@@ -1,0 +1,39 @@
+using Bills.Application.Contracts;
+using Bills.Application.Managers.Dependencies;
+using Bills.Domain.Aggregates;
+using Bills.Domain.ValueObjects;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Infrastructure.Repositories;
+
+internal sealed class BillSplitRepository : IBillSplitRepository
+{
+    private readonly BillsDbContext _dbContext;
+
+    public BillSplitRepository(BillsDbContext dbContext) => _dbContext = dbContext;
+
+    public async Task AddAsync(BillSplit split, CancellationToken cancellationToken = default)
+    {
+        await _dbContext.BillSplits.AddAsync(split, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(BillSplit split, CancellationToken cancellationToken = default)
+    {
+        _dbContext.BillSplits.Update(split);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveAsync(BillSplit split, CancellationToken cancellationToken = default)
+    {
+        _dbContext.BillSplits.Remove(split);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<BillSplit?> GetByIdAsync(SplitId splitId, CancellationToken cancellationToken = default)
+        => _dbContext.BillSplits.FirstOrDefaultAsync(s => s.Id == splitId, cancellationToken);
+
+    public Task<BillSplit?> GetByBillAndMembershipAsync(BillId billId, MembershipId membershipId, CancellationToken cancellationToken = default)
+        => _dbContext.BillSplits.FirstOrDefaultAsync(s => s.BillId == billId && s.MembershipId == membershipId, cancellationToken);
+}

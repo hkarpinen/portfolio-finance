@@ -1,0 +1,29 @@
+using Bills.Application.Managers.Dependencies;
+using Bills.Domain.Aggregates;
+using Bills.Domain.ValueObjects;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Infrastructure.Repositories;
+
+internal sealed class BillRepository : IBillRepository
+{
+    private readonly BillsDbContext _dbContext;
+
+    public BillRepository(BillsDbContext dbContext) => _dbContext = dbContext;
+
+    public async Task AddAsync(Bill bill, CancellationToken cancellationToken = default)
+    {
+        await _dbContext.Bills.AddAsync(bill, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(Bill bill, CancellationToken cancellationToken = default)
+    {
+        _dbContext.Bills.Update(bill);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<Bill?> GetByIdAsync(BillId billId, CancellationToken cancellationToken = default)
+        => _dbContext.Bills.FirstOrDefaultAsync(b => b.Id == billId, cancellationToken);
+}

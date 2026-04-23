@@ -1,0 +1,19 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+
+## Secrets
+appsettings.Production.json
+appsettings.Staging.json
+*.pfx
+*.p12
+
+## OS
+.DS_Store
+Thumbs.db
