@@ -13,14 +13,6 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
         builder.Property(i => i.Id)
             .HasConversion(id => id.Value, v => new IncomeId(v));
 
-        builder.Property(i => i.HouseholdId)
-            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new HouseholdId(v.Value) : (HouseholdId?)null)
-            .IsRequired(false);
-
-        builder.Property(i => i.MembershipId)
-            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new MembershipId(v.Value) : (MembershipId?)null)
-            .IsRequired(false);
-
         builder.Property(i => i.UserId)
             .HasConversion(id => id.Value, v => new UserId(v));
 

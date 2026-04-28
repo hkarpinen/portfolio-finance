@@ -7,8 +7,6 @@ public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncom
 {
     public CreateIncomeRequestValidator()
     {
-        RuleFor(x => x.HouseholdId).NotEmpty();
-        RuleFor(x => x.MembershipId).NotEmpty();
         // UserId is injected from JWT by both IncomeController and UserIncomeController
         // (request with { UserId = userId.Value }) — never supplied in the request body.
         RuleFor(x => x.Amount).GreaterThan(0);

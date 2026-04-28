@@ -1,3 +1,4 @@
+using Bills.Domain.ReadModels;
 using Bills.Domain.ValueObjects;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
@@ -23,11 +24,20 @@ internal sealed class UserProfileUpdatedConsumer : IConsumer<UserProfileUpdatedE
         var existing = await _dbContext.UserProjections
             .FirstOrDefaultAsync(u => u.UserId == userId, context.CancellationToken);
 
-        if (existing is not null)
+        var nameParts = (message.DisplayName ?? "").Split(' ', 2);
+        var firstName = nameParts.Length > 0 ? nameParts[0] : string.Empty;
+        var lastName  = nameParts.Length > 1 ? nameParts[1] : string.Empty;
+
+        if (existing is null)
         {
-            var nameParts = (message.DisplayName ?? "").Split(' ', 2);
-            existing.FirstName = nameParts.Length > 0 ? nameParts[0] : existing.FirstName;
-            existing.LastName  = nameParts.Length > 1 ? nameParts[1] : existing.LastName;
+            // UserRegistered was missed — recover the projection from this event.
+            var projection = UserProjection.Create(userId, string.Empty, firstName, lastName, message.AvatarUrl);
+            await _dbContext.UserProjections.AddAsync(projection, context.CancellationToken);
+        }
+        else
+        {
+            existing.FirstName = firstName.Length > 0 ? firstName : existing.FirstName;
+            existing.LastName  = lastName.Length  > 0 ? lastName  : existing.LastName;
             existing.AvatarUrl = message.AvatarUrl ?? existing.AvatarUrl;
             existing.UpdatedAt = DateTime.UtcNow;
         }

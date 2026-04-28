@@ -48,6 +48,13 @@ public interface IIncomeSourceRepository
     Task<IncomeSource?> GetByIdAsync(IncomeId incomeId, CancellationToken cancellationToken = default);
 }
 
+public interface IPersonalBillRepository
+{
+    Task AddAsync(PersonalBill personalBill, CancellationToken cancellationToken = default);
+    Task UpdateAsync(PersonalBill personalBill, CancellationToken cancellationToken = default);
+    Task<PersonalBill?> GetByIdAsync(PersonalBillId id, CancellationToken cancellationToken = default);
+}
+
 public interface IHouseholdCoverageEngine
 {
     CoverageStatusResponse BuildCoverageStatus(

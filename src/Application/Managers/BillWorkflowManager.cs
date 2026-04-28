@@ -9,11 +9,16 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
 {
     private readonly IBillRepository _billRepository;
     private readonly IBillSplitRepository _splitRepository;
+    private readonly IHouseholdMembershipRepository _membershipRepository;
 
-    public BillWorkflowManager(IBillRepository billRepository, IBillSplitRepository splitRepository)
+    public BillWorkflowManager(
+        IBillRepository billRepository,
+        IBillSplitRepository splitRepository,
+        IHouseholdMembershipRepository membershipRepository)
     {
         _billRepository = billRepository;
         _splitRepository = splitRepository;
+        _membershipRepository = membershipRepository;
     }
 
     public async Task<BillResponse> CreateAsync(CreateBillRequest request, CancellationToken cancellationToken = default)

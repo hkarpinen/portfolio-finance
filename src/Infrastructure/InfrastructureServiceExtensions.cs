@@ -1,6 +1,7 @@
 using Bills.Application.Managers.Dependencies;
 using Bills.Application.Queries;
 using Infrastructure.Engines;
+using Infrastructure.Messaging;
 using Infrastructure.Messaging.Consumers;
 using Infrastructure.Persistence;
 using Infrastructure.Queries;
@@ -52,6 +53,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IBillRepository, BillRepository>();
         services.AddScoped<IBillSplitRepository, BillSplitRepository>();
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
+        services.AddScoped<IPersonalBillRepository, PersonalBillRepository>();
         services.AddScoped<IHouseholdCoverageEngine, HouseholdCoverageEngine>();
 
         services.AddScoped<IBillQuery, BillQuery>();
@@ -60,6 +62,9 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IIncomeQuery, IncomeQuery>();
         services.AddScoped<IDashboardQuery, DashboardQuery>();
         services.AddScoped<IBillSplitQuery, BillSplitQuery>();
+        services.AddScoped<IPersonalBillQuery, PersonalBillQuery>();
+
+        services.AddHostedService<OutboxPublisher>();
 
         return services;
     }

@@ -15,12 +15,16 @@ internal sealed class BillRepository : IBillRepository
     public async Task AddAsync(Bill bill, CancellationToken cancellationToken = default)
     {
         await _dbContext.Bills.AddAsync(bill, cancellationToken);
+        foreach (var e in bill.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        bill.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(Bill bill, CancellationToken cancellationToken = default)
     {
         _dbContext.Bills.Update(bill);
+        foreach (var e in bill.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        bill.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

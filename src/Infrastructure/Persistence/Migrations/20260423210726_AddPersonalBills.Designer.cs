@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BillsDbContext))]
-    partial class BillsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260423210726_AddPersonalBills")]
+    partial class AddPersonalBills
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -405,69 +408,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_user_projections_email");
 
                     b.ToTable("user_projections", "bills");
-                });
-
-            modelBuilder.Entity("Infrastructure.Persistence.OutboxMessage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("DeadLettered")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("dead_lettered");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("event_type");
-
-                    b.Property<DateTime?>("LastAttemptAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_attempt_at");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
-                        .HasColumnName("last_error");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("payload");
-
-                    b.Property<bool>("Published")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("published");
-
-                    b.Property<DateTime?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("published_at");
-
-                    b.Property<int>("RetryCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("retry_count");
-
-                    b.HasKey("Id")
-                        .HasName("pk_outbox_messages");
-
-                    b.HasIndex("Published", "DeadLettered")
-                        .HasDatabaseName("ix_outbox_messages_published_dead_lettered")
-                        .HasFilter("published = false AND dead_lettered = false");
-
-                    b.ToTable("outbox_messages", "bills");
                 });
 
             modelBuilder.Entity("Infrastructure.Persistence.ProcessedEvent", b =>

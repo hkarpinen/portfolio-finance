@@ -13,8 +13,10 @@ public sealed class BillsDbContext : DbContext
     public DbSet<Bill> Bills => Set<Bill>();
     public DbSet<BillSplit> BillSplits => Set<BillSplit>();
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
+    public DbSet<PersonalBill> PersonalBills => Set<PersonalBill>();
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public BillsDbContext(DbContextOptions<BillsDbContext> options) : base(options) { }
 

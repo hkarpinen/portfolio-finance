@@ -22,6 +22,7 @@ public sealed class OverviewController : ControllerBase
     private readonly IDashboardQuery _dashboardQuery;
     private readonly IIncomeQuery _incomeQuery;
     private readonly IBillSplitQuery _splitQuery;
+    private readonly IPersonalBillQuery _personalBillQuery;
 
     public OverviewController(
         IHouseholdQuery householdQuery,
@@ -29,7 +30,8 @@ public sealed class OverviewController : ControllerBase
         IBillQuery billQuery,
         IDashboardQuery dashboardQuery,
         IIncomeQuery incomeQuery,
-        IBillSplitQuery splitQuery)
+        IBillSplitQuery splitQuery,
+        IPersonalBillQuery personalBillQuery)
     {
         _householdQuery = householdQuery;
         _membershipQuery = membershipQuery;
@@ -37,6 +39,7 @@ public sealed class OverviewController : ControllerBase
         _dashboardQuery = dashboardQuery;
         _incomeQuery = incomeQuery;
         _splitQuery = splitQuery;
+        _personalBillQuery = personalBillQuery;
     }
 
     [HttpGet]
@@ -75,8 +78,13 @@ public sealed class OverviewController : ControllerBase
         var incomeResult = await _incomeQuery.ListByUserAsync(new ListUserIncomeRequest(userId, 1, 500, true), ct);
         var income = incomeResult.Items.Where(s => s.IsActive).ToList();
 
+        // 3b. Personal bills
+        var personalBillsResult = await _personalBillQuery.ListByUserAsync(
+            new ListPersonalBillsRequest(userId, 1, 500, ActiveOnly: true), ct);
+        var personalBills = personalBillsResult.Items.ToList();
+
         // 4. Build household summary items
-        var summaryItems = households.Select((h, i) =>
+        List<HouseholdSummaryItem> summaryItems = households.Select((h, i) =>
         {
             var dash = dashboards[i];
             var memberCount = memberCounts[i];
@@ -110,19 +118,63 @@ public sealed class OverviewController : ControllerBase
         }
         upcomingBills.Sort((a, b) => a.DueDate.CompareTo(b.DueDate));
 
+        // 5b. Upcoming personal bills (next 7 days)
+        foreach (var pb in personalBills)
+        {
+            if (pb.IsActive && pb.DueDate >= now && pb.DueDate <= upcomingCutoff)
+            {
+                upcomingBills.Add(new UpcomingBillItem(
+                    pb.PersonalBillId, Guid.Empty, "Personal",
+                    pb.Title, pb.Amount, pb.Currency, pb.DueDate));
+            }
+        }
+        upcomingBills.Sort((a, b) => a.DueDate.CompareTo(b.DueDate));
+
         // 6. Compute total monthly income (average across all months — for header display)
         decimal totalMonthlyIncome = income.Sum(src => MonthlyEquivalent(src));
 
+        // 6b. Monthly-normalised personal bill obligations
+        decimal totalPersonalBillsMonthly = personalBills
+            .Where(pb => pb.IsActive)
+            .Sum(pb => PersonalBillMonthlyEquivalent(pb));
+
         // 7. Build 12-month contribution summaries (3 past months + current + 8 future)
         var contributionsByMonth = await BuildContributionSummariesAsync(
-            userId, income, now, monthCount: 12, pastMonths: 3, ct);
+            userId, income, personalBills, now, monthCount: 12, pastMonths: 3, ct);
+
+        // 8. Compute user-level net balance:
+        //    income minus ALL split obligations across ALL households for the current month.
+        //    This replaces the household-level (all-members income - all bills) figure which
+        //    double-counts income when a user belongs to multiple households.
+        var currentMonthSummary = contributionsByMonth
+            .FirstOrDefault(c => c.PeriodStart.Year == periodStart.Year && c.PeriodStart.Month == periodStart.Month);
+        var userNetBalance = totalMonthlyIncome - (currentMonthSummary?.TotalDue ?? 0m);
+
+        // Rebuild summary items with the corrected net balance
+        summaryItems = households.Select((h, i) =>
+        {
+            var dash = dashboards[i];
+            var memberCount = memberCounts[i];
+            return new HouseholdSummaryItem(
+                h.HouseholdId,
+                h.Name,
+                h.Description,
+                h.CurrencyCode,
+                h.OwnerId,
+                memberCount,
+                dash.TotalBills,
+                totalMonthlyIncome,
+                userNetBalance,
+                userNetBalance < 0);
+        }).ToList();
 
         return Ok(new UserBillsOverviewResponse(
             summaryItems,
             upcomingBills,
             totalMonthlyIncome,
             contributionsByMonth,
-            income));
+            income,
+            totalPersonalBillsMonthly));
     }
 
     // ─── Contribution summary builder ───────────────────────────────────────
@@ -130,6 +182,7 @@ public sealed class OverviewController : ControllerBase
     private async Task<IReadOnlyCollection<ContributionPeriodSummary>> BuildContributionSummariesAsync(
         Guid userId,
         IReadOnlyCollection<IncomeResponse> incomeSources,
+        IReadOnlyCollection<PersonalBillResponse> personalBills,
         DateTime now,
         int monthCount,
         int pastMonths,
@@ -168,11 +221,36 @@ public sealed class OverviewController : ControllerBase
                 // actual IsClaimed flag — future projected occurrences are always unclaimed.
                 var isOriginalMonth = date.Year == s.DueDate.Year && date.Month == s.DueDate.Month;
                 projected.Add((date, new ContributionItem(
-                    s.SplitId, s.BillId, s.HouseholdId, s.HouseholdName,
-                    s.BillTitle, s.BillCategory, s.Amount, s.Currency,
-                    date,
+                    s.SplitId, s.BillId, s.BillTitle, s.BillCategory,
+                    s.Amount, s.Currency, date,
                     isOriginalMonth && s.IsClaimed,
+                    s.HouseholdId, s.HouseholdName,
                     isOriginalMonth ? s.ClaimedAt : null)));
+            }
+        }
+
+        // Expand personal bills into their monthly occurrences across the window.
+        var projectedPersonal = new List<(DateTime OccurrenceDate, PersonalBillItem Item)>();
+        foreach (var pb in personalBills)
+        {
+            if (!pb.IsActive) continue;
+            IEnumerable<DateTime> occurrenceDates;
+            if (!string.IsNullOrWhiteSpace(pb.RecurrenceFrequency)
+                && Enum.TryParse<RecurrenceFrequency>(pb.RecurrenceFrequency, ignoreCase: true, out var pbFreq)
+                && pb.RecurrenceStartDate.HasValue)
+            {
+                var schedule = RecurrenceSchedule.Create(pbFreq, pb.RecurrenceStartDate.Value, pb.RecurrenceEndDate);
+                occurrenceDates = schedule.GetOccurrencesInRange(windowStart, windowEnd.AddDays(1));
+            }
+            else
+            {
+                occurrenceDates = [pb.DueDate];
+            }
+            foreach (var date in occurrenceDates)
+            {
+                projectedPersonal.Add((date, new PersonalBillItem(
+                    pb.PersonalBillId, pb.Title, pb.Category ?? "Other",
+                    pb.Amount, pb.Currency, date)));
             }
         }
 
@@ -189,15 +267,24 @@ public sealed class OverviewController : ControllerBase
                 .OrderBy(i => i.DueDate)
                 .ToList();
 
+            var monthPersonal = projectedPersonal
+                .Where(x => x.OccurrenceDate >= mStart && x.OccurrenceDate <= mEnd)
+                .Select(x => x.Item)
+                .OrderBy(i => i.DueDate)
+                .ToList();
+
             var totalDue = monthSplits.Sum(s => s.Amount);
             var totalPaid = monthSplits.Where(s => s.IsClaimed).Sum(s => s.Amount);
+            var personalDue = monthPersonal.Sum(p => p.Amount);
             var projectedIncome = incomeSources.Sum(src => ProjectIncomeForMonth(src, mStart.Year, mStart.Month));
 
             summaries.Add(new ContributionPeriodSummary(
                 label, mStart, mEnd,
                 totalDue, totalPaid, projectedIncome,
-                projectedIncome - totalDue,
-                monthSplits));
+                projectedIncome - totalDue - personalDue,
+                monthSplits,
+                personalDue,
+                monthPersonal));
         }
 
         return summaries;
@@ -224,15 +311,17 @@ public sealed class OverviewController : ControllerBase
         return MonthlyEquivalent(src);
     }
 
-    private static decimal MonthlyEquivalent(IncomeResponse src) => src.Frequency switch
+    private static decimal MonthlyEquivalent(IncomeResponse src) =>
+        UserBudgetCalculator.MonthlyEquivalent(src.Amount, src.Frequency);
+
+    private static decimal PersonalBillMonthlyEquivalent(PersonalBillResponse pb)
     {
-        RecurrenceFrequency.Weekly       => src.Amount * 52m / 12m,
-        RecurrenceFrequency.BiWeekly     => src.Amount * 26m / 12m,
-        RecurrenceFrequency.Annually     => src.Amount / 12m,
-        RecurrenceFrequency.Quarterly    => src.Amount / 3m,
-        RecurrenceFrequency.SemiAnnually => src.Amount / 6m,
-        _                                => src.Amount
-    };
+        if (string.IsNullOrWhiteSpace(pb.RecurrenceFrequency)
+            || !Enum.TryParse<RecurrenceFrequency>(pb.RecurrenceFrequency, ignoreCase: true, out var freq))
+            return pb.Amount; // one-time or unknown — count full amount
+
+        return UserBudgetCalculator.MonthlyEquivalent(pb.Amount, freq);
+    }
 
     /// <summary>
     /// Returns true if (year, month) is exactly a multiple of <paramref name="intervalMonths"/>

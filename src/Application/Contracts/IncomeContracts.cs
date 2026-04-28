@@ -10,8 +10,6 @@ public sealed record CreateIncomeRequest(
     RecurrenceFrequency Frequency,
     DateTime StartDate,
     DateTime? EndDate = null,
-    Guid? HouseholdId = null,
-    Guid? MembershipId = null,
     DateTime? LastPaymentDate = null);
 
 public sealed record UpdateIncomeRequest(
@@ -44,8 +42,6 @@ public sealed record ListUserIncomeRequest(
 
 public sealed record IncomeResponse(
     Guid IncomeId,
-    Guid? HouseholdId,
-    Guid? MembershipId,
     Guid UserId,
     decimal Amount,
     string Currency,

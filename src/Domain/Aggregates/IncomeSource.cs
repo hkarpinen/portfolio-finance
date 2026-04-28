@@ -11,10 +11,6 @@ public class IncomeSource
     private readonly List<DomainEvent> _domainEvents = new();
 
     public IncomeId Id { get; private set; }
-    /// <summary>Nullable — income sources can exist independently of a household.</summary>
-    public HouseholdId? HouseholdId { get; private set; }
-    /// <summary>Nullable — only set when linked to a household membership.</summary>
-    public MembershipId? MembershipId { get; private set; }
     public UserId UserId { get; private set; }
     public Money Amount { get; private set; }
     public string Source { get; private set; } = string.Empty;
@@ -38,8 +34,6 @@ public class IncomeSource
         Money amount,
         string source,
         RecurrenceSchedule recurrenceSchedule,
-        HouseholdId? householdId = null,
-        MembershipId? membershipId = null,
         DateTime? lastPaymentDate = null)
     {
         if (string.IsNullOrWhiteSpace(source))
@@ -51,13 +45,11 @@ public class IncomeSource
         var incomeSource = new IncomeSource
         {
             Id = IncomeId.New(),
-            HouseholdId = householdId,
-            MembershipId = membershipId,
             UserId = userId,
             Amount = amount,
             Source = source,
             RecurrenceSchedule = recurrenceSchedule,
-            LastPaymentDate = lastPaymentDate,
+            LastPaymentDate = lastPaymentDate.HasValue ? DateTime.SpecifyKind(lastPaymentDate.Value, DateTimeKind.Utc) : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             IsActive = true
@@ -65,8 +57,6 @@ public class IncomeSource
 
         incomeSource._domainEvents.Add(new IncomeSourceCreated(
             incomeSource.Id,
-            householdId,
-            membershipId,
             userId,
             amount,
             source,
@@ -87,10 +77,10 @@ public class IncomeSource
         Source = source;
         RecurrenceSchedule = recurrenceSchedule;
         if (lastPaymentDate.HasValue)
-            LastPaymentDate = lastPaymentDate;
+            LastPaymentDate = DateTime.SpecifyKind(lastPaymentDate.Value, DateTimeKind.Utc);
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new IncomeSourceUpdated(Id, HouseholdId, amount, source));
+        _domainEvents.Add(new IncomeSourceUpdated(Id, amount, source));
     }
 
     public void Deactivate()
@@ -101,7 +91,7 @@ public class IncomeSource
         IsActive = false;
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new IncomeSourceDeactivated(Id, HouseholdId));
+        _domainEvents.Add(new IncomeSourceDeactivated(Id));
     }
 
     /// <summary>
@@ -112,7 +102,7 @@ public class IncomeSource
         if (!IsActive) return false;
         IsActive = false;
         UpdatedAt = DateTime.UtcNow;
-        _domainEvents.Add(new IncomeSourceDeactivated(Id, HouseholdId));
+        _domainEvents.Add(new IncomeSourceDeactivated(Id));
         return true;
     }
 

@@ -55,7 +55,7 @@ public class BillSplit
             UpdatedAt = DateTime.UtcNow
         };
 
-        split._domainEvents.Add(new BillSplitCreated(split.Id, billId, householdId, membershipId, amount));
+        split._domainEvents.Add(new BillSplitCreated(split.Id, billId, householdId, membershipId, userId, amount));
 
         return split;
     }

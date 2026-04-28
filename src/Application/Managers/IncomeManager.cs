@@ -16,16 +16,11 @@ internal sealed class IncomeManager : IIncomeManager
 
     public async Task<IncomeResponse> CreateAsync(CreateIncomeRequest request, CancellationToken cancellationToken = default)
     {
-        var householdId = request.HouseholdId.HasValue ? HouseholdId.Create(request.HouseholdId.Value) : (HouseholdId?)null;
-        var membershipId = request.MembershipId.HasValue ? MembershipId.Create(request.MembershipId.Value) : (MembershipId?)null;
-
         var income = IncomeSource.Create(
             UserId.Create(request.UserId),
             Money.Create(request.Amount, request.Currency),
             request.Source,
             RecurrenceSchedule.Create(request.Frequency, request.StartDate, request.EndDate),
-            householdId,
-            membershipId,
             request.LastPaymentDate);
 
         await _incomeRepository.AddAsync(income, cancellationToken);
@@ -82,8 +77,6 @@ internal sealed class IncomeManager : IIncomeManager
     private static IncomeResponse Map(IncomeSource income)
         => new(
             income.Id.Value,
-            income.HouseholdId?.Value,
-            income.MembershipId?.Value,
             income.UserId.Value,
             income.Amount.Amount,
             income.Amount.Currency,

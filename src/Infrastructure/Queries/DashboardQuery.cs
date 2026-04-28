@@ -49,8 +49,16 @@ internal sealed class DashboardQuery : IDashboardQuery
 
     private async Task<Money> GetTotalIncomeAsync(Guid householdId, DateTime periodStart, DateTime periodEnd, CancellationToken cancellationToken)
     {
+        // Income is personal — it is never owned by a household (HouseholdId is always null).
+        // The household's "total income" is the sum of all active income sources belonging
+        // to each member of that household.
+        var memberUserIds = await _db.HouseholdMemberships
+            .Where(m => m.HouseholdId == HouseholdId.Create(householdId) && m.IsActive)
+            .Select(m => m.UserId)
+            .ToListAsync(cancellationToken);
+
         var items = await _db.IncomeSources
-            .Where(i => i.HouseholdId == HouseholdId.Create(householdId) && i.IsActive)
+            .Where(i => memberUserIds.Contains(i.UserId) && i.IsActive)
             .ToListAsync(cancellationToken);
 
         decimal total = 0;
@@ -65,7 +73,7 @@ internal sealed class DashboardQuery : IDashboardQuery
             if (income.RecurrenceSchedule.StartDate > periodEnd) continue;
             if (income.RecurrenceSchedule.EndDate.HasValue && income.RecurrenceSchedule.EndDate.Value < periodStart) continue;
 
-            var monthly = MonthlyEquivalent(income.Amount.Amount, income.RecurrenceSchedule.Frequency);
+            var monthly = UserBudgetCalculator.MonthlyEquivalent(income.Amount.Amount, income.RecurrenceSchedule.Frequency);
             total += monthly * periodMonths;
         }
 
@@ -98,14 +106,4 @@ internal sealed class DashboardQuery : IDashboardQuery
 
         return Money.Create(total, currency);
     }
-
-    private static decimal MonthlyEquivalent(decimal amount, RecurrenceFrequency frequency) => frequency switch
-    {
-        RecurrenceFrequency.Weekly       => amount * 52m / 12m,
-        RecurrenceFrequency.BiWeekly     => amount * 26m / 12m,
-        RecurrenceFrequency.Annually     => amount / 12m,
-        RecurrenceFrequency.Quarterly    => amount / 3m,
-        RecurrenceFrequency.SemiAnnually => amount / 6m,
-        _                                => amount,
-    };
 }

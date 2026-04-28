@@ -15,7 +15,12 @@ internal sealed class IncomeQuery : IIncomeQuery
 
     public async Task<IncomeListResponse> ListAsync(ListIncomeRequest request, CancellationToken cancellationToken = default)
     {
-        var query = _db.IncomeSources.Where(i => i.HouseholdId == HouseholdId.Create(request.HouseholdId));
+        var memberUserIds = await _db.HouseholdMemberships
+            .Where(m => m.HouseholdId == HouseholdId.Create(request.HouseholdId) && m.IsActive)
+            .Select(m => m.UserId)
+            .ToListAsync(cancellationToken);
+
+        var query = _db.IncomeSources.Where(i => memberUserIds.Contains(i.UserId));
         if (request.ActiveOnly) query = query.Where(i => i.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -51,8 +56,6 @@ internal sealed class IncomeQuery : IIncomeQuery
 
     private static IncomeResponse Map(IncomeSource income) => new(
         income.Id.Value,
-        income.HouseholdId?.Value,
-        income.MembershipId?.Value,
         income.UserId.Value,
         income.Amount.Amount,
         income.Amount.Currency,

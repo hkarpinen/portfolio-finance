@@ -22,7 +22,10 @@ public record RecurrenceSchedule
     }
 
     public static RecurrenceSchedule Create(RecurrenceFrequency frequency, DateTime startDate, DateTime? endDate = null)
-        => new(frequency, startDate, endDate);
+        => new(
+            frequency,
+            DateTime.SpecifyKind(startDate, DateTimeKind.Utc),
+            endDate.HasValue ? DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc) : null);
 
     /// <summary>
     /// Gets the occurrences of the recurrence within the specified date range.

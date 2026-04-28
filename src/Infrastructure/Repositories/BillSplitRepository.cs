@@ -16,12 +16,16 @@ internal sealed class BillSplitRepository : IBillSplitRepository
     public async Task AddAsync(BillSplit split, CancellationToken cancellationToken = default)
     {
         await _dbContext.BillSplits.AddAsync(split, cancellationToken);
+        foreach (var e in split.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        split.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(BillSplit split, CancellationToken cancellationToken = default)
     {
         _dbContext.BillSplits.Update(split);
+        foreach (var e in split.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        split.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

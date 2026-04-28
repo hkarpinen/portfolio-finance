@@ -8,10 +8,14 @@ namespace Bills.Application.Managers;
 internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
 {
     private readonly IHouseholdMembershipRepository _membershipRepository;
+    private readonly IHouseholdRepository _householdRepository;
 
-    public HouseholdMembershipManager(IHouseholdMembershipRepository membershipRepository)
+    public HouseholdMembershipManager(
+        IHouseholdMembershipRepository membershipRepository,
+        IHouseholdRepository householdRepository)
     {
         _membershipRepository = membershipRepository;
+        _householdRepository = householdRepository;
     }
 
     public async Task<MembershipResponse> InviteAsync(InviteHouseholdMemberRequest request, CancellationToken cancellationToken = default)

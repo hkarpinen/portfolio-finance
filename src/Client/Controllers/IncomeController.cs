@@ -39,7 +39,7 @@ public sealed class IncomeController : ControllerBase
     public async Task<IActionResult> Create(Guid householdId, [FromBody] CreateIncomeRequest request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        var result = await _manager.CreateAsync(request with { HouseholdId = householdId, UserId = userId.Value }, ct);
+        var result = await _manager.CreateAsync(request with { UserId = userId.Value }, ct);
         return CreatedAtAction(nameof(GetDetail), new { householdId, incomeId = result.IncomeId }, result);
     }
 

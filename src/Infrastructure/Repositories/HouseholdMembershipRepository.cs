@@ -15,12 +15,16 @@ internal sealed class HouseholdMembershipRepository : IHouseholdMembershipReposi
     public async Task AddAsync(HouseholdMembership membership, CancellationToken cancellationToken = default)
     {
         await _dbContext.HouseholdMemberships.AddAsync(membership, cancellationToken);
+        foreach (var e in membership.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        membership.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(HouseholdMembership membership, CancellationToken cancellationToken = default)
     {
         _dbContext.HouseholdMemberships.Update(membership);
+        foreach (var e in membership.GetDomainEvents()) _dbContext.AddToOutbox(e);
+        membership.ClearDomainEvents();
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

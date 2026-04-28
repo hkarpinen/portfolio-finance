@@ -1,3 +1,4 @@
+using Bills.Domain.ReadModels;
 using Bills.Domain.ValueObjects;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
@@ -27,6 +28,16 @@ internal sealed class UserBannedConsumer : IConsumer<UserBannedEvent>
         {
             existing.IsActive  = false;
             existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            // UserRegistered was not yet processed (or was missed). Create a
+            // tombstone projection so the ban is not silently lost; the full
+            // profile will be populated when UserRegistered arrives.
+            var tombstone = UserProjection.Create(userId, string.Empty, string.Empty, string.Empty);
+            tombstone.IsActive  = false;
+            tombstone.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.UserProjections.AddAsync(tombstone, context.CancellationToken);
         }
 
         _dbContext.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(UserBannedEvent), DateTime.UtcNow));

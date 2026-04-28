@@ -78,4 +78,6 @@ public sealed record UserBillsOverviewResponse(
     /// <summary>Per-month contribution view: splits due + income available, for 12 months.</summary>
     IReadOnlyCollection<ContributionPeriodSummary> ContributionsByMonth,
     /// <summary>All active income sources for the user, for display and editing.</summary>
-    IReadOnlyCollection<IncomeResponse> IncomeSources);
+    IReadOnlyCollection<IncomeResponse> IncomeSources,
+    /// <summary>Monthly-normalised total of the user's active personal bills.</summary>
+    decimal TotalPersonalBillsMonthly);

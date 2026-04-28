@@ -11,6 +11,7 @@ public static class ApplicationServiceExtensions
         services.AddScoped<IHouseholdMembershipManager, HouseholdMembershipManager>();
         services.AddScoped<IBillWorkflowManager, BillWorkflowManager>();
         services.AddScoped<IIncomeManager, IncomeManager>();
+        services.AddScoped<IPersonalBillManager, PersonalBillManager>();
 
         return services;
     }

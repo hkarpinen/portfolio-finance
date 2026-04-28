@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BillsDbContext))]
-    partial class BillsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260423200848_RemoveIncomeSourceHouseholdAndMembership")]
+    partial class RemoveIncomeSourceHouseholdAndMembership
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -293,69 +296,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("income_sources", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.PersonalBill", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("category");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("description");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("due_date");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("title");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Bills.Domain.Aggregates.PersonalBill.Amount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("currency");
-                        });
-
-                    b.HasKey("Id")
-                        .HasName("pk_personal_bills");
-
-                    b.ToTable("personal_bills", "bills");
-                });
-
             modelBuilder.Entity("Bills.Domain.ReadModels.UserProjection", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -405,69 +345,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_user_projections_email");
 
                     b.ToTable("user_projections", "bills");
-                });
-
-            modelBuilder.Entity("Infrastructure.Persistence.OutboxMessage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("DeadLettered")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("dead_lettered");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("event_type");
-
-                    b.Property<DateTime?>("LastAttemptAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_attempt_at");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
-                        .HasColumnName("last_error");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("payload");
-
-                    b.Property<bool>("Published")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("published");
-
-                    b.Property<DateTime?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("published_at");
-
-                    b.Property<int>("RetryCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("retry_count");
-
-                    b.HasKey("Id")
-                        .HasName("pk_outbox_messages");
-
-                    b.HasIndex("Published", "DeadLettered")
-                        .HasDatabaseName("ix_outbox_messages_published_dead_lettered")
-                        .HasFilter("published = false AND dead_lettered = false");
-
-                    b.ToTable("outbox_messages", "bills");
                 });
 
             modelBuilder.Entity("Infrastructure.Persistence.ProcessedEvent", b =>
@@ -562,40 +439,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("RecurrenceSchedule")
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Bills.Domain.Aggregates.PersonalBill", b =>
-                {
-                    b.OwnsOne("Bills.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
-                        {
-                            b1.Property<Guid>("PersonalBillId")
-                                .HasColumnType("uuid")
-                                .HasColumnName("id");
-
-                            b1.Property<DateTime?>("EndDate")
-                                .HasColumnType("timestamp with time zone")
-                                .HasColumnName("recurrence_end_date");
-
-                            b1.Property<string>("Frequency")
-                                .IsRequired()
-                                .HasMaxLength(50)
-                                .HasColumnType("character varying(50)")
-                                .HasColumnName("recurrence_frequency");
-
-                            b1.Property<DateTime>("StartDate")
-                                .HasColumnType("timestamp with time zone")
-                                .HasColumnName("recurrence_start_date");
-
-                            b1.HasKey("PersonalBillId");
-
-                            b1.ToTable("personal_bills", "bills");
-
-                            b1.WithOwner()
-                                .HasForeignKey("PersonalBillId")
-                                .HasConstraintName("fk_personal_bills_personal_bills_id");
-                        });
-
-                    b.Navigation("RecurrenceSchedule");
                 });
 #pragma warning restore 612, 618
         }

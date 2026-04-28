@@ -634,8 +634,6 @@ public class IncomeSourceTests
     {
         var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
         return IncomeSource.Create(
-            HouseholdId.New(),
-            MembershipId.New(),
             UserId.New(),
             Money.Create(amount, "USD"),
             "Salary",
@@ -646,18 +644,14 @@ public class IncomeSourceTests
     public void Create_ShouldSetProperties()
     {
         // Arrange
-        var householdId = HouseholdId.New();
-        var membershipId = MembershipId.New();
         var userId = UserId.New();
         var amount = Money.Create(2500m, "USD");
         var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
 
         // Act
-        var income = IncomeSource.Create(householdId, membershipId, userId, amount, "Contracting", schedule);
+        var income = IncomeSource.Create(userId, amount, "Contracting", schedule);
 
         // Assert
-        Assert.Equal(householdId, income.HouseholdId);
-        Assert.Equal(membershipId, income.MembershipId);
         Assert.Equal(userId, income.UserId);
         Assert.Equal(2500m, income.Amount.Amount);
         Assert.Equal("Contracting", income.Source);
@@ -669,8 +663,7 @@ public class IncomeSourceTests
     {
         var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
         Assert.Throws<ArgumentException>(() =>
-            IncomeSource.Create(HouseholdId.New(), MembershipId.New(), UserId.New(),
-                Money.Create(100m, "USD"), "  ", schedule));
+            IncomeSource.Create(UserId.New(), Money.Create(100m, "USD"), "  ", schedule));
     }
 
     [Fact]

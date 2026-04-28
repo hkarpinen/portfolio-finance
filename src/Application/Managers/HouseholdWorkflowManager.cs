@@ -10,7 +10,9 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
     private readonly IHouseholdRepository _householdRepository;
     private readonly IHouseholdMembershipRepository _membershipRepository;
 
-    public HouseholdWorkflowManager(IHouseholdRepository householdRepository, IHouseholdMembershipRepository membershipRepository)
+    public HouseholdWorkflowManager(
+        IHouseholdRepository householdRepository,
+        IHouseholdMembershipRepository membershipRepository)
     {
         _householdRepository = householdRepository;
         _membershipRepository = membershipRepository;
@@ -63,6 +65,7 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
 
         household.TransferOwnership(UserId.Create(request.NewOwnerId));
         await _householdRepository.UpdateAsync(household, cancellationToken);
+
         return Map(household);
     }
 

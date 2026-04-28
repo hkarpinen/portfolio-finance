@@ -7,6 +7,7 @@ public record BillSplitCreated(
     BillId BillId,
     HouseholdId HouseholdId,
     MembershipId MembershipId,
+    UserId UserId,
     Money Amount) : DomainEvent;
 
 public record BillSplitClaimed(
