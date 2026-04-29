@@ -1,5 +1,5 @@
 using System.Text;
-using Bills.Application;
+using Finance.Application;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Infrastructure;
@@ -101,7 +101,7 @@ try
     });
 
     builder.Services.AddHealthChecks()
-        .AddDbContextCheck<Infrastructure.Persistence.BillsDbContext>();
+        .AddDbContextCheck<Infrastructure.Persistence.FinanceDbContext>();
 
     var app = builder.Build();
 
@@ -150,7 +150,7 @@ try
 
     using (var scope = app.Services.CreateScope())
     {
-        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.BillsDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.FinanceDbContext>();
         await db.Database.MigrateAsync();
     }
 

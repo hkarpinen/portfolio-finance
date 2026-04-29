@@ -1,5 +1,5 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers;
+using Finance.Application.Contracts;
+using Finance.Application.Managers;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +11,7 @@ namespace Client.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/bills/members")]
+[Route("api/finance/members")]
 public sealed class MembersController : ControllerBase
 {
     private readonly IHouseholdMembershipManager _membershipManager;

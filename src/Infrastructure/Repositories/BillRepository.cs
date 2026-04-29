@@ -1,6 +1,6 @@
-using Bills.Application.Managers.Dependencies;
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Managers.Dependencies;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,9 +8,9 @@ namespace Infrastructure.Repositories;
 
 internal sealed class BillRepository : IBillRepository
 {
-    private readonly BillsDbContext _dbContext;
+    private readonly FinanceDbContext _dbContext;
 
-    public BillRepository(BillsDbContext dbContext) => _dbContext = dbContext;
+    public BillRepository(FinanceDbContext dbContext) => _dbContext = dbContext;
 
     public async Task AddAsync(Bill bill, CancellationToken cancellationToken = default)
     {

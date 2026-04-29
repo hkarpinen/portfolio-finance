@@ -1,5 +1,5 @@
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

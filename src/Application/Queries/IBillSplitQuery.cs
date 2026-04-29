@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Queries;
+namespace Finance.Application.Queries;
 
 public interface IBillSplitQuery
 {

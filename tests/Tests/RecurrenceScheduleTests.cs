@@ -1,4 +1,4 @@
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
 namespace Tests;
 

@@ -1,4 +1,4 @@
-namespace Bills.Domain.ValueObjects;
+namespace Finance.Domain.ValueObjects;
 
 /// <summary>
 /// Recurrence schedule value object for recurring bills and income sources.

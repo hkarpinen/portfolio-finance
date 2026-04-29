@@ -1,4 +1,4 @@
-namespace Bills.Domain.ValueObjects;
+namespace Finance.Domain.ValueObjects;
 
 /// <summary>
 /// Bill split aggregate root identifier.

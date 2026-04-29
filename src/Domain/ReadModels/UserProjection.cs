@@ -1,6 +1,6 @@
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.ReadModels;
+namespace Finance.Domain.ReadModels;
 
 /// <summary>
 /// Denormalized read model for user data projected from the Identity service.

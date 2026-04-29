@@ -1,6 +1,6 @@
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Contracts;
+namespace Finance.Application.Contracts;
 
 public sealed record CreateBillRequest(
     Guid HouseholdId,

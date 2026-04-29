@@ -1,7 +1,7 @@
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.Aggregates;
+namespace Finance.Domain.Aggregates;
 
 /// <summary>
 /// Personal bill aggregate root representing an individual user's personal expense.

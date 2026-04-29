@@ -1,5 +1,5 @@
-using Bills.Domain.ReadModels;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ReadModels;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
 using MassTransit;
@@ -10,9 +10,9 @@ namespace Infrastructure.Messaging.Consumers;
 
 internal sealed class UserBannedConsumer : IConsumer<UserBannedEvent>
 {
-    private readonly BillsDbContext _dbContext;
+    private readonly FinanceDbContext _dbContext;
 
-    public UserBannedConsumer(BillsDbContext dbContext) => _dbContext = dbContext;
+    public UserBannedConsumer(FinanceDbContext dbContext) => _dbContext = dbContext;
 
     public async Task Consume(ConsumeContext<UserBannedEvent> context)
     {

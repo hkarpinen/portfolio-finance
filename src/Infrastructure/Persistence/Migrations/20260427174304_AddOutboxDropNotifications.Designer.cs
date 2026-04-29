@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(BillsDbContext))]
+    [DbContext(typeof(FinanceDbContext))]
     [Migration("20260427174304_AddOutboxDropNotifications")]
     partial class AddOutboxDropNotifications
     {
@@ -27,7 +27,7 @@ namespace Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.Bill", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.Bill", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -74,7 +74,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Bills.Domain.Aggregates.Bill.Amount#Money", b1 =>
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.Bill.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
                                 .HasPrecision(18, 2)
@@ -94,7 +94,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("bills", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.BillSplit", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.BillSplit", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -136,7 +136,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Bills.Domain.Aggregates.BillSplit.Amount#Money", b1 =>
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.BillSplit.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
                                 .HasPrecision(18, 2)
@@ -156,7 +156,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("bill_splits", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.Household", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.Household", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -201,7 +201,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("households", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.HouseholdMembership", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.HouseholdMembership", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -244,7 +244,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("household_memberships", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.IncomeSource", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.IncomeSource", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -276,7 +276,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Bills.Domain.Aggregates.IncomeSource.Amount#Money", b1 =>
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.IncomeSource.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
                                 .HasPrecision(18, 2)
@@ -296,7 +296,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("income_sources", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.PersonalBill", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.PersonalBill", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -339,7 +339,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Bills.Domain.Aggregates.PersonalBill.Amount#Money", b1 =>
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.PersonalBill.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
                                 .HasPrecision(18, 2)
@@ -359,7 +359,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("personal_bills", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.ReadModels.UserProjection", b =>
+            modelBuilder.Entity("Finance.Domain.ReadModels.UserProjection", b =>
                 {
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -498,9 +498,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("processed_events", "bills");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.Bill", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.Bill", b =>
                 {
-                    b.OwnsOne("Bills.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
+                    b.OwnsOne("Finance.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
                         {
                             b1.Property<Guid>("BillId")
                                 .HasColumnType("uuid")
@@ -532,9 +532,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("RecurrenceSchedule");
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.IncomeSource", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.IncomeSource", b =>
                 {
-                    b.OwnsOne("Bills.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
+                    b.OwnsOne("Finance.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
                         {
                             b1.Property<Guid>("IncomeSourceId")
                                 .HasColumnType("uuid")
@@ -567,9 +567,9 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Bills.Domain.Aggregates.PersonalBill", b =>
+            modelBuilder.Entity("Finance.Domain.Aggregates.PersonalBill", b =>
                 {
-                    b.OwnsOne("Bills.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
+                    b.OwnsOne("Finance.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
                         {
                             b1.Property<Guid>("PersonalBillId")
                                 .HasColumnType("uuid")

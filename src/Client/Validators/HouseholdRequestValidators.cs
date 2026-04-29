@@ -1,4 +1,4 @@
-using Bills.Application.Contracts;
+using Finance.Application.Contracts;
 using FluentValidation;
 
 namespace Client.Validators;

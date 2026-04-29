@@ -1,7 +1,7 @@
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.Aggregates;
+namespace Finance.Domain.Aggregates;
 
 /// <summary>
 /// Bill split aggregate root representing a member's share of a bill.

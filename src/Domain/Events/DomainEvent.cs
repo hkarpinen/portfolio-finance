@@ -1,4 +1,4 @@
-namespace Bills.Domain.Events;
+namespace Finance.Domain.Events;
 
 /// <summary>
 /// Base record for domain events.

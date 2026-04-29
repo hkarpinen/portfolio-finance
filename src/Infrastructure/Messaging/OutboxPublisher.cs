@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Bills.Domain.Events;
+using Finance.Domain.Events;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
 using MassTransit;
@@ -58,7 +58,7 @@ internal sealed class OutboxPublisher : BackgroundService
     private async Task ProcessOutboxAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<BillsDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
         var publishEndpoint = scope.ServiceProvider.GetRequiredService<IPublishEndpoint>();
 
         using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);

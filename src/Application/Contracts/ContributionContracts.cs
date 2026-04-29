@@ -1,6 +1,6 @@
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Contracts;
+namespace Finance.Application.Contracts;
 
 /// <summary>
 /// A bill split enriched with the parent bill's due date, title, household name, and recurrence info.

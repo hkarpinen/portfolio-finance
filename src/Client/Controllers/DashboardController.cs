@@ -1,5 +1,5 @@
-using Bills.Application.Contracts;
-using Bills.Application.Queries;
+using Finance.Application.Contracts;
+using Finance.Application.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,7 +7,7 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/bills/households/{householdId:guid}/dashboard")]
+[Route("api/finance/households/{householdId:guid}/dashboard")]
 public sealed class DashboardController : ControllerBase
 {
     private readonly IDashboardQuery _query;

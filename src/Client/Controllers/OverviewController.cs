@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
-using Bills.Application.Queries;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Queries;
+using Finance.Domain.ValueObjects;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,7 +13,7 @@ namespace Client.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/bills/overview")]
+[Route("api/finance/overview")]
 public sealed class OverviewController : ControllerBase
 {
     private readonly IHouseholdQuery _householdQuery;

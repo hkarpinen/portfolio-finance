@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Queries;
+namespace Finance.Application.Queries;
 
 /// <summary>
 /// Shared helpers for computing a user's personal budget figures (income and obligations).

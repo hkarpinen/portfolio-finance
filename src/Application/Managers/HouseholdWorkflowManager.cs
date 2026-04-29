@@ -1,9 +1,9 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers.Dependencies;
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Managers.Dependencies;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Managers;
+namespace Finance.Application.Managers;
 
 internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
 {

@@ -1,7 +1,7 @@
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.Aggregates;
+namespace Finance.Domain.Aggregates;
 
 /// <summary>
 /// Income source aggregate root representing a member's income contribution to the household.

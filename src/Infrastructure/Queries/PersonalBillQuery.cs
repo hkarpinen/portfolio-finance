@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Application.Queries;
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Queries;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,9 +9,9 @@ namespace Infrastructure.Queries;
 
 internal sealed class PersonalBillQuery : IPersonalBillQuery
 {
-    private readonly BillsDbContext _db;
+    private readonly FinanceDbContext _db;
 
-    public PersonalBillQuery(BillsDbContext db) => _db = db;
+    public PersonalBillQuery(FinanceDbContext db) => _db = db;
 
     public async Task<PersonalBillListResponse> ListByUserAsync(ListPersonalBillsRequest request, CancellationToken cancellationToken = default)
     {

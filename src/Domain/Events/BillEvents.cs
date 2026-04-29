@@ -1,6 +1,6 @@
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.Events;
+namespace Finance.Domain.Events;
 
 public record BillCreated(
     BillId BillId,

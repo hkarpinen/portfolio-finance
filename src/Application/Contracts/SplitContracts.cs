@@ -1,4 +1,4 @@
-namespace Bills.Application.Contracts;
+namespace Finance.Application.Contracts;
 
 public sealed record UpsertSplitRequest(
     Guid? SplitId,

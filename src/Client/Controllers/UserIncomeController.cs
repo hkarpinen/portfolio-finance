@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers;
-using Bills.Application.Queries;
+using Finance.Application.Contracts;
+using Finance.Application.Managers;
+using Finance.Application.Queries;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +9,7 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/bills/income")]
+[Route("api/finance/income")]
 public sealed class UserIncomeController : ControllerBase
 {
     private readonly IIncomeManager _manager;

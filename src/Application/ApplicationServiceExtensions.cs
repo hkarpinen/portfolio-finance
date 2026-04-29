@@ -1,7 +1,7 @@
-using Bills.Application.Managers;
+using Finance.Application.Managers;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Bills.Application;
+namespace Finance.Application;
 
 public static class ApplicationServiceExtensions
 {

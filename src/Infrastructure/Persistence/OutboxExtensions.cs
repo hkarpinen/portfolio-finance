@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
 namespace Infrastructure.Persistence;
 
@@ -59,7 +59,7 @@ internal static class OutboxExtensions
     /// Call this for every domain event before SaveChangesAsync so both writes
     /// occur in the same transaction.
     /// </summary>
-    public static void AddToOutbox(this BillsDbContext context, DomainEvent domainEvent)
+    public static void AddToOutbox(this FinanceDbContext context, DomainEvent domainEvent)
     {
         var message = new OutboxMessage
         {

@@ -1,5 +1,5 @@
-using Bills.Application.Managers.Dependencies;
-using Bills.Application.Queries;
+using Finance.Application.Managers.Dependencies;
+using Finance.Application.Queries;
 using Infrastructure.Engines;
 using Infrastructure.Messaging;
 using Infrastructure.Messaging.Consumers;
@@ -19,9 +19,9 @@ public static class InfrastructureServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<BillsDbContext>(options =>
+        services.AddDbContext<FinanceDbContext>(options =>
             options.UseNpgsql(
-                    configuration.GetConnectionString("Bills"),
+                    configuration.GetConnectionString("Finance"),
                     npgsql => npgsql.MigrationsAssembly("Infrastructure"))
                 .UseSnakeCaseNamingConvention());
 

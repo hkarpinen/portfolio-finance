@@ -1,14 +1,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS restore
 WORKDIR /src
 
-COPY Bills.sln ./
+COPY Finance.sln ./
 COPY src/Utilities/Utilities.csproj src/Utilities/
 COPY src/Domain/Domain.csproj src/Domain/
 COPY src/Application/Application.csproj src/Application/
 COPY src/Infrastructure/Infrastructure.csproj src/Infrastructure/
 COPY src/Client/Client.csproj src/Client/
 COPY tests/Tests/Tests.csproj tests/Tests/
-RUN dotnet restore Bills.sln
+RUN dotnet restore Finance.sln
 
 FROM restore AS build
 COPY src/ src/

@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers;
-using Bills.Application.Queries;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Managers;
+using Finance.Application.Queries;
+using Finance.Domain.ValueObjects;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +10,7 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/bills/households")]
+[Route("api/finance/households")]
 public sealed class HouseholdsController : ControllerBase
 {
     private readonly IHouseholdWorkflowManager _manager;
@@ -219,5 +219,5 @@ public sealed class HouseholdsController : ControllerBase
 }
 
 public sealed record TransferOwnershipBody(Guid NewOwnerId);
-public sealed record ChangeMemberRoleBody(Bills.Domain.ValueObjects.HouseholdRole Role);
+public sealed record ChangeMemberRoleBody(Finance.Domain.ValueObjects.HouseholdRole Role);
 

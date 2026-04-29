@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
-using Bills.Application.Queries;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Queries;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,9 +8,9 @@ namespace Infrastructure.Queries;
 
 internal sealed class HouseholdMembershipQuery : IHouseholdMembershipQuery
 {
-    private readonly BillsDbContext _db;
+    private readonly FinanceDbContext _db;
 
-    public HouseholdMembershipQuery(BillsDbContext db) => _db = db;
+    public HouseholdMembershipQuery(FinanceDbContext db) => _db = db;
 
     public async Task<IReadOnlyCollection<MembershipResponse>> ListMembersAsync(Guid householdId, CancellationToken cancellationToken = default)
     {

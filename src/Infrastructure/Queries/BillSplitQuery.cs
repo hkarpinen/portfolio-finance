@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
-using Bills.Application.Queries;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Queries;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,9 +8,9 @@ namespace Infrastructure.Queries;
 
 internal sealed class BillSplitQuery : IBillSplitQuery
 {
-    private readonly BillsDbContext _dbContext;
+    private readonly FinanceDbContext _dbContext;
 
-    public BillSplitQuery(BillsDbContext dbContext) => _dbContext = dbContext;
+    public BillSplitQuery(FinanceDbContext dbContext) => _dbContext = dbContext;
 
     public async Task<IReadOnlyCollection<SplitWithBillDetail>> ListByUserWithBillDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken = default)

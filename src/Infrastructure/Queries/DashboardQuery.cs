@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers.Dependencies;
-using Bills.Application.Queries;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Managers.Dependencies;
+using Finance.Application.Queries;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +9,10 @@ namespace Infrastructure.Queries;
 
 internal sealed class DashboardQuery : IDashboardQuery
 {
-    private readonly BillsDbContext _db;
+    private readonly FinanceDbContext _db;
     private readonly IHouseholdCoverageEngine _coverageEngine;
 
-    public DashboardQuery(BillsDbContext db, IHouseholdCoverageEngine coverageEngine)
+    public DashboardQuery(FinanceDbContext db, IHouseholdCoverageEngine coverageEngine)
     {
         _db = db;
         _coverageEngine = coverageEngine;

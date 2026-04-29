@@ -1,7 +1,7 @@
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Domain.Aggregates;
+namespace Finance.Domain.Aggregates;
 
 /// <summary>
 /// Household membership aggregate root representing a member's participation in a household.

@@ -1,12 +1,12 @@
-using Bills.Domain.Aggregates;
-using Bills.Domain.ReadModels;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
 
-public sealed class BillsDbContext : DbContext
+public sealed class FinanceDbContext : DbContext
 {
     public DbSet<Household> Households => Set<Household>();
     public DbSet<HouseholdMembership> HouseholdMemberships => Set<HouseholdMembership>();
@@ -18,11 +18,11 @@ public sealed class BillsDbContext : DbContext
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
-    public BillsDbContext(DbContextOptions<BillsDbContext> options) : base(options) { }
+    public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("bills");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BillsDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(FinanceDbContext).Assembly);
     }
 }

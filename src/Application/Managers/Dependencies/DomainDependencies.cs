@@ -1,8 +1,8 @@
-using Bills.Application.Contracts;
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 
-namespace Bills.Application.Managers.Dependencies;
+namespace Finance.Application.Managers.Dependencies;
 
 public interface IHouseholdRepository
 {

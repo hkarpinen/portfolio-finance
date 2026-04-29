@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers;
-using Bills.Application.Queries;
+using Finance.Application.Contracts;
+using Finance.Application.Managers;
+using Finance.Application.Queries;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +9,7 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/bills/households/{householdId:guid}/bills/{billId:guid}/splits")]
+[Route("api/finance/households/{householdId:guid}/bills/{billId:guid}/splits")]
 public sealed class SplitsController : ControllerBase
 {
     private readonly IBillWorkflowManager _manager;

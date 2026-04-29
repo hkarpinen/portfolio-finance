@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
+using Finance.Application.Contracts;
 
-namespace Bills.Application.Managers;
+namespace Finance.Application.Managers;
 
 public interface IHouseholdWorkflowManager
 {

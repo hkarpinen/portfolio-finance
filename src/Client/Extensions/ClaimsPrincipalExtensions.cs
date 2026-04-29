@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.ValueObjects;
 
 namespace Client.Extensions;
 

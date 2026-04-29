@@ -1,6 +1,6 @@
-using Bills.Domain.Aggregates;
-using Bills.Domain.ReadModels;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
+using Finance.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

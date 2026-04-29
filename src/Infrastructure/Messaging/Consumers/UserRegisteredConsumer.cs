@@ -1,6 +1,6 @@
-using Bills.Domain.Aggregates;
-using Bills.Domain.ReadModels;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
 using MassTransit;
@@ -11,9 +11,9 @@ namespace Infrastructure.Messaging.Consumers;
 
 internal sealed class UserRegisteredConsumer : IConsumer<UserRegisteredEvent>
 {
-    private readonly BillsDbContext _dbContext;
+    private readonly FinanceDbContext _dbContext;
 
-    public UserRegisteredConsumer(BillsDbContext dbContext) => _dbContext = dbContext;
+    public UserRegisteredConsumer(FinanceDbContext dbContext) => _dbContext = dbContext;
 
     public async Task Consume(ConsumeContext<UserRegisteredEvent> context)
     {

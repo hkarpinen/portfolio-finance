@@ -1,6 +1,6 @@
-using Bills.Application.Contracts;
+using Finance.Application.Contracts;
 
-namespace Bills.Application.Queries;
+namespace Finance.Application.Queries;
 
 public interface IHouseholdMembershipQuery
 {

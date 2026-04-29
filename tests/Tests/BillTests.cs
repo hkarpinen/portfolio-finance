@@ -1,6 +1,6 @@
-using Bills.Domain.Aggregates;
-using Bills.Domain.Events;
-using Bills.Domain.ValueObjects;
+using Finance.Domain.Aggregates;
+using Finance.Domain.Events;
+using Finance.Domain.ValueObjects;
 
 namespace Tests;
 

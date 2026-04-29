@@ -1,7 +1,7 @@
-using Bills.Application.Contracts;
-using Bills.Application.Managers.Dependencies;
-using Bills.Domain.Aggregates;
-using Bills.Domain.ValueObjects;
+using Finance.Application.Contracts;
+using Finance.Application.Managers.Dependencies;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,9 +9,9 @@ namespace Infrastructure.Repositories;
 
 internal sealed class BillSplitRepository : IBillSplitRepository
 {
-    private readonly BillsDbContext _dbContext;
+    private readonly FinanceDbContext _dbContext;
 
-    public BillSplitRepository(BillsDbContext dbContext) => _dbContext = dbContext;
+    public BillSplitRepository(FinanceDbContext dbContext) => _dbContext = dbContext;
 
     public async Task AddAsync(BillSplit split, CancellationToken cancellationToken = default)
     {
