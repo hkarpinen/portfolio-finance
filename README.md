@@ -1,6 +1,6 @@
-# portfolio-bills
+# portfolio-finance
 
-Household expense splitting service. Members form households, add bills, split costs by membership, and track income sources for coverage analysis.
+Personal finance service. Tracks income sources, household bills and expense splitting, personal bills, and budget coverage analysis.
 
 ## Stack
 
@@ -19,7 +19,7 @@ dotnet run --project src/Client
 Or via the full stack in `portfolio-infra`:
 
 ```bash
-docker compose up bills
+docker compose up finance
 ```
 
 ## Structure
@@ -41,7 +41,7 @@ src/
 
 | Variable | Description |
 |---|---|
-| `ConnectionStrings__Bills` | PostgreSQL connection string |
+| `ConnectionStrings__Finance` | PostgreSQL connection string |
 | `Jwt__Secret` | JWT signing key (≥ 32 chars) |
 | `RabbitMq__Host` | RabbitMQ hostname |
 | `RabbitMq__Username` | RabbitMQ username |

@@ -1,4 +1,4 @@
-# Domain Model — Bills
+# Domain Model — Finance
 
 ## ERD
 
