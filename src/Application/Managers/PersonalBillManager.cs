@@ -1,5 +1,6 @@
 using Finance.Application.Contracts;
 using Finance.Application.Managers.Dependencies;
+using Finance.Application.Mappers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
@@ -29,7 +30,7 @@ internal sealed class PersonalBillManager : IPersonalBillManager
             request.Description);
 
         await _repository.AddAsync(bill, cancellationToken);
-        return Map(bill);
+        return PersonalBillMapper.ToResponse(bill);
     }
 
     public async Task<PersonalBillResponse?> UpdateAsync(UpdatePersonalBillRequest request, CancellationToken cancellationToken = default)
@@ -49,7 +50,7 @@ internal sealed class PersonalBillManager : IPersonalBillManager
             request.Description);
 
         await _repository.UpdateAsync(bill, cancellationToken);
-        return Map(bill);
+        return PersonalBillMapper.ToResponse(bill);
     }
 
     public async Task<PersonalBillResponse?> DeleteAsync(DeletePersonalBillRequest request, CancellationToken cancellationToken = default)
@@ -60,7 +61,7 @@ internal sealed class PersonalBillManager : IPersonalBillManager
         if (bill.TryDeactivate())
             await _repository.UpdateAsync(bill, cancellationToken);
 
-        return Map(bill);
+        return PersonalBillMapper.ToResponse(bill);
     }
 
     private static RecurrenceSchedule? ParseSchedule(string? frequency, DateTime? startDate, DateTime? endDate)
@@ -71,20 +72,4 @@ internal sealed class PersonalBillManager : IPersonalBillManager
 
         return RecurrenceSchedule.Create(freq, startDate ?? DateTime.UtcNow, endDate);
     }
-
-    private static PersonalBillResponse Map(PersonalBill bill) => new(
-        bill.Id.Value,
-        bill.UserId.Value,
-        bill.Title,
-        bill.Description,
-        bill.Amount.Amount,
-        bill.Amount.Currency,
-        bill.Category.ToString(),
-        bill.DueDate,
-        bill.RecurrenceSchedule?.Frequency.ToString(),
-        bill.RecurrenceSchedule?.StartDate,
-        bill.RecurrenceSchedule?.EndDate,
-        bill.IsActive,
-        bill.CreatedAt,
-        bill.UpdatedAt);
 }

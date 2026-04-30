@@ -34,5 +34,30 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             rs.Property(r => r.StartDate).HasColumnName("recurrence_start_date").IsRequired();
             rs.Property(r => r.EndDate).HasColumnName("recurrence_end_date");
         });
+
+        // Optional tax withholding profile — columns are NULL when not configured.
+        builder.OwnsOne(i => i.TaxProfile, tp =>
+        {
+            tp.Property(t => t.FilingStatus)
+                .HasColumnName("tax_filing_status")
+                .HasConversion<string>()
+                .HasMaxLength(30);
+            tp.Property(t => t.StateCode)
+                .HasColumnName("tax_state_code")
+                .HasMaxLength(2);
+            tp.Property(t => t.FederalAllowances)
+                .HasColumnName("tax_federal_allowances");
+            tp.Property(t => t.StateAllowances)
+                .HasColumnName("tax_state_allowances");
+        });
+
+        // Voluntary deductions stored as a JSON array column.
+        builder.OwnsMany(i => i.Deductions, d =>
+        {
+            d.ToJson("deductions");
+            d.Property(p => p.Type).HasConversion<string>();
+            d.Property(p => p.Method).HasConversion<string>();
+            d.Property(p => p.Label).HasMaxLength(200);
+        });
     }
 }

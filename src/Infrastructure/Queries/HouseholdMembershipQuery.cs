@@ -1,4 +1,5 @@
 using Finance.Application.Contracts;
+using Finance.Application.Mappers;
 using Finance.Application.Queries;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
@@ -29,16 +30,7 @@ internal sealed class HouseholdMembershipQuery : IHouseholdMembershipQuery
         return members.Select(m =>
         {
             projDict.TryGetValue(m.UserId, out var proj);
-            return new MembershipResponse(
-                m.Id.Value,
-                m.HouseholdId.Value,
-                m.UserId.Value,
-                proj?.GetFullName(),
-                m.Role,
-                m.IsActive,
-                m.InvitationCode,
-                m.JoinedAt,
-                m.UpdatedAt);
+            return MembershipMapper.ToResponse(m, proj?.GetFullName());
         }).ToList();
     }
 }

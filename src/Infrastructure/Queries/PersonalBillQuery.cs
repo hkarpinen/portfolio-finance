@@ -1,4 +1,5 @@
 using Finance.Application.Contracts;
+using Finance.Application.Mappers;
 using Finance.Application.Queries;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
@@ -26,28 +27,12 @@ internal sealed class PersonalBillQuery : IPersonalBillQuery
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        return new PersonalBillListResponse(items.Select(Map).ToArray(), total);
+        return new PersonalBillListResponse(items.Select(PersonalBillMapper.ToResponse).ToArray(), total);
     }
 
     public async Task<PersonalBillResponse?> GetDetailAsync(PersonalBillDetailRequest request, CancellationToken cancellationToken = default)
     {
         var bill = await _db.PersonalBills.FirstOrDefaultAsync(b => b.Id == PersonalBillId.Create(request.PersonalBillId), cancellationToken);
-        return bill is null ? null : Map(bill);
+        return bill is null ? null : PersonalBillMapper.ToResponse(bill);
     }
-
-    private static PersonalBillResponse Map(PersonalBill bill) => new(
-        bill.Id.Value,
-        bill.UserId.Value,
-        bill.Title,
-        bill.Description,
-        bill.Amount.Amount,
-        bill.Amount.Currency,
-        bill.Category.ToString(),
-        bill.DueDate,
-        bill.RecurrenceSchedule?.Frequency.ToString(),
-        bill.RecurrenceSchedule?.StartDate,
-        bill.RecurrenceSchedule?.EndDate,
-        bill.IsActive,
-        bill.CreatedAt,
-        bill.UpdatedAt);
 }

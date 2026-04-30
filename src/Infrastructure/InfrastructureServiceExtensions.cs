@@ -55,6 +55,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
         services.AddScoped<IPersonalBillRepository, PersonalBillRepository>();
         services.AddScoped<IHouseholdCoverageEngine, HouseholdCoverageEngine>();
+        services.AddScoped<IPayrollDeductionEngine, PayrollDeductionEngine>();
 
         services.AddScoped<IBillQuery, BillQuery>();
         services.AddScoped<IHouseholdQuery, HouseholdQuery>();

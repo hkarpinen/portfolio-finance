@@ -50,5 +50,37 @@ public sealed class UserIncomeController : ControllerBase
         var result = await _manager.DeactivateAsync(new DeactivateIncomeRequest(incomeId), ct);
         return result is null ? NotFound() : NoContent();
     }
+
+    // ── Payroll deductions ───────────────────────────────────────────────────
+
+    [HttpPut("{incomeId:guid}/tax-profile")]
+    public async Task<IActionResult> SetTaxProfile(Guid incomeId, [FromBody] SetTaxProfileRequest request, CancellationToken ct = default)
+    {
+        var result = await _manager.SetTaxProfileAsync(request with { IncomeId = incomeId }, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost("{incomeId:guid}/deductions")]
+    public async Task<IActionResult> AddDeduction(Guid incomeId, [FromBody] AddDeductionRequest request, CancellationToken ct = default)
+    {
+        var result = await _manager.AddDeductionAsync(request with { IncomeId = incomeId }, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpDelete("{incomeId:guid}/deductions")]
+    public async Task<IActionResult> RemoveDeduction(Guid incomeId, [FromBody] RemoveDeductionRequest request, CancellationToken ct = default)
+    {
+        var result = await _manager.RemoveDeductionAsync(request with { IncomeId = incomeId }, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{incomeId:guid}/net-pay")]
+    public async Task<IActionResult> GetNetPayBreakdown(Guid incomeId, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var result = await _incomeQuery.GetNetPayBreakdownAsync(
+            new GetNetPayBreakdownRequest(incomeId, year ?? now.Year, month ?? now.Month), ct);
+        return result is null ? NotFound() : Ok(result);
+    }
 }
 

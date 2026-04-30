@@ -80,4 +80,6 @@ public sealed record UserBillsOverviewResponse(
     /// <summary>All active income sources for the user, for display and editing.</summary>
     IReadOnlyCollection<IncomeResponse> IncomeSources,
     /// <summary>Monthly-normalised total of the user's active personal bills.</summary>
-    decimal TotalPersonalBillsMonthly);
+    decimal TotalPersonalBillsMonthly,
+    /// <summary>Monthly net income after all payroll deductions. Equals TotalMonthlyIncome when no deductions are configured.</summary>
+    decimal TotalMonthlyNetIncome = 0m);

@@ -21,6 +21,19 @@ public class IncomeSource
     public DateTime UpdatedAt { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// Optional tax withholding profile used by the PayrollDeductionEngine to estimate
+    /// federal income tax, state income tax, and FICA deductions.
+    /// Null means no tax estimation is performed for this source.
+    /// </summary>
+    public TaxWithholdingProfile? TaxProfile { get; private set; }
+
+    /// <summary>
+    /// Voluntary payroll deductions (health, dental, retirement, etc.).
+    /// Tax deductions are NOT stored here — they are engine-computed from <see cref="TaxProfile"/>.
+    /// </summary>
+    public List<PayrollDeduction> Deductions { get; private set; } = new();
+
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
 
     public void ClearDomainEvents() => _domainEvents.Clear();
@@ -113,5 +126,74 @@ public class IncomeSource
 
         IsActive = true;
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    // ── Tax profile ──────────────────────────────────────────────────────────
+
+    public void SetTaxProfile(TaxWithholdingProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        TaxProfile = profile;
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new IncomeSourceTaxProfileSet(Id, profile));
+    }
+
+    public void ClearTaxProfile()
+    {
+        if (TaxProfile is null) return;
+        TaxProfile = null;
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new IncomeSourceTaxProfileSet(Id, null));
+    }
+
+    // ── Voluntary deductions ─────────────────────────────────────────────────
+
+    public void AddDeduction(PayrollDeduction deduction)
+    {
+        ArgumentNullException.ThrowIfNull(deduction);
+
+        var existing = Deductions.FirstOrDefault(d =>
+            d.Type == deduction.Type &&
+            string.Equals(d.Label, deduction.Label, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
+            throw new InvalidOperationException(
+                $"A deduction of type '{deduction.Type}' with label '{deduction.Label}' already exists.");
+
+        Deductions.Add(deduction);
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new IncomeSourceDeductionAdded(Id, deduction));
+    }
+
+    public void RemoveDeduction(DeductionType type, string label)
+    {
+        var existing = Deductions.FirstOrDefault(d =>
+            d.Type == type &&
+            string.Equals(d.Label, label, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+            throw new InvalidOperationException(
+                $"No deduction of type '{type}' with label '{label}' found.");
+
+        Deductions.Remove(existing);
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new IncomeSourceDeductionRemoved(Id, type, label));
+    }
+
+    public void UpdateDeduction(DeductionType type, string label, PayrollDeduction replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+
+        var idx = Deductions.FindIndex(d =>
+            d.Type == type &&
+            string.Equals(d.Label, label, StringComparison.OrdinalIgnoreCase));
+
+        if (idx < 0)
+            throw new InvalidOperationException(
+                $"No deduction of type '{type}' with label '{label}' found.");
+
+        Deductions[idx] = replacement;
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new IncomeSourceDeductionUpdated(Id, replacement));
     }
 }

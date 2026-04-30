@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    partial class FinanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260429185414_AddDeductionsAndTaxProfile")]
+    partial class AddDeductionsAndTaxProfile
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -567,9 +570,6 @@ namespace Infrastructure.Persistence.Migrations
 
                             b1.Property<int>("Id")
                                 .ValueGeneratedOnAdd()
-                                .HasColumnType("integer");
-
-                            b1.Property<int>("Frequency")
                                 .HasColumnType("integer");
 
                             b1.Property<bool>("IsEmployerSponsored")

@@ -77,7 +77,7 @@ public sealed record ContributionPeriodSummary(
     decimal TotalDue,
     /// <summary>Sum of household splits already marked as paid/claimed.</summary>
     decimal TotalPaid,
-    /// <summary>Income projected to arrive this month, respecting each source's frequency.</summary>
+    /// <summary>Gross income projected to arrive this month, respecting each source's frequency.</summary>
     decimal ProjectedIncome,
     /// <summary>ProjectedIncome minus TotalDue minus PersonalBillsDue. Negative = over-committed.</summary>
     decimal NetAfterContributions,
@@ -85,7 +85,9 @@ public sealed record ContributionPeriodSummary(
     /// <summary>Sum of personal bill amounts due this month (normalised by frequency).</summary>
     decimal PersonalBillsDue,
     /// <summary>Personal bill occurrences projected for this period.</summary>
-    IReadOnlyCollection<PersonalBillItem> PersonalBills);
+    IReadOnlyCollection<PersonalBillItem> PersonalBills,
+    /// <summary>Net take-home income after all payroll deductions (taxes + voluntary). Equals ProjectedIncome when no deductions are configured.</summary>
+    decimal ProjectedNetIncome = 0m);
 
 /// <summary>A single personal bill occurrence within a contribution period.</summary>
 public sealed record PersonalBillItem(

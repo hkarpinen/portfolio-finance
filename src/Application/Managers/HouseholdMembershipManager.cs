@@ -1,5 +1,6 @@
 using Finance.Application.Contracts;
 using Finance.Application.Managers.Dependencies;
+using Finance.Application.Mappers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
@@ -26,7 +27,7 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
             request.InvitationCode);
 
         await _membershipRepository.AddAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
 
     public async Task<MembershipResponse?> JoinAsync(JoinHouseholdRequest request, CancellationToken cancellationToken = default)
@@ -39,7 +40,7 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
 
         membership.AcceptInvitation(UserId.Create(request.UserId));
         await _membershipRepository.UpdateAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
 
     public async Task<MembershipResponse?> JoinByCodeAsync(JoinByCodeRequest request, Guid userId, CancellationToken cancellationToken = default)
@@ -49,7 +50,7 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
 
         membership.AcceptInvitation(UserId.Create(userId));
         await _membershipRepository.UpdateAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
 
     public async Task<MembershipResponse?> LeaveAsync(LeaveHouseholdRequest request, CancellationToken cancellationToken = default)
@@ -62,7 +63,7 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
 
         membership.Remove();
         await _membershipRepository.UpdateAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
 
     public async Task<MembershipResponse?> ChangeRoleAsync(ChangeMembershipRoleRequest request, CancellationToken cancellationToken = default)
@@ -75,7 +76,7 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
 
         membership.ChangeRole(request.Role);
         await _membershipRepository.UpdateAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
 
     public async Task<MembershipResponse?> RemoveAsync(RemoveMembershipRequest request, CancellationToken cancellationToken = default)
@@ -89,18 +90,6 @@ internal sealed class HouseholdMembershipManager : IHouseholdMembershipManager
         // TODO: enforce authorization rules based on request.RemovedByUserId.
         membership.Remove();
         await _membershipRepository.UpdateAsync(membership, cancellationToken);
-        return Map(membership);
+        return MembershipMapper.ToResponse(membership);
     }
-
-    private static MembershipResponse Map(HouseholdMembership membership)
-        => new(
-            membership.Id.Value,
-            membership.HouseholdId.Value,
-            membership.UserId.Value,
-            null,
-            membership.Role,
-            membership.IsActive,
-            membership.InvitationCode,
-            membership.JoinedAt,
-            membership.UpdatedAt);
 }

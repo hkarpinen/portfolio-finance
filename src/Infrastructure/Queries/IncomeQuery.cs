@@ -1,4 +1,6 @@
 using Finance.Application.Contracts;
+using Finance.Application.Managers.Dependencies;
+using Finance.Application.Mappers;
 using Finance.Application.Queries;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
@@ -10,8 +12,15 @@ namespace Infrastructure.Queries;
 internal sealed class IncomeQuery : IIncomeQuery
 {
     private readonly FinanceDbContext _db;
+    private readonly IIncomeSourceRepository _incomeRepository;
+    private readonly IPayrollDeductionEngine _deductionEngine;
 
-    public IncomeQuery(FinanceDbContext db) => _db = db;
+    public IncomeQuery(FinanceDbContext db, IIncomeSourceRepository incomeRepository, IPayrollDeductionEngine deductionEngine)
+    {
+        _db = db;
+        _incomeRepository = incomeRepository;
+        _deductionEngine = deductionEngine;
+    }
 
     public async Task<IncomeListResponse> ListAsync(ListIncomeRequest request, CancellationToken cancellationToken = default)
     {
@@ -30,7 +39,7 @@ internal sealed class IncomeQuery : IIncomeQuery
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        return new IncomeListResponse(items.Select(Map).ToArray(), total);
+        return new IncomeListResponse(items.Select(IncomeMapper.ToResponse).ToArray(), total);
     }
 
     public async Task<IncomeListResponse> ListByUserAsync(ListUserIncomeRequest request, CancellationToken cancellationToken = default)
@@ -45,26 +54,20 @@ internal sealed class IncomeQuery : IIncomeQuery
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        return new IncomeListResponse(items.Select(Map).ToArray(), total);
+        return new IncomeListResponse(items.Select(IncomeMapper.ToResponse).ToArray(), total);
     }
 
     public async Task<IncomeResponse?> GetDetailAsync(IncomeDetailRequest request, CancellationToken cancellationToken = default)
     {
         var income = await _db.IncomeSources.FirstOrDefaultAsync(i => i.Id == IncomeId.Create(request.IncomeId), cancellationToken);
-        return income is null ? null : Map(income);
+        return income is null ? null : IncomeMapper.ToResponse(income);
     }
 
-    private static IncomeResponse Map(IncomeSource income) => new(
-        income.Id.Value,
-        income.UserId.Value,
-        income.Amount.Amount,
-        income.Amount.Currency,
-        income.Source,
-        income.RecurrenceSchedule.Frequency,
-        income.RecurrenceSchedule.StartDate,
-        income.RecurrenceSchedule.EndDate,
-        income.IsActive,
-        income.LastPaymentDate,
-        income.CreatedAt,
-        income.UpdatedAt);
+    public async Task<NetPayBreakdownResponse?> GetNetPayBreakdownAsync(GetNetPayBreakdownRequest request, CancellationToken cancellationToken = default)
+    {
+        var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
+        if (income is null) return null;
+
+        return _deductionEngine.ComputeBreakdown(IncomeMapper.ToResponse(income), request.Year, request.Month);
+    }
 }

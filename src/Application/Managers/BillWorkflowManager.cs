@@ -1,5 +1,6 @@
 using Finance.Application.Contracts;
 using Finance.Application.Managers.Dependencies;
+using Finance.Application.Mappers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
@@ -34,7 +35,7 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
             request.Description);
 
         await _billRepository.AddAsync(bill, cancellationToken);
-        return Map(bill);
+        return BillMapper.ToResponse(bill);
     }
 
     public async Task<BillResponse?> UpdateAsync(UpdateBillRequest request, CancellationToken cancellationToken = default)
@@ -54,7 +55,7 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
             request.Description);
 
         await _billRepository.UpdateAsync(bill, cancellationToken);
-        return Map(bill);
+        return BillMapper.ToResponse(bill);
     }
 
     public async Task<BillResponse?> DeactivateAsync(DeactivateBillRequest request, CancellationToken cancellationToken = default)
@@ -67,7 +68,7 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
 
         bill.Deactivate();
         await _billRepository.UpdateAsync(bill, cancellationToken);
-        return Map(bill);
+        return BillMapper.ToResponse(bill);
     }
 
     public async Task<SplitResponse> UpsertSplitAsync(UpsertSplitRequest request, CancellationToken cancellationToken = default)
@@ -81,7 +82,7 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
             {
                 existing.Update(money);
                 await _splitRepository.UpdateAsync(existing, cancellationToken);
-                return MapSplit(existing);
+                return BillMapper.ToSplitResponse(existing);
             }
         }
 
@@ -101,7 +102,7 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
             money);
 
         await _splitRepository.AddAsync(split, cancellationToken);
-        return MapSplit(split);
+        return BillMapper.ToSplitResponse(split);
     }
 
     public async Task<SplitResponse?> RemoveSplitAsync(RemoveSplitRequest request, CancellationToken cancellationToken = default)
@@ -114,41 +115,8 @@ internal sealed class BillWorkflowManager : IBillWorkflowManager
 
         split.Remove();
         await _splitRepository.RemoveAsync(split, cancellationToken);
-        return MapSplit(split);
+        return BillMapper.ToSplitResponse(split);
     }
-
-    private static BillResponse Map(Bill bill)
-        => new(
-            bill.Id.Value,
-            bill.HouseholdId.Value,
-            bill.Title,
-            bill.Description,
-            bill.Amount.Amount,
-            bill.Amount.Currency,
-            bill.Category,
-            bill.CreatedBy.Value,
-            bill.DueDate,
-            bill.RecurrenceSchedule?.Frequency,
-            bill.RecurrenceSchedule?.StartDate,
-            bill.RecurrenceSchedule?.EndDate,
-            bill.IsActive,
-            bill.CreatedAt,
-            bill.UpdatedAt);
-
-    private static SplitResponse MapSplit(BillSplit split)
-        => new(
-            split.Id.Value,
-            split.BillId.Value,
-            split.HouseholdId.Value,
-            split.MembershipId.Value,
-            split.UserId.Value,
-            split.Amount.Amount,
-            split.Amount.Currency,
-            split.IsClaimed,
-            split.ClaimedAt,
-            split.ClaimedBy?.Value,
-            split.CreatedAt,
-            split.UpdatedAt);
 
     private static RecurrenceSchedule? BuildRecurrence(
         RecurrenceFrequency? frequency,

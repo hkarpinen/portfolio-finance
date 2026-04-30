@@ -64,3 +64,15 @@ public interface IHouseholdCoverageEngine
         DateTime periodStart,
         DateTime periodEnd);
 }
+
+public interface IPayrollDeductionEngine
+{
+    /// <summary>
+    /// Computes a monthly net-pay breakdown for the given income source.
+    /// Includes engine-estimated tax withholding (from TaxProfile) and all voluntary deductions.
+    /// </summary>
+    NetPayBreakdownResponse ComputeBreakdown(IncomeResponse income, int year, int month);
+
+    /// <summary>Returns just the monthly net pay (gross minus all deductions).</summary>
+    decimal ComputeMonthlyNetPay(IncomeResponse income, int year, int month);
+}

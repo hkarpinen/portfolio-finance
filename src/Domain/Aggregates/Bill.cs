@@ -47,9 +47,6 @@ public class Bill
         if (amount.Amount < 0)
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
 
-        if (dueDate < DateTime.UtcNow.Date)
-            throw new ArgumentException("Due date cannot be in the past.", nameof(dueDate));
-
         var bill = new Bill
         {
             Id = BillId.New(),

@@ -1,5 +1,6 @@
 using Finance.Application.Contracts;
 using Finance.Application.Managers.Dependencies;
+using Finance.Application.Mappers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
@@ -31,7 +32,7 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
         var ownerMembership = HouseholdMembership.Create(household.Id, UserId.Create(request.OwnerId), HouseholdRole.Owner);
         await _membershipRepository.AddAsync(ownerMembership, cancellationToken);
 
-        return Map(household);
+        return HouseholdMapper.ToResponse(household);
     }
 
     public async Task<HouseholdResponse?> UpdateAsync(UpdateHouseholdRequest request, CancellationToken cancellationToken = default)
@@ -44,7 +45,7 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
 
         household.Update(request.Name, request.Description);
         await _householdRepository.UpdateAsync(household, cancellationToken);
-        return Map(household);
+        return HouseholdMapper.ToResponse(household);
     }
 
     public async Task<HouseholdResponse?> TransferOwnershipAsync(TransferHouseholdOwnershipRequest request, CancellationToken cancellationToken = default)
@@ -66,7 +67,7 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
         household.TransferOwnership(UserId.Create(request.NewOwnerId));
         await _householdRepository.UpdateAsync(household, cancellationToken);
 
-        return Map(household);
+        return HouseholdMapper.ToResponse(household);
     }
 
     public async Task<bool> DeleteAsync(DeleteHouseholdRequest request, CancellationToken cancellationToken = default)
@@ -87,15 +88,4 @@ internal sealed class HouseholdWorkflowManager : IHouseholdWorkflowManager
         await _householdRepository.UpdateAsync(household, cancellationToken);
         return true;
     }
-
-    private static HouseholdResponse Map(Household household)
-        => new(
-            household.Id.Value,
-            household.Name,
-            household.Description,
-            household.OwnerId.Value,
-            household.CurrencyCode,
-            household.IsActive,
-            household.CreatedAt,
-            household.UpdatedAt);
 }

@@ -1,4 +1,6 @@
 using Finance.Application.Contracts;
+using Finance.Application.Engines;
+using Finance.Application.Managers.Dependencies;
 using Finance.Application.Queries;
 using Finance.Domain.ValueObjects;
 using Client.Extensions;
@@ -23,6 +25,7 @@ public sealed class OverviewController : ControllerBase
     private readonly IIncomeQuery _incomeQuery;
     private readonly IBillSplitQuery _splitQuery;
     private readonly IPersonalBillQuery _personalBillQuery;
+    private readonly IPayrollDeductionEngine _deductionEngine;
 
     public OverviewController(
         IHouseholdQuery householdQuery,
@@ -31,7 +34,8 @@ public sealed class OverviewController : ControllerBase
         IDashboardQuery dashboardQuery,
         IIncomeQuery incomeQuery,
         IBillSplitQuery splitQuery,
-        IPersonalBillQuery personalBillQuery)
+        IPersonalBillQuery personalBillQuery,
+        IPayrollDeductionEngine deductionEngine)
     {
         _householdQuery = householdQuery;
         _membershipQuery = membershipQuery;
@@ -40,6 +44,7 @@ public sealed class OverviewController : ControllerBase
         _incomeQuery = incomeQuery;
         _splitQuery = splitQuery;
         _personalBillQuery = personalBillQuery;
+        _deductionEngine = deductionEngine;
     }
 
     [HttpGet]
@@ -132,6 +137,7 @@ public sealed class OverviewController : ControllerBase
 
         // 6. Compute total monthly income (average across all months — for header display)
         decimal totalMonthlyIncome = income.Sum(src => MonthlyEquivalent(src));
+        decimal totalMonthlyNetIncome = income.Sum(src => UserBudgetCalculator.MonthlyNetEquivalent(src));
 
         // 6b. Monthly-normalised personal bill obligations
         decimal totalPersonalBillsMonthly = personalBills
@@ -141,7 +147,6 @@ public sealed class OverviewController : ControllerBase
         // 7. Build 12-month contribution summaries (3 past months + current + 8 future)
         var contributionsByMonth = await BuildContributionSummariesAsync(
             userId, income, personalBills, now, monthCount: 12, pastMonths: 3, ct);
-
         // 8. Compute user-level net balance:
         //    income minus ALL split obligations across ALL households for the current month.
         //    This replaces the household-level (all-members income - all bills) figure which
@@ -174,7 +179,8 @@ public sealed class OverviewController : ControllerBase
             totalMonthlyIncome,
             contributionsByMonth,
             income,
-            totalPersonalBillsMonthly));
+            totalPersonalBillsMonthly,
+            totalMonthlyNetIncome));
     }
 
     // ─── Contribution summary builder ───────────────────────────────────────
@@ -277,14 +283,17 @@ public sealed class OverviewController : ControllerBase
             var totalPaid = monthSplits.Where(s => s.IsClaimed).Sum(s => s.Amount);
             var personalDue = monthPersonal.Sum(p => p.Amount);
             var projectedIncome = incomeSources.Sum(src => ProjectIncomeForMonth(src, mStart.Year, mStart.Month));
+            var projectedNetIncome = incomeSources.Sum(src =>
+                src.IsActive ? _deductionEngine.ComputeMonthlyNetPay(src, mStart.Year, mStart.Month) : 0m);
 
             summaries.Add(new ContributionPeriodSummary(
                 label, mStart, mEnd,
                 totalDue, totalPaid, projectedIncome,
-                projectedIncome - totalDue - personalDue,
+                projectedNetIncome - totalDue - personalDue,
                 monthSplits,
                 personalDue,
-                monthPersonal));
+                monthPersonal,
+                projectedNetIncome));
         }
 
         return summaries;
