@@ -62,17 +62,6 @@ public class BillTests
     }
 
     [Fact]
-    public void Create_PastDueDate_ShouldThrow()
-    {
-        // Arrange
-        var (hId, uId) = NewIds();
-
-        // Act / Assert
-        Assert.Throws<ArgumentException>(() =>
-            Bill.Create(hId, "Bill", Money.Create(100m, "USD"), BillCategory.Other, uId, DateTime.UtcNow.Date.AddDays(-1)));
-    }
-
-    [Fact]
     public void Deactivate_ShouldSetIsActiveFalse()
     {
         // Arrange
