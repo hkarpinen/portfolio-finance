@@ -1,7 +1,6 @@
-using Finance.Application.Contracts;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Application.Engines;
+namespace Finance.Domain.Utilities;
 
 /// <summary>
 /// Federal and state income tax withholding estimates.
@@ -67,19 +66,19 @@ public static class TaxCalculator
         (decimal Threshold, decimal Rate)[] HohBrackets)
     {
         /// <summary>Returns the standard deduction for the given filing status.</summary>
-        public decimal StandardDeduction(string filingStatus) => filingStatus switch
+        public decimal StandardDeduction(FilingStatus filingStatus) => filingStatus switch
         {
-            "MarriedFilingJointly" => MfjStdDed,
-            "HeadOfHousehold"      => HohStdDed,
-            _                      => SingleStdDed,
+            FilingStatus.MarriedFilingJointly => MfjStdDed,
+            FilingStatus.HeadOfHousehold      => HohStdDed,
+            _                                 => SingleStdDed,
         };
 
         /// <summary>Returns the bracket table for the given filing status.</summary>
-        public (decimal Threshold, decimal Rate)[] Brackets(string filingStatus) => filingStatus switch
+        public (decimal Threshold, decimal Rate)[] Brackets(FilingStatus filingStatus) => filingStatus switch
         {
-            "MarriedFilingJointly" => MfjBrackets,
-            "HeadOfHousehold"      => HohBrackets,
-            _                      => SingleBrackets,
+            FilingStatus.MarriedFilingJointly => MfjBrackets,
+            FilingStatus.HeadOfHousehold      => HohBrackets,
+            _                                 => SingleBrackets,
         };
     }
 
@@ -233,7 +232,7 @@ public static class TaxCalculator
     /// </summary>
     public static decimal ComputeAnnualFederalTax(
         decimal annualGross,
-        TaxProfileDto profile,
+        TaxWithholdingProfile profile,
         decimal annualPreTaxDeductions = 0m,
         int year = 0)
     {
@@ -286,7 +285,7 @@ public static class TaxCalculator
     /// </summary>
     public static decimal ComputeAnnualStateTax(
         decimal annualGross,
-        TaxProfileDto profile,
+        TaxWithholdingProfile profile,
         decimal annualPreTaxDeductions = 0m,
         int year = 0)   // year reserved for future state-rule versioning; not yet used internally
     {
@@ -294,9 +293,10 @@ public static class TaxCalculator
         if (string.IsNullOrEmpty(stateCode) || NoTaxStates.Contains(stateCode)) return 0m;
 
         // Subtract the state standard deduction (returns 0 for states with none or unknown values)
-        // plus any state-level withholding allowances the employee has claimed.
+        // plus any state-level withholding allowances/exemptions the employee has claimed,
+        // valued per the destination state (NOT the federal allowance value).
         var stateDeduction = StateStandardDeduction(stateCode, profile.FilingStatus)
-                           + profile.StateAllowances * GetFederalRules(year).AllowanceValue;
+                           + profile.StateAllowances * StateAllowanceValue(stateCode);
 
         var taxableIncome = annualGross - stateDeduction - annualPreTaxDeductions;
         if (taxableIncome <= 0) return 0m;
@@ -304,15 +304,51 @@ public static class TaxCalculator
         return StateTax(stateCode, taxableIncome, profile.FilingStatus);
     }
 
+    // ── State allowance / personal-exemption values ──────────────────────────
+    // Dollar value of one state withholding allowance or personal exemption. States that
+    // tie their value to the federal W-4 allowance ($4,300) are listed explicitly; states
+    // that publish their own value override it; states using credits (not deductions)
+    // for allowances return 0 here (the credit, when modelled, is applied after the brackets).
+    // 2024 values unless noted. Verify each year.
+    private static decimal StateAllowanceValue(string stateCode) => stateCode switch
+    {
+        // Federal-conforming allowance ($4,300 per W-4 allowance)
+        "AZ" or "CO" or "GA" or "ID" or "MN" or "MO" or "MT" or "OR" or "UT" or "VT" or "DC" => 4_300m,
+
+        // State-published per-allowance / per-exemption deduction values
+        "AL" =>  1_500m,   // AL personal exemption (single)            — AL DOR 2024
+        "CA" =>    154m,   // CA exemption credit shown as deduction-eq — CA FTB 2024 (credit-style; rough deduction equivalent)
+        "DE" =>    110m,   // DE personal credit                        — DE Div. Rev. 2024 (credit; small deduction-eq)
+        "HI" =>  1_144m,   // HI personal exemption                     — HI DoTax 2024
+        "IA" =>     40m,   // IA personal credit ($40 = ~$1k deduction) — IA DOR 2024 (credit; rough deduction-eq)
+        "KS" =>  2_250m,   // KS personal exemption                     — KS DOR 2024
+        "KY" =>      0m,   // KY uses a flat standard deduction; no per-allowance value
+        "MS" =>  6_000m,   // MS dependent exemption                    — MS DOR 2024
+        "NC" =>      0m,   // NC eliminated personal exemption (2014+)
+        "NE" =>    157m,   // NE personal exemption credit              — NE DOR 2024 (credit; rough deduction-eq)
+        "NY" =>  1_000m,   // NY dependent exemption                    — NY DTF 2024
+        "OH" =>  2_400m,   // OH personal exemption                     — OH DOR 2024 (income-tier varies; mid value)
+        "RI" =>  4_950m,   // RI personal exemption                     — RI Div. Tax. 2024
+        "SC" =>  4_610m,   // SC personal exemption (per dependent)     — SC DOR 2024
+        "VA" =>    930m,   // VA personal exemption                     — VA DOT 2024
+        "WI" =>    700m,   // WI personal exemption                     — WI DOR 2024
+
+        // Flat-tax states with no per-allowance deduction
+        "IL" or "IN" or "MA" or "MI" or "PA" or "CT" or "NJ" => 0m,
+
+        // [APPROX] states (top-rate-only) — no per-allowance modelling yet
+        _ => 0m,
+    };
+
     // ── State standard deductions ─────────────────────────────────────────────
     // Subtracted from annual gross before applying state rates, mirroring the federal approach.
     // States with no standard deduction (NJ, PA, IL, etc.) return 0.
     // "Federal-conforming" states match the 2026 federal amounts ($15,000 / $30,000).
     // All other fixed amounts are 2024 values from each state's revenue department.
 
-    private static decimal StateStandardDeduction(string stateCode, string filingStatus)
+    private static decimal StateStandardDeduction(string stateCode, FilingStatus filingStatus)
     {
-        bool mfj = filingStatus == "MarriedFilingJointly";
+        bool mfj = filingStatus == FilingStatus.MarriedFilingJointly;
         return stateCode switch
         {
             // ── Federal-conforming states (2026: $15,000 single / $30,000 MFJ) ──
@@ -363,7 +399,7 @@ public static class TaxCalculator
     // ── State tax rates ───────────────────────────────────────────────────────
     // taxableIncome here is already net of the state standard deduction (see ComputeAnnualStateTax).
 
-    private static decimal StateTax(string stateCode, decimal taxableIncome, string filingStatus)
+    private static decimal StateTax(string stateCode, decimal taxableIncome, FilingStatus filingStatus)
         => stateCode switch
         {
             // ══ Flat-rate states ══════════════════════════════════════════════
@@ -435,9 +471,6 @@ public static class TaxCalculator
     /// NOT pre-tax: Roth 401(k) (after-tax contributions), Life Insurance above the
     /// §79 $50k exclusion, and Other (unknown — treated as taxable to avoid under-withholding).
     /// </summary>
-    public static bool IsPreTaxDeduction(string deductionType) =>
-        Enum.TryParse<DeductionType>(deductionType, out var t) && t.IsPreTax();
-
     public static bool IsPreTaxDeduction(DeductionType deductionType) => deductionType.IsPreTax();
 
     // ── Flat-rate helper ──────────────────────────────────────────────────────
@@ -452,16 +485,16 @@ public static class TaxCalculator
 
     // Alabama (AL) — 3 brackets, 2024
     // Source: Alabama DOR, Form A-4 instructions 2024
-    private static (decimal Threshold, decimal Rate)[] AlBrackets(string filingStatus) =>
-        filingStatus == "MarriedFilingJointly"
+    private static (decimal Threshold, decimal Rate)[] AlBrackets(FilingStatus filingStatus) =>
+        filingStatus == FilingStatus.MarriedFilingJointly
             ? [(6_000m, 0.05m), (1_000m, 0.04m), (0m, 0.02m)]   // 5 % / 4 % / 2 %
             : [(3_000m, 0.05m), (  500m, 0.04m), (0m, 0.02m)];  // thresholds halved for single
 
     // California (CA) — 9 brackets + 1 % mental health surcharge above $1 M (not modelled)
     // Source: CA FTB 2024 Schedule X (single) / Y (MFJ)
-    private static (decimal Threshold, decimal Rate)[] CaBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] CaBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (1_443_574m, 0.133m),  // 13.3 % on income above $1,443,574
@@ -490,9 +523,9 @@ public static class TaxCalculator
 
     // Connecticut (CT) — 7 brackets, 2024
     // Source: CT DRS Publication IP-2024(7)
-    private static (decimal Threshold, decimal Rate)[] CtBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] CtBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (1_000_000m, 0.0699m),  // 6.99 % on income above $1,000,000
@@ -559,9 +592,9 @@ public static class TaxCalculator
     // Kansas (KS) — 2 brackets, 2024
     // Source: KS DOR Publication KW-100 2024
     // MFJ thresholds are double the single thresholds.
-    private static (decimal Threshold, decimal Rate)[] KsBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] KsBrackets(FilingStatus filingStatus)
     {
-        decimal lower = filingStatus == "MarriedFilingJointly" ? 30_000m : 15_000m;
+        decimal lower = filingStatus == FilingStatus.MarriedFilingJointly ? 30_000m : 15_000m;
         return
         [
             (lower, 0.057m),  // 5.7 % on income above threshold
@@ -572,9 +605,9 @@ public static class TaxCalculator
     // Minnesota (MN) — 4 brackets, 2024
     // Source: MN DOR Withholding Tax Tables 2024
     // FIXED: second threshold corrected from $87,110 to $98,760 (prior value was wrong).
-    private static (decimal Threshold, decimal Rate)[] MnBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] MnBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (366_680m, 0.0985m),  // 9.85 % on income above $366,680
@@ -616,9 +649,9 @@ public static class TaxCalculator
 
     // Nebraska (NE) — 4 brackets, 2024
     // Source: NE DOR Nebraska Circular EN 2024
-    private static (decimal Threshold, decimal Rate)[] NeBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] NeBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (71_460m, 0.0664m),  // 6.64 % on income above $71,460
@@ -652,9 +685,9 @@ public static class TaxCalculator
 
     // New York (NY) — 9 brackets, 2024
     // Source: NY DTF Publication NYS-50-T-NYS 2024
-    private static (decimal Threshold, decimal Rate)[] NyBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] NyBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (25_000_000m, 0.109m),   // 10.9 %  on income above $25,000,000
@@ -696,9 +729,9 @@ public static class TaxCalculator
     // Source: OR DOR Publication OR-WITHHOLDING 2024
     // FIXED: prior thresholds ($8,750 / $17,400 / $250,000) were wrong.
     // Correct single thresholds: $10,200 / $25,500 / $125,000.
-    private static (decimal Threshold, decimal Rate)[] OrBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] OrBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (250_000m, 0.099m),   // 9.9 %  on income above $250,000
@@ -717,9 +750,9 @@ public static class TaxCalculator
 
     // Rhode Island (RI) — 3 brackets, 2024
     // Source: RI Division of Taxation Withholding Tax Tables 2024
-    private static (decimal Threshold, decimal Rate)[] RiBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] RiBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (333_900m, 0.0599m),  // 5.99 % on income above $333,900
@@ -755,9 +788,9 @@ public static class TaxCalculator
 
     // Vermont (VT) — 4 brackets, 2024
     // Source: VT Department of Taxes Withholding Tables 2024
-    private static (decimal Threshold, decimal Rate)[] VtBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] VtBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (279_450m, 0.0875m),  // 8.75 % on income above $279,450
@@ -776,9 +809,9 @@ public static class TaxCalculator
 
     // Wisconsin (WI) — 4 brackets, 2024
     // Source: WI DOR Publication W-166 2024
-    private static (decimal Threshold, decimal Rate)[] WiBrackets(string filingStatus)
+    private static (decimal Threshold, decimal Rate)[] WiBrackets(FilingStatus filingStatus)
     {
-        if (filingStatus == "MarriedFilingJointly")
+        if (filingStatus == FilingStatus.MarriedFilingJointly)
             return
             [
                 (420_420m, 0.0765m),  // 7.65 % on income above $420,420
