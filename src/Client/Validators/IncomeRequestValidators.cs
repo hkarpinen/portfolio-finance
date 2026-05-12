@@ -1,9 +1,9 @@
-using Finance.Application.Contracts;
+using Finance.Application.Commands;
 using FluentValidation;
 
 namespace Client.Validators;
 
-public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncomeRequest>
+public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncomeCommand>
 {
     public CreateIncomeRequestValidator()
     {
@@ -12,7 +12,8 @@ public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncom
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.Source).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Frequency).IsInEnum();
+        RuleFor(x => x.QuotedAs).IsInEnum();
+        RuleFor(x => x.PaidEvery).IsInEnum().When(x => x.PaidEvery.HasValue);
         RuleFor(x => x.StartDate).NotEmpty();
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate)
@@ -20,7 +21,7 @@ public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncom
     }
 }
 
-public sealed class UpdateIncomeRequestValidator : AbstractValidator<UpdateIncomeRequest>
+public sealed class UpdateIncomeRequestValidator : AbstractValidator<UpdateIncomeCommand>
 {
     public UpdateIncomeRequestValidator()
     {
@@ -28,7 +29,8 @@ public sealed class UpdateIncomeRequestValidator : AbstractValidator<UpdateIncom
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.Source).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Frequency).IsInEnum();
+        RuleFor(x => x.QuotedAs).IsInEnum();
+        RuleFor(x => x.PaidEvery).IsInEnum().When(x => x.PaidEvery.HasValue);
         RuleFor(x => x.StartDate).NotEmpty();
         RuleFor(x => x.EndDate)
             .GreaterThanOrEqualTo(x => x.StartDate)

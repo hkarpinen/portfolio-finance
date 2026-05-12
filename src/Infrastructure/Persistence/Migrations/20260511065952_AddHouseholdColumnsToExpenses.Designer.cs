@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    partial class FinanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260511065952_AddHouseholdColumnsToExpenses")]
+    partial class AddHouseholdColumnsToExpenses
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -179,15 +182,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_expenses");
 
-                    b.HasIndex("DueDate")
-                        .HasDatabaseName("ix_expenses_due_date");
-
-                    b.HasIndex("HouseholdId", "IsActive")
-                        .HasDatabaseName("ix_expenses_household_id_is_active");
-
-                    b.HasIndex("UserId", "IsActive")
-                        .HasDatabaseName("ix_expenses_user_id_is_active");
-
                     b.ToTable("expenses", "finance");
                 });
 
@@ -220,9 +214,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_expense_payments");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_expense_payments_user_id");
 
                     b.HasIndex("ExpenseId", "OccurrenceDate")
                         .IsUnique()
@@ -277,15 +268,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_expense_splits");
-
-                    b.HasIndex("ExpenseId")
-                        .HasDatabaseName("ix_expense_splits_expense_id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_expense_splits_user_id");
-
-                    b.HasIndex("UserId", "ExpenseId")
-                        .HasDatabaseName("ix_expense_splits_user_id_expense_id");
 
                     b.ToTable("expense_splits", "finance");
                 });
@@ -688,12 +670,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_household_memberships");
 
-                    b.HasIndex("HouseholdId", "IsActive")
-                        .HasDatabaseName("ix_household_memberships_household_id_is_active");
-
-                    b.HasIndex("UserId", "IsActive")
-                        .HasDatabaseName("ix_household_memberships_user_id_is_active");
-
                     b.ToTable("household_memberships", "finance");
                 });
 
@@ -751,9 +727,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_income_sources");
-
-                    b.HasIndex("UserId", "IsActive")
-                        .HasDatabaseName("ix_income_sources_user_id_is_active");
 
                     b.ToTable("income_sources", "finance");
                 });

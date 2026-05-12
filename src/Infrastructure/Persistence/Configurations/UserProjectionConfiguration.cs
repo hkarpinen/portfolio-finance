@@ -1,5 +1,5 @@
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

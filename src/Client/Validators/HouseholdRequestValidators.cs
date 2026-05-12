@@ -1,9 +1,9 @@
-using Finance.Application.Contracts;
+using Finance.Application.Commands;
 using FluentValidation;
 
 namespace Client.Validators;
 
-public sealed class CreateHouseholdRequestValidator : AbstractValidator<CreateHouseholdRequest>
+public sealed class CreateHouseholdRequestValidator : AbstractValidator<CreateHouseholdCommand>
 {
     public CreateHouseholdRequestValidator()
     {
@@ -15,7 +15,7 @@ public sealed class CreateHouseholdRequestValidator : AbstractValidator<CreateHo
     }
 }
 
-public sealed class UpdateHouseholdRequestValidator : AbstractValidator<UpdateHouseholdRequest>
+public sealed class UpdateHouseholdRequestValidator : AbstractValidator<UpdateHouseholdCommand>
 {
     public UpdateHouseholdRequestValidator()
     {
@@ -26,7 +26,7 @@ public sealed class UpdateHouseholdRequestValidator : AbstractValidator<UpdateHo
     }
 }
 
-public sealed class TransferHouseholdOwnershipRequestValidator : AbstractValidator<TransferHouseholdOwnershipRequest>
+public sealed class TransferHouseholdOwnershipRequestValidator : AbstractValidator<TransferHouseholdOwnershipCommand>
 {
     public TransferHouseholdOwnershipRequestValidator()
     {

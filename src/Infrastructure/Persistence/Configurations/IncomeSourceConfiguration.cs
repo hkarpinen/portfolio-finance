@@ -17,6 +17,11 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             .HasConversion(id => id.Value, v => new UserId(v));
 
         builder.Property(i => i.Source).HasMaxLength(300).IsRequired();
+        builder.Property(i => i.PaymentFrequency)
+            .HasColumnName("payment_frequency")
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
         builder.Property(i => i.LastPaymentDate).IsRequired(false);
         builder.Property(i => i.CreatedAt).IsRequired();
         builder.Property(i => i.UpdatedAt).IsRequired();
@@ -27,6 +32,8 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             money.Property(m => m.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
             money.Property(m => m.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         });
+
+        builder.HasIndex(i => new { i.UserId, i.IsActive });
 
         builder.OwnsOne(i => i.RecurrenceSchedule, rs =>
         {

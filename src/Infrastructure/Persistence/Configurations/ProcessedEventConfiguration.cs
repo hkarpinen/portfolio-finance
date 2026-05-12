@@ -7,7 +7,7 @@ internal sealed class ProcessedEventConfiguration : IEntityTypeConfiguration<Pro
 {
     public void Configure(EntityTypeBuilder<ProcessedEvent> builder)
     {
-        builder.ToTable("processed_events", "bills");
+        builder.ToTable("processed_events", "finance");
         builder.HasKey(x => x.EventId);
 
         builder.Property(x => x.EventId)

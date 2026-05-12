@@ -6,7 +6,7 @@ namespace Finance.Domain.Aggregates;
 /// <summary>
 /// Household aggregate root representing a group of members sharing expenses.
 /// </summary>
-public class Household
+public class Household : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
 
@@ -72,8 +72,12 @@ public class Household
         _domainEvents.Add(new HouseholdOwnershipTransferred(Id, newOwnerId));
     }
 
-    public void Deactivate()
+    public void Deactivate(int activeMemberCount = 1)
     {
+        if (activeMemberCount > 1)
+            throw new InvalidOperationException(
+                "Cannot delete a household with other active members. Remove all other members first or transfer ownership.");
+
         if (!IsActive)
             throw new InvalidOperationException("Household is already inactive.");
 

@@ -6,7 +6,7 @@ namespace Finance.Domain.Aggregates;
 /// <summary>
 /// Household membership aggregate root representing a member's participation in a household.
 /// </summary>
-public class HouseholdMembership
+public class HouseholdMembership : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
 

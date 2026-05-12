@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Finance.Domain.Events;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
@@ -17,19 +18,18 @@ internal sealed class OutboxPublisher : BackgroundService
 
     private static readonly Dictionary<string, Type> EventTypeMap = new()
     {
-        [nameof(HouseholdCreated)]               = typeof(BillsHouseholdCreatedEvent),
-        [nameof(HouseholdOwnershipTransferred)]  = typeof(BillsHouseholdOwnershipTransferredEvent),
-        [nameof(HouseholdMemberJoined)]          = typeof(BillsHouseholdMemberJoinedEvent),
-        [nameof(HouseholdMemberLeft)]            = typeof(BillsHouseholdMemberLeftEvent),
-        [nameof(HouseholdMemberRemoved)]         = typeof(BillsHouseholdMemberRemovedEvent),
-        [nameof(HouseholdMemberRoleChanged)]     = typeof(BillsHouseholdMemberRoleChangedEvent),
-        [nameof(BillCreated)]                    = typeof(BillsBillCreatedEvent),
-        [nameof(BillSplitCreated)]               = typeof(BillsBillSplitCreatedEvent),
+        [nameof(HouseholdCreated)]               = typeof(FinanceHouseholdCreatedEvent),
+        [nameof(HouseholdOwnershipTransferred)]  = typeof(FinanceHouseholdOwnershipTransferredEvent),
+        [nameof(HouseholdMemberJoined)]          = typeof(FinanceHouseholdMemberJoinedEvent),
+        [nameof(HouseholdMemberLeft)]            = typeof(FinanceHouseholdMemberLeftEvent),
+        [nameof(HouseholdMemberRemoved)]         = typeof(FinanceHouseholdMemberRemovedEvent),
+        [nameof(HouseholdMemberRoleChanged)]     = typeof(FinanceHouseholdMemberRoleChangedEvent),
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
     public OutboxPublisher(IServiceScopeFactory scopeFactory, ILogger<OutboxPublisher> logger)
@@ -65,7 +65,7 @@ internal sealed class OutboxPublisher : BackgroundService
 
         var messages = await dbContext.OutboxMessages
             .FromSqlRaw("""
-                SELECT * FROM bills.outbox_messages
+                SELECT * FROM finance.outbox_messages
                 WHERE published = false AND dead_lettered = false
                 ORDER BY created_at
                 LIMIT 50

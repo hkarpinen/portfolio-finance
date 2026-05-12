@@ -1,29 +1,27 @@
-using Finance.Application.Contracts;
+using Finance.Application.Commands;
 using FluentValidation;
 
 namespace Client.Validators;
 
-public sealed class InviteHouseholdMemberRequestValidator : AbstractValidator<InviteHouseholdMemberRequest>
+public sealed class InviteHouseholdMemberRequestValidator : AbstractValidator<InviteHouseholdMemberCommand>
 {
     public InviteHouseholdMemberRequestValidator()
     {
         // HouseholdId is injected from the route by HouseholdsController.Invite
         // (request with { HouseholdId = id }) — never supplied in the request body.
         RuleFor(x => x.InvitedByUserId).NotEmpty();
-        RuleFor(x => x.InvitationCode).NotEmpty().MaximumLength(64);
     }
 }
 
-public sealed class JoinHouseholdRequestValidator : AbstractValidator<JoinHouseholdRequest>
+public sealed class JoinHouseholdRequestValidator : AbstractValidator<JoinHouseholdCommand>
 {
     public JoinHouseholdRequestValidator()
     {
-        RuleFor(x => x.InvitationCode).NotEmpty().MaximumLength(64);
         RuleFor(x => x.UserId).NotEmpty();
     }
 }
 
-public sealed class ChangeMembershipRoleRequestValidator : AbstractValidator<ChangeMembershipRoleRequest>
+public sealed class ChangeMembershipRoleRequestValidator : AbstractValidator<ChangeMembershipRoleCommand>
 {
     public ChangeMembershipRoleRequestValidator()
     {
@@ -32,7 +30,7 @@ public sealed class ChangeMembershipRoleRequestValidator : AbstractValidator<Cha
     }
 }
 
-public sealed class RemoveMembershipRequestValidator : AbstractValidator<RemoveMembershipRequest>
+public sealed class RemoveMembershipRequestValidator : AbstractValidator<RemoveMembershipCommand>
 {
     public RemoveMembershipRequestValidator()
     {

@@ -9,6 +9,8 @@ internal sealed class HouseholdMembershipConfiguration : IEntityTypeConfiguratio
 {
     public void Configure(EntityTypeBuilder<HouseholdMembership> builder)
     {
+        builder.ToTable("household_memberships");
+
         builder.HasKey(m => m.Id);
         builder.Property(m => m.Id)
             .HasConversion(id => id.Value, v => new MembershipId(v));
@@ -28,5 +30,8 @@ internal sealed class HouseholdMembershipConfiguration : IEntityTypeConfiguratio
         builder.Property(m => m.JoinedAt).IsRequired();
         builder.Property(m => m.UpdatedAt).IsRequired();
         builder.Property(m => m.IsActive).IsRequired();
+
+        builder.HasIndex(m => new { m.HouseholdId, m.IsActive });
+        builder.HasIndex(m => new { m.UserId, m.IsActive });
     }
 }

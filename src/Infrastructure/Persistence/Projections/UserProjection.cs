@@ -1,11 +1,14 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.ReadModels;
+namespace Finance.Infrastructure.Persistence.Projections;
 
 /// <summary>
-/// Denormalized read model for user data projected from the Identity service.
-/// Not an aggregate — has no lifecycle, invariants, or domain events.
-/// Mutation is performed by infrastructure consumers only.
+/// Denormalized projection of user data synced from the Identity service via
+/// domain events. Written by infrastructure event consumers; read by query classes.
+/// Not a domain aggregate — has no lifecycle, invariants, or domain events.
+/// Belongs in Infrastructure because its shape is driven by what queries need,
+/// its persistence is managed by EF Core, and it is mutated by infrastructure
+/// consumers, not by domain logic.
 /// </summary>
 public sealed class UserProjection
 {

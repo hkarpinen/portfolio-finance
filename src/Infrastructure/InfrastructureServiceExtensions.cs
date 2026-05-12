@@ -1,9 +1,11 @@
-using Finance.Application.Managers.Dependencies;
+using Finance.Application.Ports;
 using Finance.Application.Queries;
-using Infrastructure.Engines;
+using Finance.Application.Repositories;
+using Finance.Domain.Engines;
 using Infrastructure.Messaging;
 using Infrastructure.Messaging.Consumers;
 using Infrastructure.Persistence;
+using Infrastructure.Plaid;
 using Infrastructure.Queries;
 using Infrastructure.Repositories;
 using MassTransit;
@@ -50,22 +52,31 @@ public static class InfrastructureServiceExtensions
 
         services.AddScoped<IHouseholdRepository, HouseholdRepository>();
         services.AddScoped<IHouseholdMembershipRepository, HouseholdMembershipRepository>();
-        services.AddScoped<IBillRepository, BillRepository>();
-        services.AddScoped<IBillSplitRepository, BillSplitRepository>();
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
-        services.AddScoped<IPersonalBillRepository, PersonalBillRepository>();
-        services.AddScoped<IHouseholdCoverageEngine, HouseholdCoverageEngine>();
-        services.AddScoped<IPayrollDeductionEngine, PayrollDeductionEngine>();
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
+        services.AddScoped<IExpensePaymentRepository, ExpensePaymentRepository>();
+        services.AddScoped<IExpenseSplitRepository, ExpenseSplitRepository>();
+        services.AddScoped<IExpenseSplitPaymentRepository, ExpenseSplitPaymentRepository>();
 
-        services.AddScoped<IBillQuery, BillQuery>();
         services.AddScoped<IHouseholdQuery, HouseholdQuery>();
-        services.AddScoped<IHouseholdMembershipQuery, HouseholdMembershipQuery>();
         services.AddScoped<IIncomeQuery, IncomeQuery>();
-        services.AddScoped<IDashboardQuery, DashboardQuery>();
-        services.AddScoped<IBillSplitQuery, BillSplitQuery>();
-        services.AddScoped<IPersonalBillQuery, PersonalBillQuery>();
+        services.AddScoped<IExpenseQuery, ExpenseQuery>();
+        services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
 
         services.AddHostedService<OutboxPublisher>();
+
+        // ── Plaid integration ──────────────────────────────────────────────
+        services.Configure<PlaidOptions>(configuration.GetSection("Plaid"));
+        services.AddDataProtection();
+        services.AddScoped<IConnectionTokenProtector, AccessTokenProtector>();
+        services.AddScoped<IFinancialConnectionRepository, FinancialConnectionRepository>();
+
+        // Typed HttpClient: timeout tuned for Plaid's worst-case sync page (~10s),
+        // with a bit of headroom for network jitter on the very first sync.
+        services.AddHttpClient<IBankDataProvider, PlaidApiClient>(http =>
+        {
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
 
         return services;
     }

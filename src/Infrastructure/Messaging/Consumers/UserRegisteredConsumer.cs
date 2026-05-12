@@ -1,5 +1,5 @@
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
