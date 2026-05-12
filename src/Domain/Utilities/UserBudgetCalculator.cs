@@ -1,4 +1,4 @@
-using Finance.Domain.ReadModels;
+using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Utilities;
@@ -39,7 +39,9 @@ public static class UserBudgetCalculator
     /// Recurring bills are projected into the month via <see cref="RecurrenceSchedule.GetOccurrencesInRange"/>;
     /// one-time bills are counted if their DueDate falls inside the month.
     /// </summary>
-    public static decimal MonthlyObligationsForUser(IEnumerable<SplitWithSharedExpenseDetail> splits, int year, int month)
+    public static decimal MonthlyObligationsForUser(
+        IEnumerable<(ExpenseSplit Split, Expense Expense, Household Household)> splits,
+        int year, int month)
     {
         var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
         var monthEndExclusive = monthStart.AddMonths(1);
@@ -47,20 +49,10 @@ public static class UserBudgetCalculator
         decimal total = 0m;
         foreach (var s in splits)
         {
-            int occurrences;
-            if (s.RecurrenceFrequency.HasValue && s.RecurrenceStartDate.HasValue)
-            {
-                var schedule = RecurrenceSchedule.Create(
-                    s.RecurrenceFrequency.Value,
-                    s.RecurrenceStartDate.Value,
-                    s.RecurrenceEndDate);
-                occurrences = schedule.GetOccurrencesInRange(monthStart, monthEndExclusive).Count;
-            }
-            else
-            {
-                occurrences = (s.DueDate >= monthStart && s.DueDate < monthEndExclusive) ? 1 : 0;
-            }
-            total += occurrences * s.Amount;
+            int occurrences = s.Expense.RecurrenceSchedule is not null
+                ? s.Expense.RecurrenceSchedule.GetOccurrencesInRange(monthStart, monthEndExclusive).Count
+                : (s.Expense.DueDate >= monthStart && s.Expense.DueDate < monthEndExclusive) ? 1 : 0;
+            total += occurrences * s.Split.Amount.Amount;
         }
         return total;
     }

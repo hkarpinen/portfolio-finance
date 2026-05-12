@@ -68,6 +68,22 @@ public record RecurrenceSchedule
         return occurrences.Count * amount.Amount;
     }
 
+    /// <summary>
+    /// Returns the most recent occurrence on or before today, or the first upcoming
+    /// occurrence if the schedule hasn't started yet. Falls back to
+    /// <paramref name="fallback"/> when no occurrences can be found.
+    /// </summary>
+    public DateTime CurrentOccurrence(DateTime fallback)
+    {
+        var today = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+        var past = GetOccurrencesInRange(today.AddYears(-3), today.AddDays(1));
+        if (past.Count > 0)
+            return past[^1];
+
+        var future = GetOccurrencesInRange(today, today.AddYears(2).AddDays(1));
+        return future.Count > 0 ? future[0] : fallback;
+    }
+
     private DateTime GetNextOccurrence(DateTime current) => Frequency switch
     {
         RecurrenceFrequency.Daily => current.AddDays(1),

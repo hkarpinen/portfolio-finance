@@ -5,13 +5,13 @@ using Finance.Domain.ValueObjects;
 
 namespace Infrastructure.Persistence;
 
-// Value-object JSON converters so bills domain events serialise to flat primitives
+// Value-object JSON converters so domain events serialise to flat primitives
 // rather than {"value":"..."} objects.
 
-internal sealed class BillIdConverter : JsonConverter<BillId>
+internal sealed class ExpenseSplitIdConverter : JsonConverter<ExpenseSplitId>
 {
-    public override BillId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
-    public override void Write(Utf8JsonWriter w, BillId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
+    public override ExpenseSplitId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
+    public override void Write(Utf8JsonWriter w, ExpenseSplitId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
 }
 
 internal sealed class HouseholdIdConverter : JsonConverter<HouseholdId>
@@ -32,10 +32,10 @@ internal sealed class BillsUserIdConverter : JsonConverter<UserId>
     public override void Write(Utf8JsonWriter w, UserId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
 }
 
-internal sealed class SplitIdConverter : JsonConverter<SplitId>
+internal sealed class ExpenseIdConverter : JsonConverter<ExpenseId>
 {
-    public override SplitId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
-    public override void Write(Utf8JsonWriter w, SplitId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
+    public override ExpenseId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
+    public override void Write(Utf8JsonWriter w, ExpenseId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
 }
 
 internal static class OutboxExtensions
@@ -46,11 +46,12 @@ internal static class OutboxExtensions
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters =
         {
-            new BillIdConverter(),
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
+            new ExpenseIdConverter(),
+            new ExpenseSplitIdConverter(),
             new HouseholdIdConverter(),
             new BillsMembershipIdConverter(),
-            new BillsUserIdConverter(),
-            new SplitIdConverter()
+            new BillsUserIdConverter()
         }
     };
 

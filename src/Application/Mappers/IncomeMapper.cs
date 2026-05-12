@@ -1,4 +1,4 @@
-using Finance.Application.Contracts;
+using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
@@ -6,13 +6,14 @@ namespace Finance.Application.Mappers;
 
 public static class IncomeMapper
 {
-    public static IncomeResponse ToResponse(IncomeSource income) => new(
+    public static IncomeDto ToResponse(IncomeSource income) => new(
         income.Id.Value,
         income.UserId.Value,
         income.Amount.Amount,
         income.Amount.Currency,
         income.Source,
         income.RecurrenceSchedule.Frequency,
+        income.PaymentFrequency,
         income.RecurrenceSchedule.StartDate,
         income.RecurrenceSchedule.EndDate,
         income.IsActive,

@@ -1,4 +1,5 @@
 using Finance.Domain.Events;
+using Finance.Domain.Utilities;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
@@ -6,7 +7,7 @@ namespace Finance.Domain.Aggregates;
 /// <summary>
 /// Income source aggregate root representing a member's income contribution to the household.
 /// </summary>
-public class IncomeSource
+public class IncomeSource : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
 
@@ -15,7 +16,15 @@ public class IncomeSource
     public Money Amount { get; private set; }
     public string Source { get; private set; } = string.Empty;
     public RecurrenceSchedule RecurrenceSchedule { get; private set; } = null!;
-    /// <summary>Optional: the date the user last received this income. Used for per-month projection calculations.</summary>
+    /// <summary>
+    /// How often a paycheck actually arrives (the payment cadence).
+    /// May differ from RecurrenceSchedule.Frequency, which represents
+    /// the period the <see cref="Amount"/> is quoted in (e.g. monthly salary paid bi-weekly).
+    /// Defaults to RecurrenceSchedule.Frequency when not specified.
+    /// </summary>
+    public RecurrenceFrequency PaymentFrequency { get; private set; }
+    /// <summary>The date of the most recent paycheck — used as the recurrence anchor
+    /// so the schedule generates exact real-world pay dates.</summary>
     public DateTime? LastPaymentDate { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
@@ -47,6 +56,7 @@ public class IncomeSource
         Money amount,
         string source,
         RecurrenceSchedule recurrenceSchedule,
+        RecurrenceFrequency? paymentFrequency = null,
         DateTime? lastPaymentDate = null)
     {
         if (string.IsNullOrWhiteSpace(source))
@@ -62,6 +72,7 @@ public class IncomeSource
             Amount = amount,
             Source = source,
             RecurrenceSchedule = recurrenceSchedule,
+            PaymentFrequency = paymentFrequency ?? recurrenceSchedule.Frequency,
             LastPaymentDate = lastPaymentDate.HasValue ? DateTime.SpecifyKind(lastPaymentDate.Value, DateTimeKind.Utc) : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -78,7 +89,7 @@ public class IncomeSource
         return incomeSource;
     }
 
-    public void Update(Money amount, string source, RecurrenceSchedule recurrenceSchedule, DateTime? lastPaymentDate = null)
+    public void Update(Money amount, string source, RecurrenceSchedule recurrenceSchedule, RecurrenceFrequency? paymentFrequency = null, DateTime? lastPaymentDate = null)
     {
         if (string.IsNullOrWhiteSpace(source))
             throw new ArgumentException("Source cannot be empty.", nameof(source));
@@ -89,6 +100,7 @@ public class IncomeSource
         Amount = amount;
         Source = source;
         RecurrenceSchedule = recurrenceSchedule;
+        PaymentFrequency = paymentFrequency ?? recurrenceSchedule.Frequency;
         if (lastPaymentDate.HasValue)
             LastPaymentDate = DateTime.SpecifyKind(lastPaymentDate.Value, DateTimeKind.Utc);
         UpdatedAt = DateTime.UtcNow;
@@ -195,5 +207,40 @@ public class IncomeSource
         Deductions[idx] = replacement;
         UpdatedAt = DateTime.UtcNow;
         _domainEvents.Add(new IncomeSourceDeductionUpdated(Id, replacement));
+    }
+
+    // ── Income projection ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The per-paycheck gross amount based on how the income is quoted and
+    /// how often paychecks actually arrive.
+    /// </summary>
+    public decimal PerPaycheckGross() =>
+        UserBudgetCalculator.PerPaycheckAmount(
+            Amount.Amount, RecurrenceSchedule.Frequency, PaymentFrequency);
+
+    /// <summary>
+    /// Number of paychecks landing inside [<paramref name="from"/>,
+    /// <paramref name="toExclusive"/>) using the real-world payment anchor.
+    /// </summary>
+    public int PaychecksInRange(DateTime from, DateTime toExclusive)
+    {
+        var anchor = LastPaymentDate ?? RecurrenceSchedule.StartDate;
+        var schedule = RecurrenceSchedule.Create(PaymentFrequency, anchor, RecurrenceSchedule.EndDate);
+        return schedule.GetOccurrencesInRange(from, toExclusive).Count;
+    }
+
+    /// <summary>
+    /// Projected gross income for a single calendar month.
+    /// Returns 0 if the source is inactive or has no occurrences that month.
+    /// </summary>
+    public decimal ProjectGrossForMonth(int year, int month)
+    {
+        if (!IsActive) return 0m;
+        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+        if (RecurrenceSchedule.StartDate >= monthEnd) return 0m;
+        if (RecurrenceSchedule.EndDate.HasValue && RecurrenceSchedule.EndDate.Value <= monthStart) return 0m;
+        return PaychecksInRange(monthStart, monthEnd) * PerPaycheckGross();
     }
 }

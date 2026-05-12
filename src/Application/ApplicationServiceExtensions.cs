@@ -1,4 +1,5 @@
 using Finance.Application.Managers;
+using Finance.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Finance.Application;
@@ -7,13 +8,14 @@ public static class ApplicationServiceExtensions
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddScoped<IHouseholdWorkflowManager, HouseholdWorkflowManager>();
-        services.AddScoped<IHouseholdMembershipManager, HouseholdMembershipManager>();
-        services.AddScoped<IBillWorkflowManager, BillWorkflowManager>();
+        services.AddScoped<IHouseholdManager, HouseholdManager>();
         services.AddScoped<IIncomeManager, IncomeManager>();
-        services.AddScoped<IPersonalBillManager, PersonalBillManager>();
+        services.AddScoped<IExpenseManager, ExpenseManager>();
+        services.AddScoped<IFinancialConnectionManager, FinancialConnectionManager>();
+        services.AddScoped<IBankSyncService, BankSyncService>();
 
         return services;
     }
 }
+
 

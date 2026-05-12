@@ -1,7 +1,6 @@
-using Finance.Application.Contracts;
-using Finance.Application.Engines;
-using Finance.Application.Managers;
+using Finance.Application.Commands;
 using Finance.Application.Queries;
+using Finance.Application.Managers;
 using Finance.Domain.ValueObjects;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -14,103 +13,58 @@ namespace Client.Controllers;
 [Route("api/finance/households")]
 public sealed class HouseholdsController : ControllerBase
 {
-    private readonly IHouseholdWorkflowManager _manager;
-    private readonly IHouseholdMembershipManager _membershipManager;
+    private readonly IHouseholdManager _manager;
     private readonly IHouseholdQuery _householdQuery;
-    private readonly IHouseholdMembershipQuery _membershipQuery;
-    private readonly IBillQuery _billQuery;
-    private readonly IDashboardQuery _dashboardQuery;
-    private readonly IBillSplitQuery _splitQuery;
-    private readonly IIncomeQuery _incomeQuery;
+    private readonly IExpenseQuery _expenseQuery;
 
     public HouseholdsController(
-        IHouseholdWorkflowManager manager,
-        IHouseholdMembershipManager membershipManager,
+        IHouseholdManager manager,
         IHouseholdQuery householdQuery,
-        IHouseholdMembershipQuery membershipQuery,
-        IBillQuery billQuery,
-        IDashboardQuery dashboardQuery,
-        IBillSplitQuery splitQuery,
-        IIncomeQuery incomeQuery)
+        IExpenseQuery expenseQuery)
     {
         _manager = manager;
-        _membershipManager = membershipManager;
         _householdQuery = householdQuery;
-        _membershipQuery = membershipQuery;
-        _billQuery = billQuery;
-        _dashboardQuery = dashboardQuery;
-        _splitQuery = splitQuery;
-        _incomeQuery = incomeQuery;
+        _expenseQuery = expenseQuery;
     }
+
+    // ── Household CRUD ────────────────────────────────────────────────────────
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
-        var result = await _householdQuery.ListAsync(new ListHouseholdsRequest(userId, page, pageSize, ActiveOnly: true), ct);
+        var result = await _householdQuery.ListAsync(new ListHouseholdsParams(userId, page, pageSize, ActiveOnly: true), ct);
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetDetail(Guid id, CancellationToken ct = default)
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct = default)
     {
-        var result = await _householdQuery.GetDetailAsync(new HouseholdDetailRequest(id), ct);
+        var result = await _householdQuery.GetDetailAsync(new HouseholdDetailParams(id), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
-    /// <summary>
-    /// Composite endpoint returning household + members + bills + dashboard in a single call.
-    /// </summary>
     [HttpGet("{id:guid}/detail")]
-    public async Task<IActionResult> GetPage(Guid id, CancellationToken ct = default)
+    public async Task<IActionResult> GetDetail(Guid id, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
         var now = DateTime.UtcNow;
-        var periodStart = new DateTime(now.Year, now.Month, 1);
+        var periodStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var periodEnd = periodStart.AddMonths(1).AddDays(-1);
-
-        var household = await _householdQuery.GetDetailAsync(new HouseholdDetailRequest(id), ct);
-        if (household is null) return NotFound();
-
-        var members = await _membershipQuery.ListMembersAsync(id, ct);
-        var bills = await _billQuery.ListAsync(new ListBillsRequest(id, 1, 500, true), ct);
-        var dashboard = await _dashboardQuery.QueryAsync(new DashboardQueryRequest(id, periodStart, periodEnd), ct);
-
-        // Replace the household-wide Net Balance with the current user's personal
-        // net balance: their own income minus ALL their split obligations across
-        // every household they belong to. This is the same figure shown on the
-        // overview page so the two never disagree.
-        var userIncome = await _incomeQuery.ListByUserAsync(
-            new ListUserIncomeRequest(userId, 1, 500, true), ct);
-        var userSplits = await _splitQuery.ListByUserWithBillDetailsAsync(
-            UserId.Create(userId), periodStart, periodEnd, ct);
-
-        var monthlyIncome = UserBudgetCalculator.MonthlyIncomeForUser(
-            userIncome.Items, periodStart.Year, periodStart.Month);
-        var monthlyObligations = UserBudgetCalculator.MonthlyObligationsForUser(
-            userSplits, periodStart.Year, periodStart.Month);
-        var userNetBalance = monthlyIncome - monthlyObligations;
-
-        var correctedDashboard = dashboard with
-        {
-            TotalIncome = monthlyIncome,
-            NetBalance = userNetBalance,
-            IsOvercommitted = userNetBalance < 0,
-        };
-
-        return Ok(new HouseholdPageResponse(household, members, bills.Items, correctedDashboard));
+        var result = await _householdQuery.GetPageAsync(id, userId, periodStart, periodEnd, ct);
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateHouseholdRequest request, CancellationToken ct = default)
+    public async Task<IActionResult> Create([FromBody] CreateHouseholdCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.CreateAsync(request with { OwnerId = userId.Value }, ct);
-        return CreatedAtAction(nameof(GetDetail), new { id = result.HouseholdId }, result);
+        return CreatedAtAction(nameof(Get), new { id = result.HouseholdId }, result);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateHouseholdRequest request, CancellationToken ct = default)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateHouseholdCommand request, CancellationToken ct = default)
     {
         var result = await _manager.UpdateAsync(request with { HouseholdId = id }, ct);
         return result is null ? NotFound() : Ok(result);
@@ -122,17 +76,11 @@ public sealed class HouseholdsController : ControllerBase
         var userId = User.GetUserId().Value;
         try
         {
-            var result = await _manager.DeleteAsync(new DeleteHouseholdRequest(id, userId), ct);
+            var result = await _manager.DeleteAsync(new DeleteHouseholdCommand(id, userId), ct);
             return result ? NoContent() : NotFound();
         }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
     }
 
     [HttpPost("{id:guid}/transfer-ownership")]
@@ -141,18 +89,34 @@ public sealed class HouseholdsController : ControllerBase
         var userId = User.GetUserId().Value;
         try
         {
-            var result = await _manager.TransferOwnershipAsync(new TransferHouseholdOwnershipRequest(id, body.NewOwnerId, userId), ct);
+            var result = await _manager.TransferOwnershipAsync(new TransferHouseholdOwnershipCommand(id, body.NewOwnerId, userId), ct);
             return result is null ? NotFound() : Ok(result);
         }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
     }
+
+    // ── Dashboard ─────────────────────────────────────────────────────────────
+
+    [HttpGet("{id:guid}/dashboard")]
+    public async Task<IActionResult> Dashboard(Guid id, [FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd, CancellationToken ct = default)
+    {
+        var start = periodStart ?? new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var end   = periodEnd   ?? start.AddMonths(1).AddDays(-1);
+        var result = await _householdQuery.QueryAsync(new DashboardParams(id, start, end), ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}/dashboard/coverage")]
+    public async Task<IActionResult> DashboardCoverage(Guid id, [FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd, CancellationToken ct = default)
+    {
+        var start = periodStart ?? new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var end   = periodEnd   ?? start.AddMonths(1).AddDays(-1);
+        var result = await _householdQuery.GetCoverageStatusAsync(new CoverageStatusParams(id, start, end), ct);
+        return Ok(result);
+    }
+
+    // ── Contributions ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns per-month, per-member contribution breakdowns for a household.
@@ -164,43 +128,57 @@ public sealed class HouseholdsController : ControllerBase
         var now = DateTime.UtcNow;
         var windowStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-3);
         var windowEnd = windowStart.AddMonths(12).AddDays(-1);
-
-        var result = await _splitQuery.ListByHouseholdAsync(
+        var result = await _expenseQuery.ListSplitsByHouseholdAsync(
             HouseholdId.Create(id), windowStart, windowEnd, ct);
-
-        // Strip months with no contributions so the UI doesn't show empty cards
         var nonEmpty = result.Where(m => m.Members.Count > 0).ToList();
         return Ok(nonEmpty);
     }
 
+    // ── Members ───────────────────────────────────────────────────────────────
+
     [HttpGet("{id:guid}/members")]
     public async Task<IActionResult> ListMembers(Guid id, CancellationToken ct = default)
     {
-        var result = await _membershipQuery.ListMembersAsync(id, ct);
+        var result = await _householdQuery.ListMembersAsync(id, ct);
         return Ok(result);
     }
 
     [HttpPost("{id:guid}/members/invite")]
-    public async Task<IActionResult> Invite(Guid id, [FromBody] InviteHouseholdMemberRequest request, CancellationToken ct = default)
+    public async Task<IActionResult> Invite(Guid id, CancellationToken ct = default)
     {
-        var result = await _membershipManager.InviteAsync(request with { HouseholdId = id }, ct);
-        return CreatedAtAction(nameof(GetDetail), new { id }, result);
+        var invitedByUserId = User.GetUserId().Value;
+        var result = await _manager.InviteAsync(
+            new InviteHouseholdMemberCommand(id, invitedByUserId), ct);
+        return CreatedAtAction(nameof(Get), new { id }, result);
     }
 
     [HttpPost("{id:guid}/members/join")]
-    public async Task<IActionResult> Join(Guid id, [FromBody] JoinHouseholdRequest request, CancellationToken ct = default)
+    public async Task<IActionResult> Join(Guid id, [FromBody] JoinHouseholdCommand request, CancellationToken ct = default)
     {
-        var result = await _membershipManager.JoinAsync(request, ct);
+        var result = await _manager.JoinAsync(request, ct);
         return result is null
             ? NotFound()
-            : CreatedAtAction(nameof(GetDetail), new { id = result.HouseholdId }, result);
+            : CreatedAtAction(nameof(Get), new { id = result.HouseholdId }, result);
+    }
+
+    /// <summary>
+    /// Join a household using only the invitation code — no householdId required.
+    /// </summary>
+    [HttpPost("/api/finance/members/join")]
+    public async Task<IActionResult> JoinByCode([FromBody] JoinByCodeCommand request, CancellationToken ct = default)
+    {
+        var userId = User.GetUserId().Value;
+        var result = await _manager.JoinByCodeAsync(request, userId, ct);
+        return result is null
+            ? NotFound(new { error = "Invalid invitation code." })
+            : CreatedAtAction(nameof(Get), new { id = result.HouseholdId }, result);
     }
 
     [HttpDelete("{id:guid}/members/{membershipId:guid}")]
     public async Task<IActionResult> RemoveMember(Guid id, Guid membershipId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        var result = await _membershipManager.RemoveAsync(new RemoveMembershipRequest(membershipId, userId.Value), ct);
+        var result = await _manager.RemoveAsync(new RemoveMembershipCommand(membershipId, userId.Value), ct);
         return result is null ? NotFound() : NoContent();
     }
 
@@ -209,16 +187,22 @@ public sealed class HouseholdsController : ControllerBase
     {
         try
         {
-            var result = await _membershipManager.ChangeRoleAsync(new ChangeMembershipRoleRequest(membershipId, body.Role), ct);
+            var result = await _manager.ChangeRoleAsync(new ChangeMembershipRoleCommand(membershipId, body.Role), ct);
             return result is null ? NotFound() : Ok(result);
         }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { error = ex.Message });
-        }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
+    // ── User overview ─────────────────────────────────────────────────────────
+
+    [HttpGet("/api/finance/overview")]
+    public async Task<IActionResult> Overview(CancellationToken ct = default)
+    {
+        var userId = User.GetUserId().Value;
+        var result = await _householdQuery.GetUserOverviewAsync(userId, DateTime.UtcNow, ct);
+        return Ok(result);
     }
 }
 
 public sealed record TransferOwnershipBody(Guid NewOwnerId);
-public sealed record ChangeMemberRoleBody(Finance.Domain.ValueObjects.HouseholdRole Role);
-
+public sealed record ChangeMemberRoleBody(HouseholdRole Role);

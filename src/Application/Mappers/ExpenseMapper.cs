@@ -23,7 +23,7 @@ public static class ExpenseMapper
             expense.CreatedAt,
             expense.UpdatedAt,
             isPaid,
-            OccurrenceDateComputer.ComputeCurrent(expense.DueDate, expense.RecurrenceSchedule));
+            expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate);
 
     public static HouseholdExpenseDto ToHouseholdResponse(Expense expense, bool callerIsPaid = false) =>
         new(
@@ -42,7 +42,7 @@ public static class ExpenseMapper
             expense.IsActive,
             expense.CreatedAt,
             expense.UpdatedAt,
-            OccurrenceDateComputer.ComputeCurrent(expense.DueDate, expense.RecurrenceSchedule),
+            expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate,
             callerIsPaid);
 
     public static SplitDto ToSplitResponse(ExpenseSplit split) => new(

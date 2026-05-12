@@ -1,5 +1,4 @@
 using Finance.Application.Dtos;
-using Finance.Application.Queries;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Queries;
@@ -25,20 +24,11 @@ public sealed record ListSplitsParams(Guid ExpenseId);
 
 public interface IExpenseQuery
 {
-    // ── Personal expense queries ─────────────────────────────────────────────
+    // ── Personal expense queries ──────────────────────────────────────────────
     Task<ExpenseListDto> ListByUserAsync(ListExpensesParams request, CancellationToken cancellationToken = default);
-    /// <summary>Returns all active personal expenses for a user without pagination.</summary>
-    Task<IReadOnlyList<ExpenseDto>> GetAllActivePersonalByUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<ExpenseDto?> GetDetailAsync(ExpenseDetailParams request, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns all (ExpenseId, OccurrenceDate) pairs that the user has paid within the date window,
-    /// mapped to the timestamp the payment was recorded.
-    /// </summary>
-    Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> GetPaidOccurrencesAsync(
-        UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
-
-    // ── Household expense queries (absorbed from ISharedExpenseQuery) ─────────
+    // ── Household expense queries ─────────────────────────────────────────────
     Task<HouseholdExpenseListDto> ListByHouseholdAsync(ListHouseholdExpensesParams request, CancellationToken cancellationToken = default);
     Task<HouseholdExpenseDto?> GetHouseholdDetailAsync(HouseholdExpenseDetailParams request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<SplitDto>> ListSplitsAsync(ListSplitsParams request, CancellationToken cancellationToken = default);
@@ -47,4 +37,14 @@ public interface IExpenseQuery
     /// Returns a household expense with enriched splits (member name + paid status) and the caller's role.
     /// </summary>
     Task<HouseholdExpenseDetailDto?> GetHouseholdExpenseDetailAsync(Guid expenseId, Guid callerId, CancellationToken cancellationToken = default);
+
+    Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default);
+
+    // ── Expense-split queries (sub-entity of Expense) ────────────────────────
+    /// Returns per-month, per-member contribution summaries for all household expenses.
+    /// Recurring expenses are projected forward/back across the window.
+    /// </summary>
+    Task<IReadOnlyCollection<HouseholdMonthlyContributionsDto>> ListSplitsByHouseholdAsync(
+        HouseholdId householdId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default);
+
 }

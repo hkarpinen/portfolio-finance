@@ -9,6 +9,5 @@ public interface IExpenseRepository
     Task UpdateAsync(Expense expense, CancellationToken cancellationToken = default);
     Task RemoveAsync(Expense expense, CancellationToken cancellationToken = default);
     Task<Expense?> GetByIdAsync(ExpenseId id, CancellationToken cancellationToken = default);
-    Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default);
     Task CommitAsync(CancellationToken cancellationToken = default);
 }

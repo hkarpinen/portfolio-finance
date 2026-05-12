@@ -25,11 +25,6 @@ internal sealed class ExpenseRepository : IExpenseRepository
     public Task<Expense?> GetByIdAsync(ExpenseId id, CancellationToken cancellationToken = default)
         => _dbContext.Expenses.FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
-    public Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default)
-        => _dbContext.Expenses.AnyAsync(
-            e => e.UserId == userId && e.IsActive && e.Title == title && e.Amount.Amount == amount,
-            cancellationToken);
-
     public async Task RemoveAsync(Expense expense, CancellationToken cancellationToken = default)
     {
         _dbContext.Expenses.Remove(expense);

@@ -1,11 +1,11 @@
-using Finance.Application.Contracts;
+using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
 
 namespace Finance.Application.Mappers;
 
 public static class MembershipMapper
 {
-    public static MembershipResponse ToResponse(HouseholdMembership membership, string? fullName = null) => new(
+    public static MembershipDto ToResponse(HouseholdMembership membership, string? fullName = null) => new(
         membership.Id.Value,
         membership.HouseholdId.Value,
         membership.UserId.Value,

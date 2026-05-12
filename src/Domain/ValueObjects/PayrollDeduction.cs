@@ -42,7 +42,7 @@ public sealed class PayrollDeduction
     /// Whether this deduction reduces federal and state taxable wages (W-2 Box 1) before
     /// income-tax brackets are applied. When <c>null</c> is passed to <see cref="Create"/>,
     /// the value is inferred from the deduction type via
-    /// <see cref="Finance.Application.Engines.TaxCalculator.IsPreTaxDeduction"/>.
+    /// <see cref="Finance.Domain.Engines.TaxCalculator.IsPreTaxDeduction"/>.
     /// Use this to override the default for edge cases (e.g. a post-tax health plan,
     /// or a non-standard 401(k) arrangement).
     /// </summary>

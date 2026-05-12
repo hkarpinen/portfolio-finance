@@ -1,6 +1,7 @@
 using Finance.Application.Dtos;
 using Finance.Application.Queries;
 using Finance.Application.Mappers;
+using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,17 +11,10 @@ namespace Infrastructure.Queries;
 internal sealed class ExpenseQuery : IExpenseQuery
 {
     private readonly FinanceDbContext _db;
-    private readonly IExpenseSplitQuery _splitQuery;
-    private readonly IHouseholdMembershipQuery _membershipQuery;
 
-    public ExpenseQuery(FinanceDbContext db, IExpenseSplitQuery splitQuery, IHouseholdMembershipQuery membershipQuery)
-    {
-        _db = db;
-        _splitQuery = splitQuery;
-        _membershipQuery = membershipQuery;
-    }
+    public ExpenseQuery(FinanceDbContext db) => _db = db;
 
-    // ── Personal expense queries ─────────────────────────────────────────────
+    // ── Personal expense queries ──────────────────────────────────────────────
 
     public async Task<ExpenseListDto> ListByUserAsync(ListExpensesParams request, CancellationToken cancellationToken = default)
     {
@@ -42,7 +36,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var expenseIds = items.Select(b => b.Id).ToList();
         var occurrencesByExpenseId = items.ToDictionary(
             b => b.Id,
-            b => OccurrenceDateComputer.ComputeCurrent(b.DueDate, b.RecurrenceSchedule));
+            b => b.RecurrenceSchedule?.CurrentOccurrence(b.DueDate) ?? b.DueDate);
 
         var payments = await _db.ExpensePayments
             .AsNoTracking()
@@ -62,51 +56,18 @@ internal sealed class ExpenseQuery : IExpenseQuery
         return new ExpenseListDto(responses, total);
     }
 
-    public async Task<IReadOnlyList<ExpenseDto>> GetAllActivePersonalByUserAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        var uid = UserId.Create(userId);
-        var items = await _db.Expenses
-            .AsNoTracking()
-            .Where(e => e.UserId == uid && e.IsActive && e.HouseholdId == null)
-            .OrderBy(e => e.DueDate)
-            .ToListAsync(cancellationToken);
-        return items.Select(i => ExpenseMapper.ToResponse(i)).ToList();
-    }
-
-        public async Task<ExpenseDto?> GetDetailAsync(ExpenseDetailParams request, CancellationToken cancellationToken = default)
+    public async Task<ExpenseDto?> GetDetailAsync(ExpenseDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(request.ExpenseId);
         var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.HouseholdId == null, cancellationToken);
         if (expense is null) return null;
 
-        var occurrenceDate = OccurrenceDateComputer.ComputeCurrent(expense.DueDate, expense.RecurrenceSchedule);
+        var occurrenceDate = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
         var payment = await _db.ExpensePayments
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ExpenseId == id && p.OccurrenceDate == occurrenceDate, cancellationToken);
 
         return ExpenseMapper.ToResponse(expense, payment is not null);
-    }
-
-    public async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> GetPaidOccurrencesAsync(
-        UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken = default)
-    {
-        var expenseIds = await _db.Expenses
-            .AsNoTracking()
-            .Where(b => b.UserId == userId && b.HouseholdId == null)
-            .Select(b => b.Id)
-            .ToListAsync(cancellationToken);
-
-        if (expenseIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
-
-        var payments = await _db.ExpensePayments
-            .AsNoTracking()
-            .Where(p => expenseIds.Contains(p.ExpenseId) && p.OccurrenceDate >= from && p.OccurrenceDate <= to)
-            .Select(p => new { ExpenseId = p.ExpenseId.Value, p.OccurrenceDate, p.PaidAt })
-            .ToListAsync(cancellationToken);
-
-        return payments
-            .GroupBy(p => (p.ExpenseId, p.OccurrenceDate.Date))
-            .ToDictionary(g => g.Key, g => g.Max(p => p.PaidAt));
     }
 
     // ── Household expense queries ─────────────────────────────────────────────
@@ -133,7 +94,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
             var callerUserId = UserId.Create(request.CallerId.Value);
             var expenseIds = items.Select(b => b.Id).ToList();
             var callerSplits = await _db.ExpenseSplits
-            .AsNoTracking()
+                .AsNoTracking()
                 .Where(s => s.UserId == callerUserId && expenseIds.Contains(s.ExpenseId))
                 .ToListAsync(cancellationToken);
 
@@ -141,13 +102,13 @@ internal sealed class ExpenseQuery : IExpenseQuery
             {
                 var splitIds = callerSplits.Select(s => s.Id).ToList();
                 var payments = await _db.ExpenseSplitPayments
-            .AsNoTracking()
+                    .AsNoTracking()
                     .Where(p => splitIds.Contains(p.ExpenseSplitId))
                     .ToListAsync(cancellationToken);
 
                 foreach (var expense in items)
                 {
-                    var occurrence = OccurrenceDateComputer.ComputeCurrent(expense.DueDate, expense.RecurrenceSchedule);
+                    var occurrence = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
                     var split = callerSplits.FirstOrDefault(s => s.ExpenseId == expense.Id);
                     if (split is null) continue;
 
@@ -159,7 +120,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
         var responses = items.Select(b =>
         {
-            var occurrence = OccurrenceDateComputer.ComputeCurrent(b.DueDate, b.RecurrenceSchedule);
+            var occurrence = b.RecurrenceSchedule?.CurrentOccurrence(b.DueDate) ?? b.DueDate;
             var isPaid = paidExpenseIds.Contains(b.Id.Value);
             return ExpenseMapper.ToHouseholdResponse(b, isPaid) with { CurrentOccurrenceDate = occurrence };
         }).ToArray();
@@ -191,10 +152,27 @@ internal sealed class ExpenseQuery : IExpenseQuery
         if (expense is null) return null;
 
         var splits = await ListSplitsAsync(new ListSplitsParams(expenseId), cancellationToken);
-        var members = await _membershipQuery.ListMembersAsync(expense.HouseholdId, cancellationToken);
+
+        // Inline membership lookup (no circular IHouseholdQuery dep)
+        var hid = HouseholdId.Create(expense.HouseholdId);
+        var memberEntities = await _db.HouseholdMemberships
+            .AsNoTracking()
+            .Where(m => m.HouseholdId == hid && m.IsActive)
+            .ToListAsync(cancellationToken);
+        var memberUserIds = memberEntities.Select(m => m.UserId).ToList();
+        var memberProjections = await _db.UserProjections
+            .AsNoTracking()
+            .Where(p => memberUserIds.Contains(p.UserId))
+            .ToListAsync(cancellationToken);
+        var memberProjDict = memberProjections.ToDictionary(p => p.UserId);
+        var members = memberEntities.Select(m =>
+        {
+            memberProjDict.TryGetValue(m.UserId, out var proj);
+            return MembershipMapper.ToResponse(m, proj?.GetFullName());
+        }).ToList();
 
         var occurrenceDate = expense.CurrentOccurrenceDate == default ? expense.DueDate : expense.CurrentOccurrenceDate;
-        var paidSplitIds = await _splitQuery.GetPaidSplitIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
+        var paidSplitIds = await GetPaidSplitIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
 
         var memberDict = members.ToDictionary(m => m.MembershipId);
         var currentUserRole = members.FirstOrDefault(m => m.UserId == callerId)?.Role.ToString();
@@ -215,5 +193,151 @@ internal sealed class ExpenseQuery : IExpenseQuery
         }).ToList();
 
         return new HouseholdExpenseDetailDto(expense, enrichedSplits, members, currentUserRole);
+    }
+
+    public Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default)
+        => _db.Expenses.AsNoTracking()
+            .AnyAsync(
+                e => e.UserId == userId && e.IsActive && e.Title == title && e.Amount.Amount == amount,
+                cancellationToken);
+
+    // ── Expense-split queries ─────────────────────────────────────────────────
+
+    public async Task<IReadOnlyCollection<HouseholdMonthlyContributionsDto>> ListSplitsByHouseholdAsync(
+        HouseholdId householdId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default)
+    {
+        var allExpenses = await _db.Expenses
+            .AsNoTracking()
+            .Where(b => b.HouseholdId == householdId && b.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var relevantExpenses = allExpenses.Where(b =>
+            b.RecurrenceSchedule == null
+                ? b.DueDate >= windowStart && b.DueDate <= windowEnd
+                : b.RecurrenceSchedule.StartDate <= windowEnd &&
+                  (b.RecurrenceSchedule.EndDate == null || b.RecurrenceSchedule.EndDate >= windowStart)
+        ).ToList();
+
+        if (relevantExpenses.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
+
+        var expenseIds = relevantExpenses.Select(b => b.Id).ToList();
+
+        var splits = await _db.ExpenseSplits
+            .AsNoTracking()
+            .Where(s => expenseIds.Contains(s.ExpenseId))
+            .ToListAsync(cancellationToken);
+
+        if (splits.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
+
+        var expenseById = relevantExpenses.ToDictionary(b => b.Id);
+        var splitUserIds = splits.Select(s => s.UserId).Distinct().ToList();
+
+        var userProjections = await _db.UserProjections
+            .AsNoTracking()
+            .Where(p => splitUserIds.Contains(p.UserId))
+            .ToListAsync(cancellationToken);
+
+        var nameById = userProjections.ToDictionary(p => p.UserId.Value, p => p.GetFullName());
+
+        var splitIds = splits.Select(s => s.Id).ToList();
+
+        var splitPayments = await _db.ExpenseSplitPayments
+            .AsNoTracking()
+            .Where(p => splitIds.Contains(p.ExpenseSplitId))
+            .ToListAsync(cancellationToken);
+
+        var paymentSet = splitPayments
+            .Select(p => (p.ExpenseSplitId, p.OccurrenceDate.Date))
+            .ToHashSet();
+        var windowEndExclusive = windowEnd.AddDays(1);
+
+        var projected = new List<(int Year, int Month, Guid UserId, bool IsClaimed, decimal Amount, string Currency, HouseholdContributionItemDto Item)>();
+
+        foreach (var split in splits)
+        {
+            if (!expenseById.TryGetValue(split.ExpenseId, out var expense)) continue;
+
+            IEnumerable<DateTime> occurrenceDates = expense.RecurrenceSchedule != null
+                ? expense.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
+                : [expense.DueDate];
+
+            foreach (var date in occurrenceDates)
+            {
+                var isClaimed = paymentSet.Contains((split.Id, date.Date));
+                projected.Add((date.Year, date.Month, split.UserId.Value, isClaimed,
+                    split.Amount.Amount, split.Amount.Currency,
+                    new HouseholdContributionItemDto(
+                        split.Id.Value, expense.Id.Value,
+                        expense.Title, expense.Category.ToString(),
+                        split.Amount.Amount, split.Amount.Currency,
+                        date, isClaimed)));
+            }
+        }
+
+        var monthCount = ((windowEnd.Year * 12 + windowEnd.Month) - (windowStart.Year * 12 + windowStart.Month)) + 1;
+        var result = new List<HouseholdMonthlyContributionsDto>(monthCount);
+
+        for (var m = 0; m < monthCount; m++)
+        {
+            var mStart = windowStart.AddMonths(m);
+            var label = mStart.ToString("MMMM yyyy");
+            var currency = "USD";
+
+            var monthItems = projected
+                .Where(p => p.Year == mStart.Year && p.Month == mStart.Month)
+                .ToList();
+
+            var byMember = monthItems
+                .GroupBy(p => p.UserId)
+                .Select(g =>
+                {
+                    var contributions = g.Select(p => p.Item).OrderBy(i => i.DueDate).ToList();
+                    var totalDue = g.Sum(p => p.Amount);
+                    var totalPaid = g.Where(p => p.IsClaimed).Sum(p => p.Amount);
+                    if (contributions.Count > 0) currency = contributions[0].Currency;
+                    nameById.TryGetValue(g.Key, out var displayName);
+                    return new HouseholdMemberContributionDto(g.Key, displayName, totalDue, totalPaid, contributions);
+                })
+                .OrderBy(m2 => m2.UserId)
+                .ToList();
+
+            var total = byMember.Sum(m2 => m2.TotalDue);
+            result.Add(new HouseholdMonthlyContributionsDto(label, mStart, total, currency, byMember));
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlySet<Guid>> GetPaidSplitIdsForExpenseAsync(
+        Guid expenseId, DateTime occurrenceDate, CancellationToken cancellationToken = default)
+    {
+        var occ = DateTime.SpecifyKind(occurrenceDate.Date, DateTimeKind.Utc);
+        var eid = ExpenseId.Create(expenseId);
+
+        var splitIds = await _db.ExpenseSplits
+            .AsNoTracking()
+            .Where(s => s.ExpenseId == eid)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+
+        var paidSplitIds = await _db.ExpenseSplitPayments
+            .AsNoTracking()
+            .Where(p => splitIds.Contains(p.ExpenseSplitId) && p.OccurrenceDate == occ)
+            .Select(p => p.ExpenseSplitId.Value)
+            .ToListAsync(cancellationToken);
+
+        return paidSplitIds.ToHashSet();
+    }
+
+    private static IReadOnlyCollection<HouseholdMonthlyContributionsDto> BuildEmptyMonths(DateTime windowStart, DateTime windowEnd)
+    {
+        var monthCount = ((windowEnd.Year * 12 + windowEnd.Month) - (windowStart.Year * 12 + windowStart.Month)) + 1;
+        return Enumerable.Range(0, monthCount)
+            .Select(m =>
+            {
+                var mStart = windowStart.AddMonths(m);
+                return new HouseholdMonthlyContributionsDto(mStart.ToString("MMMM yyyy"), mStart, 0, "USD", []);
+            })
+            .ToList();
     }
 }
