@@ -24,7 +24,7 @@ erDiagram
         datetime JoinedAt
         datetime UpdatedAt
     }
-    Bill {
+    Expense {
         uuid Id PK
         uuid HouseholdId FK
         string Title
@@ -41,17 +41,17 @@ erDiagram
         datetime CreatedAt
         datetime UpdatedAt
     }
-    BillSplit {
+    ExpenseSplit {
         uuid Id PK
-        uuid BillId FK
+        uuid ExpenseId FK
         uuid HouseholdId FK
         uuid MembershipId FK
         uuid UserId FK
         decimal Amount
         string Currency
-        bool IsClaimed
-        datetime ClaimedAt
-        uuid ClaimedBy
+        bool IsPaid
+        datetime PaidAt
+        uuid PaidBy
         datetime CreatedAt
         datetime UpdatedAt
     }
@@ -79,10 +79,10 @@ erDiagram
     }
 
     Household ||--o{ HouseholdMembership : "has members"
-    Household ||--o{ Bill : "owns"
+    Household ||--o{ Expense : "owns"
     Household ||--o{ IncomeSource : "has income"
-    Bill ||--o{ BillSplit : "split into"
-    HouseholdMembership ||--o{ BillSplit : "assigned to"
+    Expense ||--o{ ExpenseSplit : "split into"
+    HouseholdMembership ||--o{ ExpenseSplit : "assigned to"
     HouseholdMembership ||--o{ IncomeSource : "linked to"
 ```
 
@@ -105,20 +105,20 @@ erDiagram
 | Cannot remove already inactive membership | `HouseholdMembership.Remove` |
 | AcceptInvitation requires inactive membership with code | `HouseholdMembership.AcceptInvitation` |
 
-### Bill
+### Expense
 | Invariant | Where enforced |
 |---|---|
-| Title cannot be empty | `Bill.Create` / `Update` |
-| Amount cannot be negative | `Bill.Create` / `Update` |
-| Due date cannot be in the past | `Bill.Create` |
-| Cannot deactivate already inactive bill | `Bill.Deactivate` |
+| Title cannot be empty | `Expense.Create` / `Update` |
+| Amount cannot be negative | `Expense.Create` / `Update` |
+| Due date cannot be in the past | `Expense.Create` |
+| Cannot deactivate already inactive expense | `Expense.Deactivate` |
 
-### BillSplit
+### ExpenseSplit
 | Invariant | Where enforced |
 |---|---|
-| Amount cannot be negative | `BillSplit.Create` / `Update` |
-| Cannot claim already claimed split | `BillSplit.Claim` |
-| One split per member per bill | `BillWorkflowManager.UpsertSplitAsync` |
+| Amount cannot be negative | `ExpenseSplit.Create` / `Update` |
+| Cannot pay already paid split | `ExpenseSplit.Pay` |
+| One split per member per expense | `ExpenseWorkflowManager.UpsertSplitAsync` |
 
 ### IncomeSource
 | Invariant | Where enforced |
@@ -135,7 +135,7 @@ erDiagram
 | `Money` | Amount + currency code |
 | `RecurrenceSchedule` | Frequency + start date + optional end date |
 | `HouseholdRole` | `Owner`, `Member` |
-| `BillCategory` | Enum of expense categories |
+| `ExpenseCategory` | Enum of expense categories |
 | `RecurrenceFrequency` | `Daily`, `Weekly`, `Monthly`, `Yearly` |
 
 ## Domain Events
@@ -150,13 +150,13 @@ erDiagram
 | `HouseholdMemberInvited` | `HouseholdMembership.CreateWithInvitation` |
 | `HouseholdMemberRoleChanged` | `HouseholdMembership.ChangeRole` |
 | `HouseholdMemberRemoved` | `HouseholdMembership.Remove` |
-| `BillCreated` | `Bill.Create` |
-| `BillUpdated` | `Bill.Update` |
-| `BillDeactivated` | `Bill.Deactivate` |
-| `BillSplitCreated` | `BillSplit.Create` |
-| `BillSplitUpdated` | `BillSplit.Update` |
-| `BillSplitClaimed` | `BillSplit.Claim` |
-| `BillSplitRemoved` | `BillSplit.Remove` |
+| `ExpenseCreated` | `Expense.Create` |
+| `ExpenseUpdated` | `Expense.Update` |
+| `ExpenseDeactivated` | `Expense.Deactivate` |
+| `ExpenseSplitCreated` | `ExpenseSplit.Create` |
+| `ExpenseSplitUpdated` | `ExpenseSplit.Update` |
+| `ExpenseSplitPaid` | `ExpenseSplit.Pay` |
+| `ExpenseSplitRemoved` | `ExpenseSplit.Remove` |
 | `IncomeSourceCreated` | `IncomeSource.Create` |
 | `IncomeSourceUpdated` | `IncomeSource.Update` |
 | `IncomeSourceDeactivated` | `IncomeSource.Deactivate` / `TryDeactivate` |

@@ -1,6 +1,6 @@
 # portfolio-finance
 
-Personal finance service. Tracks income sources, household bills and expense splitting, personal bills, and budget coverage analysis.
+Personal finance service. Tracks income sources, household expenses and expense splitting, and budget coverage analysis.
 
 ## Stack
 
@@ -46,3 +46,13 @@ src/
 | `RabbitMq__Host` | RabbitMQ hostname |
 | `RabbitMq__Username` | RabbitMQ username |
 | `RabbitMq__Password` | RabbitMQ password |
+| `Plaid__ClientId` | Plaid dashboard client id |
+| `Plaid__Secret` | Plaid dashboard secret (per environment) |
+| `Plaid__Environment` | `sandbox` \| `development` \| `production` |
+| `Plaid__WebhookUrl` | Public HTTPS URL terminating at `/api/finance/plaid/webhook` |
+
+## Plaid integration
+
+Bank linking, cursor-based transaction sync, and recurring-stream detection.
+See [docs/use-cases/plaid-integration.md](docs/use-cases/plaid-integration.md)
+for the full design, sequence diagrams, and production hardening checklist.
