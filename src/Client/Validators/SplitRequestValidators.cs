@@ -1,9 +1,9 @@
-using Finance.Application.Contracts;
+using Finance.Application.Commands;
 using FluentValidation;
 
 namespace Client.Validators;
 
-public sealed class UpsertSplitRequestValidator : AbstractValidator<UpsertSplitRequest>
+public sealed class UpsertSplitRequestValidator : AbstractValidator<UpsertSplitCommand>
 {
     public UpsertSplitRequestValidator()
     {
