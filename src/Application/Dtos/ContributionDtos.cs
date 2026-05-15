@@ -11,11 +11,11 @@ public abstract record SplitOccurrenceBaseDto(
     DateTime DueDate,
     bool IsClaimed);
 
-/// <summary>A single split the user is responsible for, shown within a contribution period — includes household context.</summary>
+/// <summary>A single split the user is responsible for, shown within a contribution period.</summary>
 public sealed record ContributionItemDto(
     Guid SplitId, Guid BillId, string BillTitle, string BillCategory,
     decimal Amount, string Currency, DateTime DueDate, bool IsClaimed,
-    Guid HouseholdId, string HouseholdName, DateTime? ClaimedAt)
+    Guid GroupId, DateTime? ClaimedAt)
     : SplitOccurrenceBaseDto(SplitId, BillId, BillTitle, BillCategory, Amount, Currency, DueDate, IsClaimed);
 
 /// <summary>A single contribution item shown inside a household's per-member breakdown — household fields omitted.</summary>

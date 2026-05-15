@@ -6,11 +6,11 @@ namespace Tests;
 
 public class SharedExpenseTests
 {
-    private static (HouseholdId, UserId) NewIds() => (HouseholdId.New(), UserId.New());
+    private static (GroupId, UserId) NewIds() => (GroupId.Create(Guid.NewGuid()), UserId.New());
 
-    private static Expense CreateValidExpense(HouseholdId? householdId = null, UserId? createdBy = null)
+    private static Expense CreateValidExpense(GroupId? groupId = null, UserId? createdBy = null)
     {
-        var hId = householdId ?? HouseholdId.New();
+        var hId = groupId ?? GroupId.Create(Guid.NewGuid());
         var uId = createdBy ?? UserId.New();
         return Expense.CreateHousehold(
             hId,
@@ -33,7 +33,7 @@ public class SharedExpenseTests
 
         // Assert
         Assert.Equal("Electricity", bill.Title);
-        Assert.Equal(hId, bill.HouseholdId);
+        Assert.Equal(hId, bill.GroupId);
         Assert.Equal(uId, bill.CreatedBy);
         Assert.Equal(dueDate, bill.DueDate);
         Assert.True(bill.IsActive);

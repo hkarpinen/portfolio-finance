@@ -18,11 +18,8 @@ internal sealed class ExpenseSplitConfiguration : IEntityTypeConfiguration<Expen
         builder.Property(s => s.ExpenseId)
             .HasConversion(id => id.Value, v => new ExpenseId(v));
 
-        builder.Property(s => s.HouseholdId)
-            .HasConversion(id => id.Value, v => new HouseholdId(v));
-
-        builder.Property(s => s.MembershipId)
-            .HasConversion(id => id.Value, v => new MembershipId(v));
+        builder.Property(s => s.GroupId)
+            .HasConversion(id => id.Value, v => new GroupId(v));
 
         builder.Property(s => s.UserId)
             .HasConversion(id => id.Value, v => new UserId(v));

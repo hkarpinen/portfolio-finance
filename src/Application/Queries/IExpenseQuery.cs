@@ -45,6 +45,6 @@ public interface IExpenseQuery
     /// Recurring expenses are projected forward/back across the window.
     /// </summary>
     Task<IReadOnlyCollection<HouseholdMonthlyContributionsDto>> ListSplitsByHouseholdAsync(
-        HouseholdId householdId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default);
+        GroupId groupId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default);
 
 }

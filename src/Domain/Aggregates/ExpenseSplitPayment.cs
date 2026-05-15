@@ -14,7 +14,7 @@ public class ExpenseSplitPayment : IAggregateRoot
     public ExpenseSplitPaymentId Id { get; private set; }
     public ExpenseSplitId ExpenseSplitId { get; private set; }
     public ExpenseId ExpenseId { get; private set; }
-    public HouseholdId HouseholdId { get; private set; }
+    public GroupId GroupId { get; private set; }
     public UserId UserId { get; private set; }
     public DateTime OccurrenceDate { get; private set; }
     public DateTime PaidAt { get; private set; }
@@ -28,7 +28,7 @@ public class ExpenseSplitPayment : IAggregateRoot
     public static ExpenseSplitPayment Create(
         ExpenseSplitId expenseSplitId,
         ExpenseId expenseId,
-        HouseholdId householdId,
+        GroupId groupId,
         UserId userId,
         DateTime occurrenceDate,
         string? transactionReference = null)
@@ -38,14 +38,14 @@ public class ExpenseSplitPayment : IAggregateRoot
             Id = ExpenseSplitPaymentId.New(),
             ExpenseSplitId = expenseSplitId,
             ExpenseId = expenseId,
-            HouseholdId = householdId,
+            GroupId = groupId,
             UserId = userId,
             OccurrenceDate = DateTime.SpecifyKind(occurrenceDate.Date, DateTimeKind.Utc),
             PaidAt = DateTime.UtcNow,
             TransactionReference = transactionReference,
         };
 
-        payment._domainEvents.Add(new ExpenseSplitPaid(expenseSplitId, expenseId, householdId, userId, payment.OccurrenceDate));
+        payment._domainEvents.Add(new ExpenseSplitPaid(expenseSplitId, expenseId, groupId, userId, payment.OccurrenceDate));
         return payment;
     }
 }

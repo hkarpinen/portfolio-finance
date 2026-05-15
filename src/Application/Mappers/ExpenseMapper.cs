@@ -28,7 +28,7 @@ public static class ExpenseMapper
     public static HouseholdExpenseDto ToHouseholdResponse(Expense expense, bool callerIsPaid = false) =>
         new(
             expense.Id.Value,
-            expense.HouseholdId!.Value.Value,
+            expense.GroupId!.Value.Value,
             expense.Title,
             expense.Description,
             expense.Amount.Amount,
@@ -48,8 +48,7 @@ public static class ExpenseMapper
     public static SplitDto ToSplitResponse(ExpenseSplit split) => new(
         split.Id.Value,
         split.ExpenseId.Value,
-        split.HouseholdId.Value,
-        split.MembershipId.Value,
+        split.GroupId.Value,
         split.UserId.Value,
         split.Amount.Amount,
         split.Amount.Currency,

@@ -24,7 +24,7 @@ public static class ContributionCalculator
         int pastMonths,
         IReadOnlyList<IncomeSource> incomeSources,
         IReadOnlyList<Expense> personalExpenses,
-        IReadOnlyList<(ExpenseSplit Split, Expense Expense, Household Household)> splits,
+        IReadOnlyList<(ExpenseSplit Split, Expense Expense)> splits,
         IReadOnlyDictionary<(Guid SplitId, DateTime OccurrenceDate), DateTime> paidSplitOccurrences,
         IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
     {
@@ -50,7 +50,7 @@ public static class ContributionCalculator
                     s.Split.Id.Value, s.Expense.Id.Value, s.Expense.Title, s.Expense.Category.ToString(),
                     s.Split.Amount.Amount, s.Split.Amount.Currency, date,
                     isClaimed,
-                    s.Split.HouseholdId.Value, s.Household.Name,
+                    s.Split.GroupId.Value,
                     isClaimed ? claimedAt : null)));
             }
         }

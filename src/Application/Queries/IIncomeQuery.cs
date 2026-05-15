@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Application.Queries;
 
 public sealed record ListIncomeParams(
-    Guid HouseholdId,
+    Guid UserId,
     int Page = 1,
     int PageSize = 20,
     bool ActiveOnly = true);

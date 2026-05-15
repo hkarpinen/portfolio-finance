@@ -18,12 +18,6 @@ internal sealed class OutboxPublisher : BackgroundService
 
     private static readonly Dictionary<string, Type> EventTypeMap = new()
     {
-        [nameof(HouseholdCreated)]               = typeof(FinanceHouseholdCreatedEvent),
-        [nameof(HouseholdOwnershipTransferred)]  = typeof(FinanceHouseholdOwnershipTransferredEvent),
-        [nameof(HouseholdMemberJoined)]          = typeof(FinanceHouseholdMemberJoinedEvent),
-        [nameof(HouseholdMemberLeft)]            = typeof(FinanceHouseholdMemberLeftEvent),
-        [nameof(HouseholdMemberRemoved)]         = typeof(FinanceHouseholdMemberRemovedEvent),
-        [nameof(HouseholdMemberRoleChanged)]     = typeof(FinanceHouseholdMemberRoleChangedEvent),
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()

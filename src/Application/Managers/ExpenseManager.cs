@@ -13,7 +13,6 @@ internal sealed class ExpenseManager : IExpenseManager
     private readonly IExpensePaymentRepository _paymentRepository;
     private readonly IExpenseSplitRepository _splitRepository;
     private readonly IExpenseSplitPaymentRepository _splitPaymentRepository;
-    private readonly IHouseholdMembershipRepository _membershipRepository;
     private readonly IFinancialConnectionRepository _connectionRepository;
 
     public ExpenseManager(
@@ -21,14 +20,12 @@ internal sealed class ExpenseManager : IExpenseManager
         IExpensePaymentRepository paymentRepository,
         IExpenseSplitRepository splitRepository,
         IExpenseSplitPaymentRepository splitPaymentRepository,
-        IHouseholdMembershipRepository membershipRepository,
         IFinancialConnectionRepository connectionRepository)
     {
         _repository = repository;
         _paymentRepository = paymentRepository;
         _splitRepository = splitRepository;
         _splitPaymentRepository = splitPaymentRepository;
-        _membershipRepository = membershipRepository;
         _connectionRepository = connectionRepository;
     }
 
@@ -98,13 +95,13 @@ internal sealed class ExpenseManager : IExpenseManager
     public async Task<HouseholdExpenseDto> CreateHouseholdExpenseAsync(CreateHouseholdExpenseCommand request, CancellationToken cancellationToken = default)
     {
         var expense = Expense.CreateHousehold(
-            HouseholdId.Create(request.HouseholdId),
+            GroupId.Create(request.HouseholdId),
             UserId.Create(request.CreatedBy),
             request.Title,
             Money.Create(request.Amount, request.Currency),
             request.Category,
             request.DueDate,
-            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate, request.RecurrenceEndDate),
+            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description);
 
         await _repository.AddAsync(expense, cancellationToken);
@@ -117,20 +114,12 @@ internal sealed class ExpenseManager : IExpenseManager
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
         if (expense is null) return null;
 
-        if (expense.HouseholdId.HasValue)
-        {
-            var membership = await _membershipRepository.GetByUserAndHouseholdAsync(
-                UserId.Create(request.CallerId), expense.HouseholdId.Value, cancellationToken);
-            if (membership is null)
-                throw new UnauthorizedAccessException("Caller is not a member of this household.");
-        }
-
         expense.Update(
             request.Title,
             Money.Create(request.Amount, request.Currency),
             request.Category,
             request.DueDate,
-            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate, request.RecurrenceEndDate),
+            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description);
 
         await _repository.UpdateAsync(expense, cancellationToken);
@@ -142,14 +131,6 @@ internal sealed class ExpenseManager : IExpenseManager
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
         if (expense is null) return null;
-
-        if (expense.HouseholdId.HasValue)
-        {
-            var membership = await _membershipRepository.GetByUserAndHouseholdAsync(
-                UserId.Create(request.CallerId), expense.HouseholdId.Value, cancellationToken);
-            if (membership is null)
-                throw new UnauthorizedAccessException("Caller is not a member of this household.");
-        }
 
         expense.Deactivate();
         await _repository.UpdateAsync(expense, cancellationToken);
@@ -176,9 +157,9 @@ internal sealed class ExpenseManager : IExpenseManager
             }
         }
 
-        var duplicate = await _splitRepository.GetByExpenseAndMembershipAsync(
+        var duplicate = await _splitRepository.GetByExpenseAndUserAsync(
             expenseId,
-            MembershipId.Create(request.MembershipId),
+            UserId.Create(request.UserId),
             cancellationToken);
 
         if (duplicate is not null)
@@ -186,8 +167,7 @@ internal sealed class ExpenseManager : IExpenseManager
 
         var split = ExpenseSplit.Create(
             expenseId,
-            HouseholdId.Create(request.HouseholdId),
-            MembershipId.Create(request.MembershipId),
+            GroupId.Create(request.GroupId),
             UserId.Create(request.UserId),
             money);
 
@@ -201,37 +181,30 @@ internal sealed class ExpenseManager : IExpenseManager
         var split = await _splitRepository.GetByIdAsync(ExpenseSplitId.Create(request.SplitId), cancellationToken);
         if (split is null) return null;
 
-        var membership = await _membershipRepository.GetByUserAndHouseholdAsync(
-            UserId.Create(request.CallerId), split.HouseholdId, cancellationToken);
-        if (membership is null || membership.Role == HouseholdRole.Member)
-            throw new UnauthorizedAccessException("Only household Admins and Owners can remove splits.");
-
         split.Remove();
         await _splitRepository.RemoveAsync(split, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToSplitResponse(split);
     }
 
-    public async Task SplitEvenlyAsync(Guid expenseId, IReadOnlyList<Guid> membershipIds, CancellationToken cancellationToken = default)
+    public async Task SplitEvenlyAsync(Guid expenseId, IReadOnlyList<Guid> userIds, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(expenseId), cancellationToken)
             ?? throw new InvalidOperationException("Expense not found.");
 
-        if (expense.HouseholdId is null)
+        if (expense.GroupId is null)
             throw new InvalidOperationException("Cannot split a personal expense.");
 
-        if (membershipIds.Count == 0)
-            throw new ArgumentException("At least one membership is required.", nameof(membershipIds));
+        if (userIds.Count == 0)
+            throw new ArgumentException("At least one user is required.", nameof(userIds));
 
-        var perMember = expense.Amount.Amount / membershipIds.Count;
+        var perMember = expense.Amount.Amount / userIds.Count;
         var money = Money.Create(perMember, expense.Amount.Currency);
 
-        var memberships = await _membershipRepository.GetByIdsAsync(
-            membershipIds.Select(MembershipId.Create).ToList(), cancellationToken);
-
-        foreach (var membership in memberships)
+        foreach (var userId in userIds)
         {
-            var existing = await _splitRepository.GetByExpenseAndMembershipAsync(expense.Id, membership.Id, cancellationToken);
+            var uid = UserId.Create(userId);
+            var existing = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, uid, cancellationToken);
             if (existing is not null)
             {
                 existing.Update(money);
@@ -239,7 +212,7 @@ internal sealed class ExpenseManager : IExpenseManager
             }
             else
             {
-                var split = ExpenseSplit.Create(expense.Id, expense.HouseholdId.Value, membership.Id, membership.UserId, money);
+                var split = ExpenseSplit.Create(expense.Id, expense.GroupId.Value, uid, money);
                 await _splitRepository.AddAsync(split, cancellationToken);
             }
         }
@@ -255,9 +228,8 @@ internal sealed class ExpenseManager : IExpenseManager
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        if (expense.HouseholdId.HasValue)
+        if (expense.GroupId.HasValue)
         {
-            // Household expense: record split payment for the caller's split
             var userId = UserId.Create(request.UserId);
             var split = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken)
                 ?? throw new InvalidOperationException("No split found for this user on this expense.");
@@ -265,7 +237,7 @@ internal sealed class ExpenseManager : IExpenseManager
             var existing = await _splitPaymentRepository.GetAsync(split.Id, occurrenceDate, cancellationToken);
             if (existing is not null) return; // idempotent
 
-            var payment = ExpenseSplitPayment.Create(split.Id, expense.Id, expense.HouseholdId.Value, userId, occurrenceDate, request.TransactionReference);
+            var payment = ExpenseSplitPayment.Create(split.Id, expense.Id, expense.GroupId.Value, userId, occurrenceDate, request.TransactionReference);
             await _splitPaymentRepository.AddAsync(payment, cancellationToken);
         }
         else
@@ -291,7 +263,7 @@ internal sealed class ExpenseManager : IExpenseManager
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        if (expense.HouseholdId.HasValue)
+        if (expense.GroupId.HasValue)
         {
             var userId = UserId.Create(request.UserId);
             var split = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken);

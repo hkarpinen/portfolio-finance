@@ -14,8 +14,8 @@ public class Expense : IAggregateRoot
     public ExpenseId Id { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>Non-null for household (shared) expenses; null for personal expenses.</summary>
-    public HouseholdId? HouseholdId { get; private set; }
+    /// <summary>Non-null for group (shared) expenses; null for personal expenses.</summary>
+    public GroupId? GroupId { get; private set; }
 
     /// <summary>The member who created the household expense. Null for personal expenses.</summary>
     public UserId? CreatedBy { get; private set; }
@@ -56,7 +56,7 @@ public class Expense : IAggregateRoot
         {
             Id = ExpenseId.New(),
             UserId = userId,
-            HouseholdId = null,
+            GroupId = null,
             CreatedBy = null,
             Title = title,
             Description = description,
@@ -81,9 +81,9 @@ public class Expense : IAggregateRoot
         return expense;
     }
 
-    /// <summary>Creates a household shared expense (HouseholdId set, UserId = createdBy).</summary>
+    /// <summary>Creates a group shared expense (GroupId set, UserId = createdBy).</summary>
     public static Expense CreateHousehold(
-        HouseholdId householdId,
+        GroupId groupId,
         UserId createdBy,
         string title,
         Money amount,
@@ -101,7 +101,7 @@ public class Expense : IAggregateRoot
         {
             Id = ExpenseId.New(),
             UserId = createdBy,
-            HouseholdId = householdId,
+            GroupId = groupId,
             CreatedBy = createdBy,
             Title = title,
             Description = description,
@@ -122,7 +122,7 @@ public class Expense : IAggregateRoot
             category,
             dueDate,
             recurrenceSchedule,
-            householdId));
+            groupId));
 
         return expense;
     }
@@ -148,7 +148,7 @@ public class Expense : IAggregateRoot
         Description = description;
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new ExpenseUpdated(Id, title, amount, category, dueDate, HouseholdId));
+        _domainEvents.Add(new ExpenseUpdated(Id, title, amount, category, dueDate, GroupId));
     }
 
     public void Deactivate()
@@ -159,7 +159,7 @@ public class Expense : IAggregateRoot
         IsActive = false;
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new ExpenseDeactivated(Id, HouseholdId));
+        _domainEvents.Add(new ExpenseDeactivated(Id, GroupId));
     }
 
     public void Activate()

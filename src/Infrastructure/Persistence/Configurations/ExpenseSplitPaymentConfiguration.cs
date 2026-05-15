@@ -23,8 +23,8 @@ internal sealed class ExpenseSplitPaymentConfiguration : IEntityTypeConfiguratio
             .HasConversion(id => id.Value, v => new ExpenseId(v))
             .IsRequired();
 
-        builder.Property(p => p.HouseholdId)
-            .HasConversion(id => id.Value, v => new HouseholdId(v))
+        builder.Property(p => p.GroupId)
+            .HasConversion(id => id.Value, v => new GroupId(v))
             .IsRequired();
 
         builder.Property(p => p.UserId)

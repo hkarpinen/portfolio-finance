@@ -8,12 +8,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace Client.Controllers;
 
 /// <summary>
-/// Income sources — covers both household-scoped (api/finance/households/{id}/income)
+/// Income sources — covers both group-scoped (api/finance/groups/{groupId}/income)
 /// and user-scoped (api/finance/income) routes. Both are driven by the same IncomeSource aggregate.
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/finance/households/{householdId:guid}/income")]
+[Route("api/finance/groups/{groupId:guid}/income")]
 public sealed class IncomeController : ControllerBase
 {
     private readonly IIncomeManager _manager;
@@ -25,39 +25,39 @@ public sealed class IncomeController : ControllerBase
         _incomeQuery = incomeQuery;
     }
 
-    // ── Household-scoped income ───────────────────────────────────────────────
+    // ── Group-scoped income ──────────────────────────────────────────────────
 
     [HttpGet]
-    public async Task<IActionResult> List(Guid householdId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> List(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
-        var result = await _incomeQuery.ListAsync(new ListIncomeParams(householdId, page, pageSize, ActiveOnly: true), ct);
+        var result = await _incomeQuery.ListAsync(new ListIncomeParams(groupId, page, pageSize, ActiveOnly: true), ct);
         return Ok(result);
     }
 
     [HttpGet("{incomeId:guid}")]
-    public async Task<IActionResult> GetDetail(Guid householdId, Guid incomeId, CancellationToken ct = default)
+    public async Task<IActionResult> GetDetail(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
         var result = await _incomeQuery.GetDetailAsync(new IncomeDetailParams(incomeId), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(Guid householdId, [FromBody] CreateIncomeCommand request, CancellationToken ct = default)
+    public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateIncomeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.CreateAsync(request with { UserId = userId.Value }, ct);
-        return CreatedAtAction(nameof(GetDetail), new { householdId, incomeId = result.IncomeId }, result);
+        return CreatedAtAction(nameof(GetDetail), new { groupId, incomeId = result.IncomeId }, result);
     }
 
     [HttpPut("{incomeId:guid}")]
-    public async Task<IActionResult> Update(Guid householdId, Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
+    public async Task<IActionResult> Update(Guid groupId, Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
         var result = await _manager.UpdateAsync(request with { IncomeId = incomeId }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{incomeId:guid}")]
-    public async Task<IActionResult> Deactivate(Guid householdId, Guid incomeId, CancellationToken ct = default)
+    public async Task<IActionResult> Deactivate(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
         var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId), ct);
         return result is null ? NotFound() : NoContent();
@@ -123,5 +123,21 @@ public sealed class IncomeController : ControllerBase
         var result = await _incomeQuery.GetNetPayBreakdownAsync(
             new GetNetPayBreakdownParams(incomeId, year ?? now.Year, month ?? now.Month), ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>
+    /// Returns the full per-month contribution/budget summary for the authenticated user.
+    /// Covers projected income, household split obligations, personal bill obligations and
+    /// (where available) real-balance disposable income.
+    /// </summary>
+    [HttpGet("/api/finance/contribution-summary")]
+    public async Task<IActionResult> GetContributionSummary(
+        [FromQuery] int months = 13,
+        [FromQuery] int past = 3,
+        CancellationToken ct = default)
+    {
+        var userId = User.GetUserId();
+        var result = await _incomeQuery.GetContributionSummariesAsync(userId.Value, DateTime.UtcNow, months, past, ct);
+        return Ok(result);
     }
 }

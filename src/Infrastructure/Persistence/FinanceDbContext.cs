@@ -10,8 +10,6 @@ namespace Infrastructure.Persistence;
 
 public sealed class FinanceDbContext : DbContext
 {
-    public DbSet<Household> Households => Set<Household>();
-    public DbSet<HouseholdMembership> HouseholdMemberships => Set<HouseholdMembership>();
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExpensePayment> ExpensePayments => Set<ExpensePayment>();

@@ -25,7 +25,7 @@ public sealed record ExpenseListDto(IReadOnlyCollection<ExpenseDto> Items, int T
 
 public sealed record HouseholdExpenseDto(
     Guid ExpenseId,
-    Guid HouseholdId,
+    Guid GroupId,
     string Title,
     string? Description,
     decimal Amount,
@@ -44,10 +44,9 @@ public sealed record HouseholdExpenseDto(
 
 public sealed record HouseholdExpenseListDto(IReadOnlyCollection<HouseholdExpenseDto> Items, int TotalCount);
 
-/// <summary>Split enriched with member display name and role.</summary>
+/// <summary>Split enriched with member display name.</summary>
 public sealed record SplitDetailDto(
     Guid SplitId,
-    Guid MembershipId,
     Guid UserId,
     string? DisplayName,
     string? AvatarUrl,
@@ -56,18 +55,15 @@ public sealed record SplitDetailDto(
     string Currency,
     bool IsClaimed);
 
-/// <summary>Composite read model — household expense with enriched splits and caller context.</summary>
+/// <summary>Composite read model — household expense with enriched splits.</summary>
 public sealed record HouseholdExpenseDetailDto(
     HouseholdExpenseDto Expense,
-    IReadOnlyCollection<SplitDetailDto> Splits,
-    IReadOnlyCollection<MembershipDto> Members,
-    string? CurrentUserRole);
+    IReadOnlyCollection<SplitDetailDto> Splits);
 
 public sealed record SplitDto(
     Guid SplitId,
     Guid ExpenseId,
-    Guid HouseholdId,
-    Guid MembershipId,
+    Guid GroupId,
     Guid UserId,
     decimal Amount,
     string Currency,

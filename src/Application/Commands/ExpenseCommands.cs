@@ -59,8 +59,7 @@ public sealed record DeactivateExpenseCommand(Guid ExpenseId, Guid CallerId);
 public sealed record UpsertSplitCommand(
     Guid? SplitId,
     Guid ExpenseId,
-    Guid HouseholdId,
-    Guid MembershipId,
+    Guid GroupId,
     Guid UserId,
     decimal Amount,
     string Currency);
@@ -79,4 +78,4 @@ public sealed record MarkExpenseUnpaidCommand(
     DateTime OccurrenceDate);
 
 public sealed record PaymentOccurrenceBody(DateTime OccurrenceDate);
-public sealed record SplitEvenlyBody(IReadOnlyList<Guid> MembershipIds);
+public sealed record SplitEvenlyBody(IReadOnlyList<Guid> UserIds);

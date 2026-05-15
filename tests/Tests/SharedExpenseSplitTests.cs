@@ -11,18 +11,16 @@ public class SharedExpenseSplitTests
     {
         // Arrange
         var expenseId = ExpenseId.New();
-        var householdId = HouseholdId.New();
-        var membershipId = MembershipId.New();
+        var groupId = GroupId.Create(Guid.NewGuid());
         var userId = UserId.New();
         var amount = Money.Create(50m, "USD");
 
         // Act
-        var split = ExpenseSplit.Create(expenseId, householdId, membershipId, userId, amount);
+        var split = ExpenseSplit.Create(expenseId, groupId, userId, amount);
 
         // Assert
         Assert.Equal(expenseId, split.ExpenseId);
-        Assert.Equal(householdId, split.HouseholdId);
-        Assert.Equal(membershipId, split.MembershipId);
+        Assert.Equal(groupId, split.GroupId);
         Assert.Equal(userId, split.UserId);
         Assert.Equal(50m, split.Amount.Amount);
     }
@@ -31,7 +29,7 @@ public class SharedExpenseSplitTests
     public void Create_ShouldRaise_ExpenseSplitCreatedEvent()
     {
         // Arrange / Act
-        var split = ExpenseSplit.Create(ExpenseId.New(), HouseholdId.New(), MembershipId.New(), UserId.New(), Money.Create(25m, "USD"));
+        var split = ExpenseSplit.Create(ExpenseId.New(), GroupId.Create(Guid.NewGuid()), UserId.New(), Money.Create(25m, "USD"));
 
         // Assert
         Assert.Single(split.GetDomainEvents());

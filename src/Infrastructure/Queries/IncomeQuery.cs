@@ -29,13 +29,8 @@ internal sealed class IncomeQuery : IIncomeQuery
 
     public async Task<IncomeListDto> ListAsync(ListIncomeParams request, CancellationToken cancellationToken = default)
     {
-        var memberUserIds = await _db.HouseholdMemberships
-            .AsNoTracking()
-            .Where(m => m.HouseholdId == HouseholdId.Create(request.HouseholdId) && m.IsActive)
-            .Select(m => m.UserId)
-            .ToListAsync(cancellationToken);
-
-        var query = _db.IncomeSources.AsNoTracking().Where(i => memberUserIds.Contains(i.UserId));
+        var uid = UserId.Create(request.UserId);
+        var query = _db.IncomeSources.AsNoTracking().Where(i => i.UserId == uid);
         if (request.ActiveOnly) query = query.Where(i => i.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -122,7 +117,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         var personalExpenses = await _db.Expenses
             .AsNoTracking()
-            .Where(e => e.UserId == uid && e.IsActive && e.HouseholdId == null)
+            .Where(e => e.UserId == uid && e.IsActive && e.GroupId == null)
             .OrderBy(e => e.DueDate)
             .ToListAsync(cancellationToken);
 
@@ -138,7 +133,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
     // ── Private DB fetch helpers ──────────────────────────────────────────────
 
-    private async Task<IReadOnlyList<(ExpenseSplit Split, Expense Expense, Household Household)>> FetchSplitsWithBillDetailsAsync(
+    private async Task<IReadOnlyList<(ExpenseSplit Split, Expense Expense)>> FetchSplitsWithBillDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
         var splits = await _db.ExpenseSplits
@@ -152,7 +147,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         var expenses = await _db.Expenses
             .AsNoTracking()
-            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.HouseholdId != null)
+            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.GroupId != null)
             .ToListAsync(cancellationToken);
 
         var relevantExpenses = expenses.Where(b =>
@@ -164,20 +159,9 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         if (relevantExpenses.Count == 0) return [];
 
-        var householdIds = relevantExpenses.Values.Select(b => b.HouseholdId!.Value).Distinct().ToList();
-        var households = await _db.Households
-            .AsNoTracking()
-            .Where(h => householdIds.Contains(h.Id))
-            .ToDictionaryAsync(h => h.Id, cancellationToken);
-
         return splits
             .Where(s => relevantExpenses.ContainsKey(s.ExpenseId))
-            .Select(s =>
-            {
-                var b = relevantExpenses[s.ExpenseId];
-                var h = households[b.HouseholdId!.Value];
-                return (s, b, h);
-            })
+            .Select(s => (s, relevantExpenses[s.ExpenseId]))
             .ToList();
     }
 
@@ -208,7 +192,7 @@ internal sealed class IncomeQuery : IIncomeQuery
     {
         var expenseIds = await _db.Expenses
             .AsNoTracking()
-            .Where(b => b.UserId == userId && b.HouseholdId == null)
+            .Where(b => b.UserId == userId && b.GroupId == null)
             .Select(b => b.Id)
             .ToListAsync(cancellationToken);
 

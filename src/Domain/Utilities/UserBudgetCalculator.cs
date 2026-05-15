@@ -40,7 +40,7 @@ public static class UserBudgetCalculator
     /// one-time bills are counted if their DueDate falls inside the month.
     /// </summary>
     public static decimal MonthlyObligationsForUser(
-        IEnumerable<(ExpenseSplit Split, Expense Expense, Household Household)> splits,
+        IEnumerable<(ExpenseSplit Split, Expense Expense)> splits,
         int year, int month)
     {
         var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);

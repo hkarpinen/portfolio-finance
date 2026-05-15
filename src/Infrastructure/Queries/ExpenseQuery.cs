@@ -19,7 +19,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<ExpenseListDto> ListByUserAsync(ListExpensesParams request, CancellationToken cancellationToken = default)
     {
         var userId = UserId.Create(request.UserId);
-        var query = _db.Expenses.Where(b => b.UserId == userId && b.HouseholdId == null);
+        var query = _db.Expenses.Where(b => b.UserId == userId && b.GroupId == null);
         if (request.ActiveOnly) query = query.Where(b => b.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -59,7 +59,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<ExpenseDto?> GetDetailAsync(ExpenseDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(request.ExpenseId);
-        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.HouseholdId == null, cancellationToken);
+        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.GroupId == null, cancellationToken);
         if (expense is null) return null;
 
         var occurrenceDate = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
@@ -74,8 +74,8 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
     public async Task<HouseholdExpenseListDto> ListByHouseholdAsync(ListHouseholdExpensesParams request, CancellationToken cancellationToken = default)
     {
-        var householdId = HouseholdId.Create(request.HouseholdId);
-        var query = _db.Expenses.Where(b => b.HouseholdId == householdId);
+        var groupId = GroupId.Create(request.HouseholdId);
+        var query = _db.Expenses.Where(b => b.GroupId == groupId);
         if (request.ActiveOnly) query = query.Where(b => b.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -131,7 +131,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<HouseholdExpenseDto?> GetHouseholdDetailAsync(HouseholdExpenseDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(request.ExpenseId);
-        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.HouseholdId != null, cancellationToken);
+        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.GroupId != null, cancellationToken);
         return expense is null ? null : ExpenseMapper.ToHouseholdResponse(expense);
     }
 
@@ -153,46 +153,30 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
         var splits = await ListSplitsAsync(new ListSplitsParams(expenseId), cancellationToken);
 
-        // Inline membership lookup (no circular IHouseholdQuery dep)
-        var hid = HouseholdId.Create(expense.HouseholdId);
-        var memberEntities = await _db.HouseholdMemberships
-            .AsNoTracking()
-            .Where(m => m.HouseholdId == hid && m.IsActive)
-            .ToListAsync(cancellationToken);
-        var memberUserIds = memberEntities.Select(m => m.UserId).ToList();
-        var memberProjections = await _db.UserProjections
-            .AsNoTracking()
-            .Where(p => memberUserIds.Contains(p.UserId))
-            .ToListAsync(cancellationToken);
-        var memberProjDict = memberProjections.ToDictionary(p => p.UserId);
-        var members = memberEntities.Select(m =>
-        {
-            memberProjDict.TryGetValue(m.UserId, out var proj);
-            return MembershipMapper.ToResponse(m, proj?.GetFullName());
-        }).ToList();
-
         var occurrenceDate = expense.CurrentOccurrenceDate == default ? expense.DueDate : expense.CurrentOccurrenceDate;
         var paidSplitIds = await GetPaidSplitIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
 
-        var memberDict = members.ToDictionary(m => m.MembershipId);
-        var currentUserRole = members.FirstOrDefault(m => m.UserId == callerId)?.Role.ToString();
+        var splitUserIdSet = splits.Select(s => s.UserId).ToHashSet();
+        var projections2 = (await _db.UserProjections.AsNoTracking()
+            .ToListAsync(cancellationToken))
+            .Where(p => splitUserIdSet.Contains(p.UserId.Value))
+            .ToDictionary(p => p.UserId.Value);
 
         var enrichedSplits = splits.Select(s =>
         {
-            memberDict.TryGetValue(s.MembershipId, out var member);
+            projections2.TryGetValue(s.UserId, out var proj);
             return new SplitDetailDto(
                 s.SplitId,
-                s.MembershipId,
                 s.UserId,
-                member?.DisplayName,
+                proj?.GetFullName(),
                 null,
-                member?.Role.ToString() ?? "Member",
+                "Member",
                 s.Amount,
                 s.Currency,
                 paidSplitIds.Contains(s.SplitId));
         }).ToList();
 
-        return new HouseholdExpenseDetailDto(expense, enrichedSplits, members, currentUserRole);
+        return new HouseholdExpenseDetailDto(expense, enrichedSplits);
     }
 
     public Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default)
@@ -204,11 +188,11 @@ internal sealed class ExpenseQuery : IExpenseQuery
     // ── Expense-split queries ─────────────────────────────────────────────────
 
     public async Task<IReadOnlyCollection<HouseholdMonthlyContributionsDto>> ListSplitsByHouseholdAsync(
-        HouseholdId householdId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default)
+        GroupId householdId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default)
     {
         var allExpenses = await _db.Expenses
             .AsNoTracking()
-            .Where(b => b.HouseholdId == householdId && b.IsActive)
+            .Where(b => b.GroupId == householdId && b.IsActive)
             .ToListAsync(cancellationToken);
 
         var relevantExpenses = allExpenses.Where(b =>

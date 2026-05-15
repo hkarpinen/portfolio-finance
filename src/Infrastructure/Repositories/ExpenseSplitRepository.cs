@@ -33,9 +33,6 @@ internal sealed class ExpenseSplitRepository : IExpenseSplitRepository
     public Task<ExpenseSplit?> GetByIdAsync(ExpenseSplitId splitId, CancellationToken cancellationToken = default)
         => _dbContext.ExpenseSplits.FirstOrDefaultAsync(s => s.Id == splitId, cancellationToken);
 
-    public Task<ExpenseSplit?> GetByExpenseAndMembershipAsync(ExpenseId expenseId, MembershipId membershipId, CancellationToken cancellationToken = default)
-        => _dbContext.ExpenseSplits.FirstOrDefaultAsync(s => s.ExpenseId == expenseId && s.MembershipId == membershipId, cancellationToken);
-
     public Task<ExpenseSplit?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default)
         => _dbContext.ExpenseSplits.FirstOrDefaultAsync(s => s.ExpenseId == expenseId && s.UserId == userId, cancellationToken);
 }

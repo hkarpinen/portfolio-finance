@@ -19,8 +19,8 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .HasConversion(id => id.Value, v => new UserId(v));
 
         // Nullable for personal expenses (null = personal, set = household).
-        builder.Property(b => b.HouseholdId)
-            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new HouseholdId(v.Value) : (HouseholdId?)null)
+        builder.Property(b => b.GroupId)
+            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new GroupId(v.Value) : (GroupId?)null)
             .IsRequired(false);
 
         builder.Property(b => b.CreatedBy)
@@ -48,7 +48,7 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             rs.Property(r => r.EndDate).HasColumnName("recurrence_end_date");
         });
 
-        builder.HasIndex(b => new { b.HouseholdId, b.IsActive });
+        builder.HasIndex(b => new { b.GroupId, b.IsActive });
         builder.HasIndex(b => b.DueDate);
         builder.HasIndex(b => new { b.UserId, b.IsActive });
     }

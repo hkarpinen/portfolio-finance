@@ -334,7 +334,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (request.HouseholdId.HasValue)
             {
                 expense = Expense.CreateHousehold(
-                    HouseholdId.Create(request.HouseholdId.Value),
+                    GroupId.Create(request.HouseholdId.Value),
                     UserId.Create(userId),
                     displayName, amount, ExpenseCategory.Other, nextDue, schedule);
                 expense.Activate();

@@ -50,15 +50,12 @@ public static class InfrastructureServiceExtensions
             });
         });
 
-        services.AddScoped<IHouseholdRepository, HouseholdRepository>();
-        services.AddScoped<IHouseholdMembershipRepository, HouseholdMembershipRepository>();
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
         services.AddScoped<IExpenseRepository, ExpenseRepository>();
         services.AddScoped<IExpensePaymentRepository, ExpensePaymentRepository>();
         services.AddScoped<IExpenseSplitRepository, ExpenseSplitRepository>();
         services.AddScoped<IExpenseSplitPaymentRepository, ExpenseSplitPaymentRepository>();
 
-        services.AddScoped<IHouseholdQuery, HouseholdQuery>();
         services.AddScoped<IIncomeQuery, IncomeQuery>();
         services.AddScoped<IExpenseQuery, ExpenseQuery>();
         services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();

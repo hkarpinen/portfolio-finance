@@ -12,8 +12,7 @@ public class ExpenseSplit : IAggregateRoot
 
     public ExpenseSplitId Id { get; private set; }
     public ExpenseId ExpenseId { get; private set; }
-    public HouseholdId HouseholdId { get; private set; }
-    public MembershipId MembershipId { get; private set; }
+    public GroupId GroupId { get; private set; }
     public UserId UserId { get; private set; }
     public Money Amount { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -28,8 +27,7 @@ public class ExpenseSplit : IAggregateRoot
 
     public static ExpenseSplit Create(
         ExpenseId expenseId,
-        HouseholdId householdId,
-        MembershipId membershipId,
+        GroupId groupId,
         UserId userId,
         Money amount)
     {
@@ -40,15 +38,14 @@ public class ExpenseSplit : IAggregateRoot
         {
             Id = ExpenseSplitId.New(),
             ExpenseId = expenseId,
-            HouseholdId = householdId,
-            MembershipId = membershipId,
+            GroupId = groupId,
             UserId = userId,
             Amount = amount,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        split._domainEvents.Add(new ExpenseSplitCreated(split.Id, expenseId, householdId, membershipId, userId, amount));
+        split._domainEvents.Add(new ExpenseSplitCreated(split.Id, expenseId, groupId, userId, amount));
         return split;
     }
 
@@ -60,12 +57,12 @@ public class ExpenseSplit : IAggregateRoot
         Amount = newAmount;
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new ExpenseSplitUpdated(Id, ExpenseId, HouseholdId, newAmount));
+        _domainEvents.Add(new ExpenseSplitUpdated(Id, ExpenseId, GroupId, newAmount));
     }
 
     public void Remove()
     {
         UpdatedAt = DateTime.UtcNow;
-        _domainEvents.Add(new ExpenseSplitRemoved(Id, ExpenseId, HouseholdId, MembershipId));
+        _domainEvents.Add(new ExpenseSplitRemoved(Id, ExpenseId, GroupId));
     }
 }

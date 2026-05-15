@@ -14,16 +14,10 @@ internal sealed class ExpenseSplitIdConverter : JsonConverter<ExpenseSplitId>
     public override void Write(Utf8JsonWriter w, ExpenseSplitId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
 }
 
-internal sealed class HouseholdIdConverter : JsonConverter<HouseholdId>
+internal sealed class GroupIdConverter : JsonConverter<GroupId>
 {
-    public override HouseholdId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
-    public override void Write(Utf8JsonWriter w, HouseholdId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
-}
-
-internal sealed class BillsMembershipIdConverter : JsonConverter<MembershipId>
-{
-    public override MembershipId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
-    public override void Write(Utf8JsonWriter w, MembershipId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
+    public override GroupId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
+    public override void Write(Utf8JsonWriter w, GroupId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
 }
 
 internal sealed class BillsUserIdConverter : JsonConverter<UserId>
@@ -49,8 +43,7 @@ internal static class OutboxExtensions
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
             new ExpenseIdConverter(),
             new ExpenseSplitIdConverter(),
-            new HouseholdIdConverter(),
-            new BillsMembershipIdConverter(),
+            new GroupIdConverter(),
             new BillsUserIdConverter()
         }
     };

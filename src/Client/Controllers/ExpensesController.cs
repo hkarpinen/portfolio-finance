@@ -1,6 +1,7 @@
 using Finance.Application.Commands;
 using Finance.Application.Queries;
 using Finance.Application.Managers;
+using Finance.Domain.ValueObjects;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,8 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Client.Controllers;
 
 /// <summary>
-/// Expenses — covers both personal (api/finance/expenses) and household-scoped
-/// (api/finance/households/{id}/expenses) routes. Both are driven by the same Expense aggregate.
+/// Expenses — covers both personal (api/finance/expenses) and group-scoped
+/// (api/finance/groups/{groupId}/expenses) routes. Both are driven by the same Expense aggregate.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -82,41 +83,41 @@ public sealed class ExpensesController : ControllerBase
 
     // ── Household expenses ────────────────────────────────────────────────────
 
-    [HttpGet("/api/finance/households/{householdId:guid}/expenses")]
-    public async Task<IActionResult> ListByHousehold(Guid householdId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    [HttpGet("/api/finance/groups/{groupId:guid}/expenses")]
+    public async Task<IActionResult> ListByHousehold(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
         var result = await _query.ListByHouseholdAsync(
-            new ListHouseholdExpensesParams(householdId, page, pageSize, ActiveOnly: true, CallerId: userId), ct);
+            new ListHouseholdExpensesParams(groupId, page, pageSize, ActiveOnly: true, CallerId: userId), ct);
         return Ok(result);
     }
 
-    [HttpGet("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}")]
-    public async Task<IActionResult> GetHouseholdDetail(Guid householdId, Guid expenseId, CancellationToken ct = default)
+    [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    public async Task<IActionResult> GetHouseholdDetail(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var result = await _query.GetHouseholdDetailAsync(new HouseholdExpenseDetailParams(expenseId), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
-    [HttpGet("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/detail")]
-    public async Task<IActionResult> GetHouseholdFullDetail(Guid householdId, Guid expenseId, CancellationToken ct = default)
+    [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/detail")]
+    public async Task<IActionResult> GetHouseholdFullDetail(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
         var result = await _query.GetHouseholdExpenseDetailAsync(expenseId, userId, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
-    [HttpPost("/api/finance/households/{householdId:guid}/expenses")]
-    public async Task<IActionResult> CreateHousehold(Guid householdId, [FromBody] CreateHouseholdExpenseCommand request, CancellationToken ct = default)
+    [HttpPost("/api/finance/groups/{groupId:guid}/expenses")]
+    public async Task<IActionResult> CreateHousehold(Guid groupId, [FromBody] CreateHouseholdExpenseCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.CreateHouseholdExpenseAsync(
-            request with { HouseholdId = householdId, CreatedBy = userId.Value }, ct);
-        return CreatedAtAction(nameof(GetHouseholdDetail), new { householdId, expenseId = result.ExpenseId }, result);
+            request with { HouseholdId = groupId, CreatedBy = userId.Value }, ct);
+        return CreatedAtAction(nameof(GetHouseholdDetail), new { groupId, expenseId = result.ExpenseId }, result);
     }
 
-    [HttpPut("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}")]
-    public async Task<IActionResult> UpdateHousehold(Guid householdId, Guid expenseId, [FromBody] UpdateHouseholdExpenseCommand request, CancellationToken ct = default)
+    [HttpPut("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    public async Task<IActionResult> UpdateHousehold(Guid groupId, Guid expenseId, [FromBody] UpdateHouseholdExpenseCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.UpdateHouseholdExpenseAsync(
@@ -124,8 +125,8 @@ public sealed class ExpensesController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
-    [HttpDelete("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}")]
-    public async Task<IActionResult> DeactivateHousehold(Guid householdId, Guid expenseId, CancellationToken ct = default)
+    [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    public async Task<IActionResult> DeactivateHousehold(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.DeactivateHouseholdExpenseAsync(
@@ -133,16 +134,16 @@ public sealed class ExpensesController : ControllerBase
         return result is null ? NotFound() : NoContent();
     }
 
-    [HttpPost("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/payments")]
-    public async Task<IActionResult> PaySplit(Guid householdId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
+    [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/payments")]
+    public async Task<IActionResult> PaySplit(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         await _manager.MarkPaidAsync(new MarkExpensePaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
     }
 
-    [HttpDelete("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/payments")]
-    public async Task<IActionResult> UnpaySplit(Guid householdId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
+    [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/payments")]
+    public async Task<IActionResult> UnpaySplit(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         await _manager.MarkUnpaidAsync(new MarkExpenseUnpaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
@@ -151,38 +152,56 @@ public sealed class ExpensesController : ControllerBase
 
     // ── Splits ────────────────────────────────────────────────────────────────
 
-    [HttpGet("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/splits")]
-    public async Task<IActionResult> ListSplits(Guid householdId, Guid expenseId, CancellationToken ct = default)
+    [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits")]
+    public async Task<IActionResult> ListSplits(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var result = await _query.ListSplitsAsync(new ListSplitsParams(expenseId), ct);
         return Ok(result);
     }
 
-    [HttpPost("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/splits")]
-    public async Task<IActionResult> UpsertSplit(Guid householdId, Guid expenseId, [FromBody] UpsertSplitCommand request, CancellationToken ct = default)
+    [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits")]
+    public async Task<IActionResult> UpsertSplit(Guid groupId, Guid expenseId, [FromBody] UpsertSplitCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         try
         {
             var result = await _manager.UpsertSplitAsync(
-                request with { ExpenseId = expenseId, HouseholdId = householdId, UserId = userId.Value }, ct);
+                request with { ExpenseId = expenseId, GroupId = groupId, UserId = userId.Value }, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
     }
 
-    [HttpPost("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/splits/even")]
-    public async Task<IActionResult> SplitEvenly(Guid householdId, Guid expenseId, [FromBody] SplitEvenlyBody body, CancellationToken ct = default)
+    [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits/even")]
+    public async Task<IActionResult> SplitEvenly(Guid groupId, Guid expenseId, [FromBody] SplitEvenlyBody body, CancellationToken ct = default)
     {
-        await _manager.SplitEvenlyAsync(expenseId, body.MembershipIds, ct);
+        await _manager.SplitEvenlyAsync(expenseId, body.UserIds, ct);
         return NoContent();
     }
 
-    [HttpDelete("/api/finance/households/{householdId:guid}/expenses/{expenseId:guid}/splits/{splitId:guid}")]
-    public async Task<IActionResult> RemoveSplit(Guid householdId, Guid expenseId, Guid splitId, CancellationToken ct = default)
+    [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits/{splitId:guid}")]
+    public async Task<IActionResult> RemoveSplit(Guid groupId, Guid expenseId, Guid splitId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.RemoveSplitAsync(new RemoveSplitCommand(splitId, userId.Value), ct);
         return result is null ? NotFound() : NoContent();
+    }
+
+    // ── Contributions ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns per-month, per-member contribution breakdowns for a household.
+    /// Window: 3 past months + current month + 8 future months (12 total).
+    /// </summary>
+    [HttpGet("/api/finance/groups/{groupId:guid}/contributions")]
+    public async Task<IActionResult> GetContributions(Guid groupId, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var windowStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-3);
+        var windowEnd = windowStart.AddMonths(12).AddDays(-1);
+        var result = await _query.ListSplitsByHouseholdAsync(
+            GroupId.Create(groupId), windowStart, windowEnd, ct);
+        var nonEmpty = result.Where(m => m.Members.Count > 0).ToList();
+        return Ok(nonEmpty);
     }
 }

@@ -10,7 +10,7 @@ public record ExpenseCreated(
     ExpenseCategory Category,
     DateTime DueDate,
     RecurrenceSchedule? RecurrenceSchedule,
-    HouseholdId? HouseholdId = null) : DomainEvent;
+    GroupId? HouseholdId = null) : DomainEvent;
 
 public record ExpenseUpdated(
     ExpenseId ExpenseId,
@@ -18,11 +18,11 @@ public record ExpenseUpdated(
     Money Amount,
     ExpenseCategory Category,
     DateTime DueDate,
-    HouseholdId? HouseholdId = null) : DomainEvent;
+    GroupId? HouseholdId = null) : DomainEvent;
 
 public record ExpenseDeactivated(
     ExpenseId ExpenseId,
-    HouseholdId? HouseholdId = null) : DomainEvent;
+    GroupId? HouseholdId = null) : DomainEvent;
 
 public record ExpensePaid(
     ExpenseId ExpenseId,
@@ -34,4 +34,3 @@ public record ExpenseUnpaid(
     ExpenseId ExpenseId,
     UserId UserId,
     DateTime OccurrenceDate) : DomainEvent;
-

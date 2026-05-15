@@ -20,7 +20,7 @@ public class ExpenseAggregateTests
         Assert.Equal(userId, expense.UserId);
         Assert.Equal("Netflix", expense.Title);
         Assert.Equal(15.99m, expense.Amount.Amount);
-        Assert.Null(expense.HouseholdId);
+        Assert.Null(expense.GroupId);
         Assert.Null(expense.CreatedBy);
         Assert.True(expense.IsActive);
         Assert.Single(expense.GetDomainEvents());
@@ -55,11 +55,11 @@ public class ExpenseAggregateTests
     [Fact]
     public void CreateHousehold_SetsHouseholdIdAndCreatedBy()
     {
-        var hId = HouseholdId.Create(Guid.NewGuid());
+        var hId = GroupId.Create(Guid.NewGuid());
         var creator = NewUser();
         var expense = Expense.CreateHousehold(hId, creator, "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
 
-        Assert.Equal(hId, expense.HouseholdId);
+        Assert.Equal(hId, expense.GroupId);
         Assert.Equal(creator, expense.CreatedBy);
         Assert.Equal(creator, expense.UserId);
         Assert.True(expense.IsActive);
