@@ -18,3 +18,5 @@ appsettings.Staging.json
 ## OS
 .DS_Store
 Thumbs.db
+
+**.lscache
