@@ -35,4 +35,7 @@ internal sealed class ExpenseSplitRepository : IExpenseSplitRepository
 
     public Task<ExpenseSplit?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default)
         => _dbContext.ExpenseSplits.FirstOrDefaultAsync(s => s.ExpenseId == expenseId && s.UserId == userId, cancellationToken);
+
+    public Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default)
+        => _dbContext.ExpenseSplits.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
 }

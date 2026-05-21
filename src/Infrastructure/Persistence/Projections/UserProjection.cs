@@ -20,6 +20,7 @@ public sealed class UserProjection
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IsActive { get; set; }
+    public bool IsDemo { get; set; }
 
     private UserProjection() { }
 

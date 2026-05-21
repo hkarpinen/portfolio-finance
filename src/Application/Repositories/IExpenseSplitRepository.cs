@@ -11,4 +11,5 @@ public interface IExpenseSplitRepository
     Task<ExpenseSplit?> GetByIdAsync(ExpenseSplitId splitId, CancellationToken cancellationToken = default);
     Task<ExpenseSplit?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default);
     Task CommitAsync(CancellationToken cancellationToken = default);
+    Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default);
 }

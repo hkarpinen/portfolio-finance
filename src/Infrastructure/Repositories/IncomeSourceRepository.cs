@@ -32,4 +32,7 @@ internal sealed class IncomeSourceRepository : IIncomeSourceRepository
 
     public Task CommitAsync(CancellationToken cancellationToken = default)
         => _dbContext.SaveChangesAsync(cancellationToken);
+
+    public Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default)
+        => _dbContext.IncomeSources.Where(i => i.UserId == userId).ExecuteDeleteAsync(cancellationToken);
 }

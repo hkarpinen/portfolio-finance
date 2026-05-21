@@ -10,4 +10,5 @@ public interface IIncomeSourceRepository
     Task RemoveAsync(IncomeSource incomeSource, CancellationToken cancellationToken = default);
     Task<IncomeSource?> GetByIdAsync(IncomeId incomeId, CancellationToken cancellationToken = default);
     Task CommitAsync(CancellationToken cancellationToken = default);
+    Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default);
 }

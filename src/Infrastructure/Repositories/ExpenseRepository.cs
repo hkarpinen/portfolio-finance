@@ -32,4 +32,7 @@ internal sealed class ExpenseRepository : IExpenseRepository
 
     public Task CommitAsync(CancellationToken cancellationToken = default)
         => _dbContext.SaveChangesAsync(cancellationToken);
+
+    public Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default)
+        => _dbContext.Expenses.Where(e => e.UserId == userId).ExecuteDeleteAsync(cancellationToken);
 }

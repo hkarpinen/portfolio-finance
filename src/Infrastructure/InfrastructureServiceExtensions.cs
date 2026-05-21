@@ -35,6 +35,9 @@ public static class InfrastructureServiceExtensions
             x.AddConsumer<UserRegisteredConsumer>();
             x.AddConsumer<UserProfileUpdatedConsumer>();
             x.AddConsumer<UserBannedConsumer>();
+            x.AddConsumer<DemoUserCreatedConsumer>();
+            x.AddConsumer<DemoHouseholdSeededConsumer>();
+            x.AddConsumer<DemoUserExpiredConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -73,6 +76,11 @@ public static class InfrastructureServiceExtensions
         services.AddHttpClient<IBankDataProvider, PlaidApiClient>(http =>
         {
             http.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddHttpClient<IPlaidWebhookVerifier, PlaidWebhookVerifier>(http =>
+        {
+            http.Timeout = TimeSpan.FromSeconds(10);
         });
 
         return services;

@@ -1,4 +1,5 @@
 using Finance.Application.Managers;
+using Finance.Application.Managers.Demo;
 using Finance.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,6 +13,7 @@ public static class ApplicationServiceExtensions
         services.AddScoped<IExpenseManager, ExpenseManager>();
         services.AddScoped<IFinancialConnectionManager, FinancialConnectionManager>();
         services.AddScoped<IBankSyncService, BankSyncService>();
+        services.AddScoped<IDemoSeedManager, DemoSeedManager>();
 
         return services;
     }

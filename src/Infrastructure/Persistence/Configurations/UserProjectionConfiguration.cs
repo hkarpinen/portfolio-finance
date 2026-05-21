@@ -21,6 +21,7 @@ internal sealed class UserProjectionConfiguration : IEntityTypeConfiguration<Use
         builder.Property(u => u.CreatedAt).IsRequired();
         builder.Property(u => u.UpdatedAt).IsRequired();
         builder.Property(u => u.IsActive).IsRequired();
+        builder.Property(u => u.IsDemo).IsRequired().HasDefaultValue(false);
 
         builder.HasIndex(u => u.Email).IsUnique();
     }
