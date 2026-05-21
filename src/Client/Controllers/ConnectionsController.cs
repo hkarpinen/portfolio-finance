@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Client.Extensions;
 using Finance.Application.Dtos;
 using Finance.Application.Commands;
 using Finance.Application.Queries;
 using Finance.Application.Managers;
+using Infrastructure.Plaid;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,14 +19,18 @@ public sealed class ConnectionsController : ControllerBase
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly ILogger<ConnectionsController> _logger;
 
+    private readonly IPlaidWebhookVerifier _webhookVerifier;
+
     public ConnectionsController(
         IFinancialConnectionManager manager,
         IFinancialConnectionQuery connectionQuery,
-        ILogger<ConnectionsController> logger)
+        ILogger<ConnectionsController> logger,
+        IPlaidWebhookVerifier webhookVerifier)
     {
         _manager = manager;
         _connectionQuery = connectionQuery;
         _logger = logger;
+        _webhookVerifier = webhookVerifier;
     }
 
     /// <summary>Issues a single-use bank-link token. The SPA passes this straight to Plaid Link.</summary>
@@ -164,15 +170,37 @@ public sealed class ConnectionsController : ControllerBase
     }
 
     /// <summary>
-    /// Bank-link provider webhook receiver. UNAUTHENTICATED — Plaid signs requests with JWT
-    /// in the <c>Plaid-Verification</c> header; production deployments should validate that
-    /// signature. We gate on item-id existence so spoofed payloads are a no-op.
+    /// Bank-link provider webhook receiver. Verifies the <c>Plaid-Verification</c> JWT signature
+    /// and body hash before processing any payload.
     /// </summary>
     [AllowAnonymous]
     [HttpPost("webhook")]
-    public async Task<IActionResult> Webhook([FromBody] WebhookPayload payload, CancellationToken ct)
+    public async Task<IActionResult> Webhook(CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(payload.ItemId))
+        // Read the raw body for signature verification before model binding consumes it
+        Request.EnableBuffering();
+        byte[] rawBody;
+        using (var ms = new MemoryStream())
+        {
+            await Request.Body.CopyToAsync(ms, ct);
+            rawBody = ms.ToArray();
+        }
+        Request.Body.Position = 0;
+
+        if (!Request.Headers.TryGetValue("Plaid-Verification", out var verificationHeader)
+            || string.IsNullOrEmpty(verificationHeader))
+        {
+            _logger.LogWarning("Plaid webhook: missing Plaid-Verification header");
+            return Unauthorized();
+        }
+
+        if (!await _webhookVerifier.VerifyAsync(verificationHeader!, rawBody, ct))
+            return Unauthorized();
+
+        var payload = JsonSerializer.Deserialize<WebhookPayload>(rawBody,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (payload is null || string.IsNullOrEmpty(payload.ItemId))
             return Ok();
 
         _logger.LogInformation(
