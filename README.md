@@ -68,6 +68,26 @@ src/
 | `Plaid__Environment` | `sandbox` \| `development` \| `production` |
 | `Plaid__WebhookUrl` | Public HTTPS URL terminating at `/api/finance/plaid/webhook` |
 
+## CI/CD
+
+Two workflows run on push to `main`:
+
+| Workflow | File | What it does |
+|---|---|---|
+| **Build & Publish** | `.github/workflows/docker-publish.yml` | Runs `dotnet test`, builds the Docker image, pushes to `ghcr.io/hkarpinen/portfolio-finance:latest` |
+| **Deploy** | `.github/workflows/deploy.yml` | Triggers after Build & Publish succeeds; SSHes into the server, pulls the new image, and restarts only the `finance` container |
+
+### Required GitHub Actions secrets
+
+Set these under **Settings → Secrets and variables → Actions** in the repo:
+
+| Secret | Description |
+|---|---|
+| `DEPLOY_HOST` | VPS IP address or hostname |
+| `DEPLOY_USER` | SSH user on the server (e.g. `deploy`) |
+| `DEPLOY_KEY` | Private SSH key for that user |
+| `DEPLOY_PATH` | Absolute path to the infra directory on the server (e.g. `/home/deploy/portfolio/infra`) |
+
 ## Plaid integration
 
 Bank linking, cursor-based transaction sync, and recurring-stream detection.
