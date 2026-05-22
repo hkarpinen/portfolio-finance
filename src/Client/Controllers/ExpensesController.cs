@@ -5,6 +5,7 @@ using Finance.Domain.ValueObjects;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Client.Controllers;
 
@@ -14,6 +15,7 @@ namespace Client.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
+[EnableRateLimiting("api")]
 [Route("api/finance/expenses")]
 public sealed class ExpensesController : ControllerBase
 {

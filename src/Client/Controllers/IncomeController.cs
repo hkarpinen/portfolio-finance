@@ -4,6 +4,7 @@ using Finance.Application.Managers;
 using Client.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Client.Controllers;
 
@@ -13,6 +14,7 @@ namespace Client.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
+[EnableRateLimiting("api")]
 [Route("api/finance/groups/{groupId:guid}/income")]
 public sealed class IncomeController : ControllerBase
 {

@@ -1,9 +1,11 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Finance.Application;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
@@ -73,6 +75,25 @@ try
                   .AllowCredentials());
     });
 
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        options.AddFixedWindowLimiter("api", opt =>
+        {
+            opt.PermitLimit = 120;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueLimit = 0;
+        });
+
+        options.AddFixedWindowLimiter("write", opt =>
+        {
+            opt.PermitLimit = 30;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueLimit = 0;
+        });
+    });
+
     builder.Services.AddControllers()
         .AddJsonOptions(o =>
             o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
@@ -135,6 +156,7 @@ try
     });
 
     app.UseSerilogRequestLogging();
+    app.UseRateLimiter();
 
     if (app.Environment.IsDevelopment())
     {

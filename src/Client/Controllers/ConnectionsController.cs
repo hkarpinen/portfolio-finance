@@ -7,11 +7,13 @@ using Finance.Application.Managers;
 using Infrastructure.Plaid;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
+[EnableRateLimiting("api")]
 [Route("api/finance/connections")]
 public sealed class ConnectionsController : ControllerBase
 {
