@@ -1,6 +1,6 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Aggregates;
+namespace Finance.Domain.ReadModels;
 
 /// <summary>
 /// Application-layer data model for a bank account sourced from a linked financial institution.

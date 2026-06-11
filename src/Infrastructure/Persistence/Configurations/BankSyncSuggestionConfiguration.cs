@@ -1,4 +1,4 @@
-using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -26,7 +26,7 @@ internal sealed class BankSyncSuggestionConfiguration : IEntityTypeConfiguration
         builder.Property(s => s.MerchantName).HasMaxLength(500);
         builder.Property(s => s.Amount).HasPrecision(18, 4).IsRequired();
         builder.Property(s => s.Currency).HasMaxLength(3).IsRequired();
-        builder.Property(s => s.Direction).HasMaxLength(10).IsRequired();
+        builder.Property(s => s.Direction).HasConversion<string>().HasMaxLength(10).IsRequired();
         builder.Property(s => s.TransactionDate).IsRequired();
         builder.Property(s => s.LinkedEntityType).HasMaxLength(100);
 

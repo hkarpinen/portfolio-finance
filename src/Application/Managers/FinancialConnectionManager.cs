@@ -3,8 +3,8 @@ using Finance.Application.Dtos;
 using Finance.Application.Ports;
 using Finance.Application.Queries;
 using Finance.Application.Repositories;
-using Finance.Application.Services;
 using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -21,10 +21,10 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
     private readonly IFinancialConnectionRepository _repo;
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
-    private readonly IExpenseRepository _expenseRepository;
-    private readonly IExpensePaymentRepository _expensePaymentRepository;
+    private readonly IChargeRepository _expenseRepository;
+    private readonly IChargePaymentRepository _expensePaymentRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
-    private readonly IBankSyncService _syncService;
+    private readonly IBankSyncManager _syncService;
     private readonly ILogger<FinancialConnectionManager> _logger;
 
     public FinancialConnectionManager(
@@ -32,10 +32,10 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         IFinancialConnectionRepository repo,
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
-        IExpenseRepository expenseRepository,
-        IExpensePaymentRepository expensePaymentRepository,
+        IChargeRepository expenseRepository,
+        IChargePaymentRepository expensePaymentRepository,
         IIncomeSourceRepository incomeRepository,
-        IBankSyncService syncService,
+        IBankSyncManager syncService,
         ILogger<FinancialConnectionManager> logger)
     {
         _api = api;
@@ -79,13 +79,13 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             var oldSuggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(existing.Id, cancellationToken);
             foreach (var suggestion in oldSuggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
             {
-                if (suggestion.LinkedEntityType == "Expense")
+                if (suggestion.LinkedEntityType == LinkedEntityType.Charge)
                 {
                     var expense = await _expenseRepository.GetByIdAsync(
-                        ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
+                        ChargeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
                     if (expense is not null) await _expenseRepository.RemoveAsync(expense, cancellationToken);
                 }
-                else if (suggestion.LinkedEntityType == "IncomeSource")
+                else if (suggestion.LinkedEntityType == LinkedEntityType.IncomeSource)
                 {
                     var income = await _incomeRepository.GetByIdAsync(
                         IncomeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
@@ -177,14 +177,14 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         var suggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(connection.Id, cancellationToken);
         foreach (var suggestion in suggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
         {
-            if (suggestion.LinkedEntityType == "Expense")
+            if (suggestion.LinkedEntityType == LinkedEntityType.Charge)
             {
                 var expense = await _expenseRepository.GetByIdAsync(
-                    ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
+                    ChargeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
                 if (expense is not null)
                     await _expenseRepository.RemoveAsync(expense, cancellationToken);
             }
-            else if (suggestion.LinkedEntityType == "IncomeSource")
+            else if (suggestion.LinkedEntityType == LinkedEntityType.IncomeSource)
             {
                 var income = await _incomeRepository.GetByIdAsync(
                     IncomeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
@@ -230,7 +230,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
 
     // ── Recurring suggestions ────────────────────────────────────────────────
 
-    public async Task<ListSuggestionsDto> RefreshSuggestionsAsync(
+    public async Task<RecurringSuggestionListDto> RefreshSuggestionsAsync(
         Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default)
     {
         var connection = await _repo.GetConnectionAsync(
@@ -242,7 +242,8 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         await _syncService.RefreshSuggestionsAsync(connection, ct);
 
         var suggestions = await _connectionQuery.ListSuggestionsForUserAsync(UserId.Create(userId), ct);
-        return new ListSuggestionsDto(suggestions.Select(MapSuggestion).ToList());
+        var dtos = suggestions.Select(MapSuggestion).ToList();
+        return new RecurringSuggestionListDto(dtos, dtos.Count);
     }
 
     public async Task<AcceptSuggestionDto> AcceptSuggestionAsync(
@@ -270,10 +271,10 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
                 paymentFrequency: suggestion.Frequency,
                 lastPaymentDate: suggestion.LastDate);
             await _incomeRepository.AddAsync(income, ct);
-            suggestion.MarkLinked(income.Id.Value, "IncomeSource");
+            suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
             await _repo.SaveSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, "IncomeSource");
+            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
         }
         else
         {
@@ -281,14 +282,14 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (nextDue < DateTime.UtcNow.Date)
                 nextDue = DateTime.UtcNow.Date.AddDays(1);
 
-            var expense = Expense.Create(
+            var expense = Charge.Create(
                 UserId.Create(userId), sourceName, suggestion.AverageAmount,
-                ExpenseCategory.Other, nextDue, schedule);
+                ChargeCategory.Other, nextDue, schedule);
             await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, "Expense");
+            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, "Expense");
+            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
         }
     }
 
@@ -318,10 +319,10 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
                 paymentFrequency: RecurrenceFrequency.Monthly,
                 lastPaymentDate: suggestion.TransactionDate);
             await _incomeRepository.AddAsync(income, ct);
-            suggestion.MarkLinked(income.Id.Value, "IncomeSource");
+            suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, "IncomeSource");
+            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
         }
         else
         {
@@ -330,31 +331,31 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (nextDue < DateTime.UtcNow.Date)
                 nextDue = DateTime.UtcNow.Date.AddDays(1);
 
-            Expense expense;
-            if (request.HouseholdId.HasValue)
+            Charge expense;
+            if (request.GroupId.HasValue)
             {
-                expense = Expense.CreateHousehold(
-                    GroupId.Create(request.HouseholdId.Value),
+                expense = Charge.CreateGroup(
+                    GroupId.Create(request.GroupId.Value),
                     UserId.Create(userId),
-                    displayName, amount, ExpenseCategory.Other, nextDue, schedule);
+                    displayName, amount, ChargeCategory.Other, nextDue, schedule);
                 expense.Activate();
             }
             else
             {
-                expense = Expense.Create(
+                expense = Charge.Create(
                     UserId.Create(userId), displayName, amount,
-                    ExpenseCategory.Other, nextDue, schedule);
+                    ChargeCategory.Other, nextDue, schedule);
             }
 
-            var payment = ExpensePayment.Create(
+            var payment = ChargePayment.Create(
                 expense.Id, expense.UserId,
                 suggestion.TransactionDate, suggestion.ExternalTransactionId);
             await _expenseRepository.AddAsync(expense, ct);
             await _expensePaymentRepository.AddAsync(payment, ct);
-            suggestion.MarkLinked(expense.Id.Value, "Expense");
+            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, "Expense");
+            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
         }
     }
 

@@ -7,17 +7,17 @@ namespace Finance.Application.Managers.Demo;
 internal sealed class DemoSeedManager : IDemoSeedManager
 {
     private readonly IIncomeSourceRepository _incomeRepo;
-    private readonly IExpenseRepository _expenseRepo;
-    private readonly IExpenseSplitRepository _splitRepo;
+    private readonly IChargeRepository _chargeRepo;
+    private readonly IAllocationRepository _allocationRepo;
 
     public DemoSeedManager(
         IIncomeSourceRepository incomeRepo,
-        IExpenseRepository expenseRepo,
-        IExpenseSplitRepository splitRepo)
+        IChargeRepository chargeRepo,
+        IAllocationRepository allocationRepo)
     {
         _incomeRepo = incomeRepo;
-        _expenseRepo = expenseRepo;
-        _splitRepo = splitRepo;
+        _chargeRepo = chargeRepo;
+        _allocationRepo = allocationRepo;
     }
 
     public async Task SeedAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -37,70 +37,74 @@ internal sealed class DemoSeedManager : IDemoSeedManager
 
         var expenses = new[]
         {
-            Expense.Create(uid, "Rent", Money.Create(1500m, "USD"),
-                ExpenseCategory.Rent, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Rent", Money.Create(1500m, "USD"),
+                ChargeCategory.Rent, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Internet", Money.Create(60m, "USD"),
-                ExpenseCategory.Internet, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Internet", Money.Create(60m, "USD"),
+                ChargeCategory.Internet, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Spotify", Money.Create(11m, "USD"),
-                ExpenseCategory.Subscriptions, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Spotify", Money.Create(11m, "USD"),
+                ChargeCategory.Subscriptions, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Phone Plan", Money.Create(45m, "USD"),
-                ExpenseCategory.Phone, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Phone Plan", Money.Create(45m, "USD"),
+                ChargeCategory.Phone, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Health Insurance", Money.Create(200m, "USD"),
-                ExpenseCategory.Insurance, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Health Insurance", Money.Create(200m, "USD"),
+                ChargeCategory.Insurance, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Gym Membership", Money.Create(25m, "USD"),
-                ExpenseCategory.Healthcare, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Gym Membership", Money.Create(25m, "USD"),
+                ChargeCategory.Healthcare, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Expense.Create(uid, "Car Insurance", Money.Create(110m, "USD"),
-                ExpenseCategory.Insurance, startOfMonth.AddMonths(1),
+            Charge.Create(uid, "Car Insurance", Money.Create(110m, "USD"),
+                ChargeCategory.Insurance, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
         };
-        foreach (var expense in expenses)
-            await _expenseRepo.AddAsync(expense, cancellationToken);
+        foreach (var charge in expenses)
+            await _chargeRepo.AddAsync(charge, cancellationToken);
 
         await _incomeRepo.CommitAsync(cancellationToken);
-        await _expenseRepo.CommitAsync(cancellationToken);
+        await _chargeRepo.CommitAsync(cancellationToken);
     }
 
-    public async Task SeedGroupExpensesAsync(Guid userId, Guid groupId, CancellationToken cancellationToken = default)
+    public async Task SeedGroupChargesAsync(Guid userId, Guid groupId, CancellationToken cancellationToken = default)
     {
         var uid = new UserId(userId);
         var gid = new GroupId(groupId);
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var sharedExpenses = new[]
+        var sharedCharges = new[]
         {
-            (title: "Electricity", amount: 120m, category: ExpenseCategory.Utilities),
-            (title: "Groceries", amount: 400m, category: ExpenseCategory.Groceries),
-            (title: "Water & Gas", amount: 80m, category: ExpenseCategory.Utilities),
-            (title: "Netflix", amount: 18m, category: ExpenseCategory.Subscriptions),
+            (title: "Electricity", amount: 120m, category: ChargeCategory.Utilities),
+            (title: "Groceries", amount: 400m, category: ChargeCategory.Groceries),
+            (title: "Water & Gas", amount: 80m, category: ChargeCategory.Utilities),
+            (title: "Netflix", amount: 18m, category: ChargeCategory.Subscriptions),
         };
 
-        foreach (var (title, amount, category) in sharedExpenses)
+        // The commit publishes each charge's ChargeCreated and each share's AllocationCreated
+        // through the outbox; the LedgerPostingConsumer journals them, so demo households get a
+        // real double-entry ledger through the exact same path live charges take — seeded data
+        // is never ledger-less.
+        foreach (var (title, amount, category) in sharedCharges)
         {
-            var expense = Expense.CreateHousehold(
+            var charge = Charge.CreateGroup(
                 gid, uid, title, Money.Create(amount, "USD"),
                 category, startOfMonth.AddMonths(1),
                 RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth));
-            await _expenseRepo.AddAsync(expense, cancellationToken);
+            await _chargeRepo.AddAsync(charge, cancellationToken);
 
-            var split = ExpenseSplit.Create(expense.Id, gid, uid, Money.Create(amount, "USD"));
-            await _splitRepo.AddAsync(split, cancellationToken);
+            var allocation = Allocation.Create(charge.Id, gid, uid, Money.Create(amount, "USD"));
+            await _allocationRepo.AddAsync(allocation, cancellationToken);
         }
 
-        await _expenseRepo.CommitAsync(cancellationToken);
+        await _chargeRepo.CommitAsync(cancellationToken);
     }
 
     public async Task CleanupAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var uid = new UserId(userId);
-        await _splitRepo.DeleteAllForUserAsync(uid, cancellationToken);
+        await _allocationRepo.DeleteAllForUserAsync(uid, cancellationToken);
         await _incomeRepo.DeleteAllForUserAsync(uid, cancellationToken);
-        await _expenseRepo.DeleteAllForUserAsync(uid, cancellationToken);
+        await _chargeRepo.DeleteAllForUserAsync(uid, cancellationToken);
     }
 }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Finance.Application;
+using Finance.Domain;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Infrastructure;
@@ -22,6 +23,7 @@ try
     builder.Host.UseSerilog((context, configuration) =>
         configuration.ReadFrom.Configuration(context.Configuration));
 
+    builder.Services.AddDomain();
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -100,6 +102,16 @@ try
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+    // Problem details for standardised error responses (RFC 7807)
+    builder.Services.AddProblemDetails(options =>
+    {
+        options.CustomizeProblemDetails = ctx =>
+        {
+            ctx.ProblemDetails.Instance ??= $"{ctx.HttpContext.Request.Method} {ctx.HttpContext.Request.Path}";
+            ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
+        };
+    });
+
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
@@ -126,6 +138,9 @@ try
 
     var app = builder.Build();
 
+    // ProblemDetails-aware exception + status-code handling.
+    // The custom status-code mapping below is preserved by setting the status before
+    // re-throwing into the ProblemDetails middleware.
     app.UseExceptionHandler(exceptionApp =>
     {
         exceptionApp.Run(async context =>
@@ -144,16 +159,22 @@ try
                 InvalidOperationException => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError
             };
-            context.Response.ContentType = "application/problem+json";
-            await context.Response.WriteAsJsonAsync(new
+
+            var problemDetailsService = context.RequestServices
+                .GetRequiredService<Microsoft.AspNetCore.Http.IProblemDetailsService>();
+            await problemDetailsService.WriteAsync(new Microsoft.AspNetCore.Http.ProblemDetailsContext
             {
-                type = "about:blank",
-                title = "An error occurred while processing the request.",
-                status = context.Response.StatusCode,
-                traceId = context.TraceIdentifier
+                HttpContext = context,
+                ProblemDetails =
+                {
+                    Status = context.Response.StatusCode,
+                    Title = "An error occurred while processing the request.",
+                    Detail = exception?.Message
+                }
             });
         });
     });
+    app.UseStatusCodePages();
 
     app.UseSerilogRequestLogging();
     app.UseRateLimiter();
@@ -170,11 +191,7 @@ try
     app.MapControllers();
     app.MapHealthChecks("/health").AllowAnonymous();
 
-    using (var scope = app.Services.CreateScope())
-    {
-        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.FinanceDbContext>();
-        await db.Database.MigrateAsync();
-    }
+    await app.Services.ApplyMigrationsAsync();
 
     app.Run();
 }

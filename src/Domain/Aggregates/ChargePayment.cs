@@ -23,19 +23,19 @@ public class ChargePayment : IAggregateRoot
 
     private ChargePayment() { }
 
-    public static ChargePayment Create(ChargeId expenseId, UserId userId, DateTime occurrenceDate, string? transactionReference = null)
+    public static ChargePayment Create(ChargeId chargeId, UserId userId, DateTime occurrenceDate, string? transactionReference = null)
     {
         var payment = new ChargePayment
         {
             Id = ChargePaymentId.New(),
-            ChargeId = expenseId,
+            ChargeId = chargeId,
             UserId = userId,
             OccurrenceDate = DateTime.SpecifyKind(occurrenceDate.Date, DateTimeKind.Utc),
             PaidAt = DateTime.UtcNow,
             TransactionReference = transactionReference,
         };
 
-        payment._domainEvents.Add(new ChargePaid(expenseId, userId, payment.OccurrenceDate, payment.PaidAt));
+        payment._domainEvents.Add(new ChargePaid(chargeId, userId, payment.OccurrenceDate, payment.PaidAt));
         return payment;
     }
 

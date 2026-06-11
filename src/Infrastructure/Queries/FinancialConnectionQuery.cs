@@ -1,6 +1,7 @@
 using Finance.Application.Dtos;
 using Finance.Application.Queries;
 using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,7 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
 
     // ── Connections & transactions ────────────────────────────────────────────
 
-    public async Task<ListConnectionsDto> ListConnectionsAsync(
+    public async Task<ConnectionListDto> ListConnectionsAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
         var userIdVo = UserId.Create(userId);
@@ -49,7 +50,7 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
                     a.CurrencyCode, a.CurrentBalance, a.AvailableBalance)).ToList());
         }).ToList();
 
-        return new ListConnectionsDto(responses);
+        return new ConnectionListDto(responses, responses.Count);
     }
 
     public async Task<TransactionListDto> ListTransactionsAsync(
@@ -111,7 +112,7 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
 
     // ── Bank sync suggestions ─────────────────────────────────────────────────
 
-    public async Task<ListSuggestionsDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var userIdVo = new UserId(userId);
         var rows = await _db.RecurringSuggestions
@@ -124,10 +125,10 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             s.Direction.ToString(), s.Description, s.MerchantName,
             s.Frequency, s.AverageAmount.Amount, s.LastAmount.Amount, s.AverageAmount.Currency,
             s.FirstDate, s.LastDate, s.PredictedNextDate, s.IsActive, s.IsLinked)).ToList();
-        return new ListSuggestionsDto(dtos);
+        return new RecurringSuggestionListDto(dtos, dtos.Count);
     }
 
-    public async Task<ListBankSyncSuggestionsDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default)
+    public async Task<BankSyncSuggestionListDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default)
     {
         var userIdVo = new UserId(userId);
         var query = _db.BankSyncSuggestions
@@ -140,7 +141,7 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             .ToListAsync(cancellationToken);
         var dtos = rows.Select(s => new BankSyncSuggestionDto(
             s.Id,
-            s.Direction,
+            s.Direction.ToString(),
             s.Name,
             s.MerchantName,
             s.Amount,
@@ -148,7 +149,7 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             s.TransactionDate,
             s.IsLinked,
             s.Dismissed)).ToList();
-        return new ListBankSyncSuggestionsDto(dtos);
+        return new BankSyncSuggestionListDto(dtos, dtos.Count);
     }
 
     // ── Account balances ──────────────────────────────────────────────────────

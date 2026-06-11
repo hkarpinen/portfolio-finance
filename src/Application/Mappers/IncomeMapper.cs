@@ -21,21 +21,22 @@ public static class IncomeMapper
         income.CreatedAt,
         income.UpdatedAt,
         ToTaxProfileDto(income.TaxProfile),
-        income.Deductions.Select(ToDeductionDto).ToList().AsReadOnly());
+        income.Deductions.Select(ToDeductionDto).ToList().AsReadOnly(),
+        income.Notes);
 
     public static TaxProfileDto? ToTaxProfileDto(TaxWithholdingProfile? profile) =>
         profile is null ? null : new TaxProfileDto(
-            profile.FilingStatus.ToString(),
+            profile.FilingStatus,
             profile.StateCode,
             profile.FederalAllowances,
             profile.StateAllowances);
 
     public static PayrollDeductionDto ToDeductionDto(PayrollDeduction d) => new(
-        d.Type.ToString(),
+        d.Type,
         d.Label,
-        d.Method.ToString(),
+        d.Method,
         d.Value,
         d.IsEmployerSponsored,
-        d.Frequency.ToString(),
+        d.Frequency,
         d.IsTaxExempt);
 }

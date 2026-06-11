@@ -1,4 +1,3 @@
-using Finance.Domain.Utilities;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
@@ -8,9 +7,30 @@ namespace Finance.Domain.Engines;
 /// tax withholding and voluntary deductions.
 /// Change driver: tax calculation rules and deduction ordering logic.
 /// </summary>
-public static class PayrollDeductionEngine
+public interface IPayrollDeductionEngine
 {
-    public static NetPayBreakdown ComputeBreakdown(
+    NetPayBreakdown ComputeBreakdown(
+        Guid incomeId,
+        decimal grossAmount,
+        RecurrenceFrequency frequency,
+        string currency,
+        TaxWithholdingProfile? taxProfile,
+        IReadOnlyList<PayrollDeduction>? deductions,
+        int year,
+        int month);
+
+    decimal ComputeMonthlyNetPay(
+        decimal grossAmount,
+        RecurrenceFrequency frequency,
+        TaxWithholdingProfile? taxProfile,
+        IReadOnlyList<PayrollDeduction>? deductions,
+        int year,
+        int month);
+}
+
+internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
+{
+    public NetPayBreakdown ComputeBreakdown(
         Guid incomeId,
         decimal grossAmount,
         RecurrenceFrequency frequency,
@@ -99,7 +119,7 @@ public static class PayrollDeductionEngine
             Math.Round(netPay, 2));
     }
 
-    public static decimal ComputeMonthlyNetPay(
+    public decimal ComputeMonthlyNetPay(
         decimal grossAmount,
         RecurrenceFrequency frequency,
         TaxWithholdingProfile? taxProfile,

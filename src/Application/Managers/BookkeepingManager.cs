@@ -1,0 +1,542 @@
+using Finance.Application.Repositories;
+using Finance.Domain.Aggregates;
+using Finance.Domain.Engines;
+using Finance.Domain.ValueObjects;
+
+namespace Finance.Application.Managers;
+
+/// <summary>Input for syncing a group charge's accrual entry into its group ledger. Carries only
+/// what the accrual posting needs (Dr Expense / Cr Vendor Payable); the payer and funding source
+/// matter to vendor payments and settlements, which carry their own commands.</summary>
+public sealed record PostChargeToLedgerCommand(
+    Guid GroupId,
+    Guid ChargeId,
+    string Title,
+    string Category,
+    decimal Total,
+    string Currency,
+    DateTime Date);
+
+/// <summary>Input for recording a settlement (a member settling their allocation into the
+/// funding account that fronted the bill) as one journal entry in the group ledger.</summary>
+public sealed record RecordSettlementCommand(
+    Guid GroupId,
+    Guid ChargeId,
+    Guid AllocationId,
+    Guid FromUserId,
+    Guid ToUserId,
+    decimal Amount,
+    string Currency,
+    DateTime Occurrence,
+    DateTime ValueDate,
+    string Source,
+    FundingSource FundingSource = FundingSource.PayerMember);
+
+/// <summary>
+/// What a "mark allocation paid/unpaid" resolved to. The ledger posting itself is driven by the
+/// <c>SettlementRecorded</c>/<c>SettlementReversed</c> domain events (outbox → ledger-posting
+/// consumer), so this is informational for the caller.
+/// </summary>
+public sealed record SettlementOutcome(
+    Guid GroupId,
+    Guid ChargeId,
+    Guid AllocationId,
+    Guid FromUserId,
+    Guid ToUserId,
+    decimal Amount,
+    string Currency,
+    DateTime Occurrence,
+    DateTime ValueDate,
+    string Source,
+    FundingSource FundingSource = FundingSource.PayerMember);
+
+/// <summary>Input for recording that the vendor was paid for an occurrence of a group charge:
+/// one transfer that clears the Vendor Payable into the funding account (the payer's Member account
+/// for front-and-reimburse, or the shared Cash pool for pooled).</summary>
+public sealed record RecordVendorPaymentCommand(
+    Guid GroupId,
+    Guid ChargeId,
+    decimal Total,
+    string Currency,
+    FundingSource FundingSource,
+    Guid? PaidByUserId,
+    DateTime Occurrence,
+    DateTime ValueDate,
+    string Source);
+
+/// <summary>What "mark vendor paid/unpaid" resolved to. The ledger posting is driven by the
+/// <c>VendorPaid</c>/<c>VendorPaymentReversed</c> domain events — same pattern as
+/// <see cref="SettlementOutcome"/>.</summary>
+public sealed record VendorPaymentOutcome(
+    Guid GroupId,
+    Guid ChargeId,
+    decimal Total,
+    string Currency,
+    FundingSource FundingSource,
+    Guid? PaidByUserId,
+    DateTime Occurrence,
+    DateTime ValueDate,
+    string Source);
+
+/// <summary>Deterministic journal-entry source strings so a later reversal can find the entry.</summary>
+public static class LedgerSources
+{
+    public static string Charge(Guid chargeId) => $"charge:{chargeId:N}";
+
+    public static string Settlement(Guid chargeId, DateTime occurrence, Guid fromUserId)
+        => $"settlement:{chargeId:N}:{occurrence:yyyyMMdd}:{fromUserId:N}";
+
+    public static string VendorPayment(Guid chargeId, DateTime occurrence)
+        => $"vendorpayment:{chargeId:N}:{occurrence:yyyyMMdd}";
+
+    /// <summary>Per-allocation source so a member's share is journaled (and reversible) on its own,
+    /// whether it was added at creation or later — Dr Member / Cr Expense under this key.</summary>
+    public static string Allocation(Guid allocationId) => $"allocation:{allocationId:N}";
+}
+
+/// <summary>
+/// Keeps the books — records financial events into the double-entry ledger. Encapsulates
+/// the WORKFLOW volatility (ensure the ledger and its accounts exist, journalize via the
+/// engine, persist the entries, commit as one transaction). It holds no accounting RULES:
+/// the debit/credit policy lives in <see cref="IJournalizingEngine"/>, the chart structure
+/// in <see cref="GroupChart"/>, the I/O in <see cref="ILedgerRepository"/>.
+/// </summary>
+public interface IBookkeepingManager
+{
+    /// <summary>Brings the charge's accrual entry — <c>Dr Expense / Cr Vendor Payable</c> under the
+    /// charge source — in line with the charge: posts it when missing, reverses and re-posts when
+    /// the amount, category, title or date changed, and no-ops when the books already match.
+    /// Returns true when it re-journaled (the caller then re-syncs the allocation postings, which
+    /// credit the category's expense account). Idempotent — driven by the charge domain events,
+    /// which may be redelivered.</summary>
+    Task<bool> SyncChargeAccrualAsync(PostChargeToLedgerCommand command, CancellationToken ct = default);
+
+    /// <summary>Brings one member's share posting — <c>Dr Member / Cr Expense</c> under a
+    /// per-allocation source — in line with the allocation: posts when missing, reverses and
+    /// re-posts on a changed amount or expense account, no-ops when it already matches. Splits
+    /// added (or edited) after creation are tracked the same way as create-time ones. Idempotent.</summary>
+    Task SyncAllocationAsync(Guid groupId, Guid chargeId, string category, Guid userId, decimal amount, string currency, Guid allocationId, CancellationToken ct = default);
+
+    /// <summary>Records that the vendor was paid for an occurrence of a group charge: a single
+    /// transfer clearing the Vendor Payable into the funding account (<c>Dr Vendor Payable / Cr
+    /// Member:payer</c> when a member fronted it, <c>Dr Vendor Payable / Cr Cash</c> from the pot).
+    /// Idempotent on the command's source. "Is it paid" is derived from the Vendor Payable balance —
+    /// no separate paid-state is stored.</summary>
+    Task RecordVendorPaymentAsync(RecordVendorPaymentCommand command, CancellationToken ct = default);
+
+    /// <summary>Posts a settlement journal entry and emits <c>SettlementRecorded</c>. Idempotent
+    /// on the command's source — re-recording the same settlement is a no-op.</summary>
+    Task RecordSettlementAsync(RecordSettlementCommand command, CancellationToken ct = default);
+
+    /// <summary>Reverses the active journal entries posted under <paramref name="source"/> with
+    /// mirror (reversing) entries and emits <c>SettlementReversed</c> for each. The single place a
+    /// settlement is undone.</summary>
+    Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default);
+
+    /// <summary>Records a direct member-to-member settle-up payment (the payer squaring what they
+    /// owe a creditor, outside any single charge): <c>Dr Member:to / Cr Member:from</c>, which moves
+    /// both toward zero. Idempotent on <paramref name="source"/>.</summary>
+    Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default);
+
+    /// <summary>Unwinds a charge from the books — reverses every active journal entry tagged with it
+    /// (accrual, vendor payment, settlements) so a deactivated/deleted bill leaves no orphan Vendor
+    /// Payable or member balances. Idempotent: nothing to do if already unwound.</summary>
+    Task ReverseChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default);
+
+    // ── Event application (called by the LedgerPostingConsumer) ─────────────────
+    // These CONVERGE the books from current DB state for a charge/allocation/settlement/vendor event:
+    // they re-read the aggregate (the manager owns this orchestration, not the message consumer) and
+    // sync the books to it, so the consumer stays a thin dedup-and-dispatch adapter with no domain I/O.
+
+    /// <summary>Sync a group charge's accrual entry to its current state, then re-sync every share.
+    /// Reads the charge and its allocations; no-ops for a personal, deleted or deactivated charge.</summary>
+    Task ConvergeChargeAsync(Guid chargeId, CancellationToken ct = default);
+
+    /// <summary>Sync one share posting to the allocation's current state, reversing instead if the
+    /// allocation has vanished (order-insensitive). Reads the allocation and its charge.</summary>
+    Task ConvergeAllocationAsync(Guid groupId, Guid allocationId, CancellationToken ct = default);
+
+    /// <summary>Post a settlement from a <c>SettlementRecorded</c> fact, reading the charge so the
+    /// funding side mirrors its <see cref="FundingSource"/> (PayerMember → the payer, GroupCash → the pot).</summary>
+    Task RecordSettlementFromEventAsync(
+        Guid groupId, Guid chargeId, Guid allocationId, Guid fromUserId, Guid toUserId,
+        decimal amount, string currency, DateTime occurrence, DateTime valueDate, CancellationToken ct = default);
+
+    /// <summary>Post a vendor payment from a <c>VendorPaid</c> fact, reading the charge for its amount
+    /// and group. No-ops for a personal charge.</summary>
+    Task RecordVendorPaymentFromEventAsync(
+        Guid chargeId, FundingSource fundingSource, Guid? paidByUserId,
+        DateTime occurrence, DateTime paidAt, CancellationToken ct = default);
+
+    /// <summary>Reverse a vendor payment from a <c>VendorPaymentReversed</c> fact, reading the charge
+    /// for its group. No-ops for a personal charge.</summary>
+    Task ReverseVendorPaymentFromEventAsync(Guid chargeId, DateTime occurrence, CancellationToken ct = default);
+}
+
+internal sealed class BookkeepingManager : IBookkeepingManager
+{
+    private readonly ILedgerRepository _ledgers;
+    private readonly IJournalizingEngine _journalizing;
+    private readonly IChargeRepository _charges;
+    private readonly IAllocationRepository _allocations;
+
+    public BookkeepingManager(
+        ILedgerRepository ledgers,
+        IJournalizingEngine journalizing,
+        IChargeRepository charges,
+        IAllocationRepository allocations)
+    {
+        _ledgers = ledgers;
+        _journalizing = journalizing;
+        _charges = charges;
+        _allocations = allocations;
+    }
+
+    public async Task<bool> SyncChargeAccrualAsync(PostChargeToLedgerCommand cmd, CancellationToken ct = default)
+    {
+        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+
+        var expenseAccount = await EnsureAccountAsync(
+            ledger.Id, GroupChart.ExpenseCode(cmd.Category),
+            () => GroupChart.OpenExpenseAccount(ledger.Id, cmd.Category), ct);
+
+        var source = LedgerSources.Charge(cmd.ChargeId);
+        var date = DateTime.SpecifyKind(cmd.Date.Date, DateTimeKind.Utc);
+        var description = $"{cmd.Title} — incurred";
+
+        // Already in sync? One active accrual entry debiting the right expense account for the
+        // right amount with the same description and value date — nothing to do. This is what
+        // makes the event-driven posting convergent: redeliveries and no-op edits fall out here.
+        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        if (active.Count == 1 && AccrualMatches(active[0], expenseAccount.Id, cmd.Total, cmd.Currency, description, date))
+            return false;
+
+        // Stale (amount/category/title/date changed) — reverse what's on the books, then re-post.
+        foreach (var stale in active)
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(DateTime.UtcNow.Date), ct);
+
+        // Accrual basis: the charge is incurred and OWED to the vendor — Dr Expense / Cr Vendor
+        // Payable. Member shares are journaled per-allocation (SyncAllocationAsync) so a split added
+        // after creation is tracked exactly like a create-time one. Who pays the vendor (the pot) is
+        // recorded later. "Is it paid" is derived from the Vendor Payable balance — the ledger is the
+        // single source of truth.
+        var vendorPayable = await EnsureVendorPayableAccountAsync(ledger.Id, ct);
+
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: expenseAccount.Id, CreditAccount: vendorPayable.Id,
+            Money.Create(cmd.Total, cmd.Currency), date, description, source));
+        var entry = JournalEntry.Post(
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source, sourceChargeId: cmd.ChargeId);
+        await _ledgers.AddJournalEntryAsync(entry, ct);
+        await _ledgers.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task SyncAllocationAsync(
+        Guid groupId, Guid chargeId, string category, Guid userId, decimal amount, string currency,
+        Guid allocationId, CancellationToken ct = default)
+    {
+        var ledger = await EnsureGroupLedgerAsync(groupId, currency, ct);
+        var source = LedgerSources.Allocation(allocationId);
+
+        var expenseAccount = await EnsureAccountAsync(
+            ledger.Id, GroupChart.ExpenseCode(category),
+            () => GroupChart.OpenExpenseAccount(ledger.Id, category), ct);
+        var member = await EnsureMemberAccountAsync(ledger.Id, userId, ct);
+
+        // Already in sync? One active entry moving the right amount from the right member onto the
+        // right expense account — nothing to do (redeliveries and unchanged upserts land here).
+        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        if (active.Count == 1 && TransferMatches(active[0], member.Id, expenseAccount.Id, amount, currency))
+            return;
+
+        foreach (var stale in active)
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(DateTime.UtcNow.Date), ct);
+
+        // The member bears their share — Dr Member / Cr Expense (moves the cost off the nominal
+        // expense onto the member's stake).
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: member.Id, CreditAccount: expenseAccount.Id,
+            Money.Create(amount, currency), DateTime.UtcNow.Date, "Allocation", source));
+        var entry = JournalEntry.Post(
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+            sourceChargeId: chargeId, sourceMemberId: userId);
+        await _ledgers.AddJournalEntryAsync(entry, ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
+    {
+        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+
+        // Idempotent: if this occurrence's vendor payment is already on the books, do nothing.
+        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct));
+        if (existing.Count > 0) return;
+
+        var vendorPayable = await EnsureVendorPayableAccountAsync(ledger.Id, ct);
+        // The funding account is whoever actually paid the vendor — the payer's own Member account
+        // (front-and-reimburse) or the shared Cash pool (pooled). One resolver, one volatility axis.
+        var funding = await EnsureFundingAccountAsync(
+            ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty, ct);
+
+        // Clear the liability against the funding account: Dr Vendor Payable / Cr funding.
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: vendorPayable.Id, CreditAccount: funding.Id,
+            Money.Create(cmd.Total, cmd.Currency), cmd.ValueDate, "Vendor payment", cmd.Source));
+
+        var entry = JournalEntry.Post(
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+            sourceChargeId: cmd.ChargeId, sourceOccurrence: cmd.Occurrence);
+        await _ledgers.AddJournalEntryAsync(entry, ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
+    {
+        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+
+        // Idempotent: if this settlement is already on the books (active entry under its
+        // source), do nothing. The ledger is the single source of truth — no dual write.
+        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct));
+        if (existing.Count > 0) return;
+
+        var from = await EnsureMemberAccountAsync(ledger.Id, cmd.FromUserId, ct);
+        // The debtor settles INTO the funding account that paid the vendor — the payer's Member
+        // account (front-and-reimburse) or the shared Cash pool (pooled). Resolved the same way
+        // the charge was posted, so a settlement always mirrors its charge's funding.
+        var funding = await EnsureFundingAccountAsync(ledger.Id, cmd.FundingSource, cmd.ToUserId, ct);
+
+        // A settlement debits the funding account and credits the debtor — that direction is the
+        // workflow's call; the engine just balances it.
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: funding.Id, CreditAccount: from.Id,
+            Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, "Settlement", cmd.Source));
+
+        // The ledger records only the accounting (with opaque source-document provenance for the
+        // read side). The SettlementRecorded fact is raised by the Allocation aggregate in the
+        // charge context — the ledger must not know about charge-domain events.
+        var entry = JournalEntry.Post(
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+            sourceChargeId: cmd.ChargeId, sourceAllocationId: cmd.AllocationId,
+            sourceOccurrence: cmd.Occurrence, sourceMemberId: cmd.FromUserId);
+        await _ledgers.AddJournalEntryAsync(entry, ct);
+
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default)
+    {
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
+        if (ledger is null) return;
+
+        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        if (active.Count == 0) return;
+
+        // The ledger only mirrors the reversing entries; the SettlementReversed fact is raised by
+        // the Allocation aggregate in the charge context.
+        foreach (var entry in active)
+            await _ledgers.AddJournalEntryAsync(entry.Reverse(DateTime.UtcNow.Date), ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default)
+    {
+        var ledger = await EnsureGroupLedgerAsync(groupId, currency, ct);
+
+        // Idempotent on source — re-posting the same settle-up payment is a no-op.
+        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        if (existing.Count > 0) return;
+
+        var from = await EnsureMemberAccountAsync(ledger.Id, fromUserId, ct);
+        var to = await EnsureMemberAccountAsync(ledger.Id, toUserId, ct);
+
+        // The payer (from, a debtor) squares up with a creditor (to): Dr Member:to / Cr Member:from,
+        // moving both toward zero. The cash changed hands directly between the two — no pot involved.
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: to.Id, CreditAccount: from.Id,
+            Money.Create(amount, currency), DateTime.UtcNow.Date, "Settle-up", source));
+
+        var entry = JournalEntry.Post(
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+            sourceMemberId: fromUserId);
+        await _ledgers.AddJournalEntryAsync(entry, ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task ReverseChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default)
+    {
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
+        if (ledger is null) return;
+
+        // Every in-effect entry for the charge — accrual, vendor payment, and settlements all carry
+        // its SourceChargeId. Reversing them returns every touched account to where it was.
+        var active = ActiveEntries(await _ledgers.GetEntriesByChargeAsync(ledger.Id, chargeId, ct));
+        if (active.Count == 0) return;
+
+        foreach (var entry in active)
+            await _ledgers.AddJournalEntryAsync(entry.Reverse(DateTime.UtcNow.Date), ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    // ── Event application (charge-context reads + convergence) ─────────────────
+
+    public async Task ConvergeChargeAsync(Guid chargeId, CancellationToken ct = default)
+    {
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge?.GroupId is null || !charge.IsActive) return; // personal, deleted, or deactivated
+
+        var groupId = charge.GroupId.Value.Value;
+        var date = charge.RecurrenceSchedule?.CurrentOccurrence(charge.DueDate) ?? charge.DueDate;
+        await SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            groupId, chargeId, charge.Title, charge.Category.ToString(),
+            charge.Amount.Amount, charge.Amount.Currency, date), ct);
+
+        // Re-sync every share — allocations credit the category's expense account, so a category
+        // change moves them too. Each sync is a cheap no-op when the books already match.
+        var allocations = await _allocations.ListByChargeAsync(charge.Id, ct);
+        foreach (var a in allocations)
+            await SyncAllocationAsync(
+                groupId, chargeId, charge.Category.ToString(),
+                a.UserId.Value, a.Amount.Amount, a.Amount.Currency, a.Id.Value, ct);
+    }
+
+    public async Task ConvergeAllocationAsync(Guid groupId, Guid allocationId, CancellationToken ct = default)
+    {
+        var allocation = await _allocations.GetByIdAsync(AllocationId.Create(allocationId), ct);
+        if (allocation is null)
+        {
+            // Removed before this message was processed — reverse instead (order-insensitive).
+            await ReverseBySourceAsync(groupId, LedgerSources.Allocation(allocationId), ct);
+            return;
+        }
+
+        var charge = await _charges.GetByIdAsync(allocation.ChargeId, ct);
+        if (charge?.GroupId is null || !charge.IsActive) return;
+
+        await SyncAllocationAsync(
+            groupId, charge.Id.Value, charge.Category.ToString(),
+            allocation.UserId.Value, allocation.Amount.Amount, allocation.Amount.Currency, allocationId, ct);
+    }
+
+    public async Task RecordSettlementFromEventAsync(
+        Guid groupId, Guid chargeId, Guid allocationId, Guid fromUserId, Guid toUserId,
+        decimal amount, string currency, DateTime occurrence, DateTime valueDate, CancellationToken ct = default)
+    {
+        // The settlement mirrors the charge's funding model: PayerMember settles to the payer
+        // (ToUserId), GroupCash into the pot. Read the charge for the authoritative funding source.
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        var fundingSource = charge?.FundingSource ?? FundingSource.GroupCash;
+        await RecordSettlementAsync(new RecordSettlementCommand(
+            groupId, chargeId, allocationId, fromUserId, toUserId, amount, currency,
+            occurrence, valueDate,
+            LedgerSources.Settlement(chargeId, occurrence, fromUserId),
+            fundingSource), ct);
+    }
+
+    public async Task RecordVendorPaymentFromEventAsync(
+        Guid chargeId, FundingSource fundingSource, Guid? paidByUserId,
+        DateTime occurrence, DateTime paidAt, CancellationToken ct = default)
+    {
+        // The event names only the occurrence; the amount and group come off the charge.
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge?.GroupId is null) return;
+        await RecordVendorPaymentAsync(new RecordVendorPaymentCommand(
+            charge.GroupId.Value.Value, chargeId, charge.Amount.Amount, charge.Amount.Currency,
+            fundingSource, paidByUserId, occurrence, paidAt,
+            LedgerSources.VendorPayment(chargeId, occurrence)), ct);
+    }
+
+    public async Task ReverseVendorPaymentFromEventAsync(Guid chargeId, DateTime occurrence, CancellationToken ct = default)
+    {
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge?.GroupId is null) return;
+        await ReverseBySourceAsync(
+            charge.GroupId.Value.Value, LedgerSources.VendorPayment(chargeId, occurrence), ct);
+    }
+
+    // ── workflow helpers ──────────────────────────────────────────────────────
+
+    /// <summary>True when the active accrual entry already reflects the charge — same expense
+    /// account, amount, description (which carries the title) and value date.</summary>
+    private static bool AccrualMatches(
+        JournalEntry entry, AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
+    {
+        var debit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        return debit is not null
+            && debit.AccountId == expenseAccount
+            && debit.Amount.Amount == total
+            && debit.Amount.Currency == currency
+            && entry.Description == description
+            && entry.Date == date;
+    }
+
+    /// <summary>True when the active entry is the same 1↔1 transfer — same debit/credit accounts
+    /// and amount.</summary>
+    private static bool TransferMatches(
+        JournalEntry entry, AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
+    {
+        var debit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var credit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
+        return debit is not null && credit is not null
+            && debit.AccountId == debitAccount
+            && credit.AccountId == creditAccount
+            && debit.Amount.Amount == amount
+            && debit.Amount.Currency == currency;
+    }
+
+    /// <summary>Entries under a source that are still in effect — not reversals
+    /// (<see cref="JournalEntry.ReversalOfEntryId"/>), and not yet reversed
+    /// (<see cref="JournalEntry.ReversedByEntryId"/>). Both are declared columns, backfilled by the
+    /// <c>JournalEntryReversedBy</c> migration, so this no longer scans for reversal pairs.</summary>
+    private static IReadOnlyList<JournalEntry> ActiveEntries(IReadOnlyList<JournalEntry> entries)
+        => entries
+            .Where(e => e.ReversalOfEntryId is null && e.ReversedByEntryId is null)
+            .ToList();
+
+    private async Task<Ledger> EnsureGroupLedgerAsync(Guid groupId, string currency, CancellationToken ct)
+    {
+        var existing = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
+        if (existing is not null) return existing;
+
+        var ledger = Ledger.Open(LedgerOwnerType.Group, groupId, currency);
+        await _ledgers.AddLedgerAsync(ledger, ct);
+        foreach (var account in GroupChart.StandardAccounts(ledger.Id))
+            await _ledgers.AddAccountAsync(account, ct);
+        await _ledgers.CommitAsync(ct);
+        return ledger;
+    }
+
+    private Task<Account> EnsureMemberAccountAsync(LedgerId ledgerId, Guid userId, CancellationToken ct)
+        => EnsureAccountAsync(ledgerId, GroupChart.MemberCode(userId),
+            () => GroupChart.OpenMemberAccount(ledgerId, userId), ct);
+
+    private Task<Account> EnsureCashAccountAsync(LedgerId ledgerId, CancellationToken ct)
+        => EnsureAccountAsync(ledgerId, GroupChart.CashCode,
+            () => GroupChart.OpenCashAccount(ledgerId), ct);
+
+    private Task<Account> EnsureVendorPayableAccountAsync(LedgerId ledgerId, CancellationToken ct)
+        => EnsureAccountAsync(ledgerId, GroupChart.VendorPayableCode,
+            () => Account.Open(ledgerId, GroupChart.VendorPayableCode, "Vendor Payable", AccountType.Liability), ct);
+
+    /// <summary>The single place a charge's <see cref="FundingSource"/> resolves to a concrete
+    /// ledger account: the payer's Member account, or the shared Cash pool. The enum carries no
+    /// account knowledge of its own — this switch is the only mapping.</summary>
+    private Task<Account> EnsureFundingAccountAsync(
+        LedgerId ledgerId, FundingSource fundingSource, Guid payerUserId, CancellationToken ct)
+        => fundingSource switch
+        {
+            FundingSource.GroupCash => EnsureCashAccountAsync(ledgerId, ct),
+            _ => EnsureMemberAccountAsync(ledgerId, payerUserId, ct),
+        };
+
+    private async Task<Account> EnsureAccountAsync(LedgerId ledgerId, string code, Func<Account> factory, CancellationToken ct)
+    {
+        var existing = await _ledgers.GetAccountByCodeAsync(ledgerId, code, ct);
+        if (existing is not null) return existing;
+
+        var account = factory();
+        await _ledgers.AddAccountAsync(account, ct);
+        await _ledgers.CommitAsync(ct);
+        return account;
+    }
+}

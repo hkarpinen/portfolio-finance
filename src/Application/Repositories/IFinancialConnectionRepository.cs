@@ -1,5 +1,5 @@
 using Finance.Domain.Aggregates;
-using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Repositories;

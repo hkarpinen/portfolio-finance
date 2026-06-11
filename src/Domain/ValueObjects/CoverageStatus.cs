@@ -1,11 +1,11 @@
 namespace Finance.Domain.ValueObjects;
 
 /// <summary>
-/// Household income vs. bill coverage assessment produced by
-/// <see cref="Finance.Domain.Engines.HouseholdCoverageEngine"/>.
+/// Group income vs. bill coverage assessment produced by
+/// <see cref="Finance.Domain.Engines.GroupCoverageEngine"/>.
 /// </summary>
 public sealed record CoverageStatus(
-    Guid HouseholdId,
+    Guid GroupId,
     decimal TotalGrossIncomeAmount,
     decimal TotalNetIncomeAmount,
     decimal TotalBillsAmount,

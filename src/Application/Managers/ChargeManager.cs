@@ -35,7 +35,7 @@ internal sealed class ChargeManager : IChargeManager
         _logger = logger;
     }
 
-    // ── Personal expense operations ───────────────────────────────────────────
+    // ── Personal charge operations ───────────────────────────────────────────
 
     public async Task<ChargeResponseDto> CreateAsync(CreateChargeCommand request, CancellationToken cancellationToken = default)
     {
@@ -96,7 +96,7 @@ internal sealed class ChargeManager : IChargeManager
         return ChargeMapper.ToResponse(expense);
     }
 
-    // ── Group expense operations ──────────────────────────────────────────
+    // ── Group charge operations ──────────────────────────────────────────
 
     public async Task<ChargeResponseDto> CreateGroupChargeAsync(CreateGroupChargeCommand request, CancellationToken cancellationToken = default)
     {
@@ -320,12 +320,12 @@ internal sealed class ChargeManager : IChargeManager
 
         if (expense.GroupId.HasValue)
         {
-            // Collect-first: "mark my share paid" = the member pays their share INTO the shared
-            // household account (the pot) — Dr Cash / Cr Member. Available as soon as they have a
-            // split; it does NOT depend on the vendor having been paid (the owner pays the vendor
-            // from the pot once everyone's in). The ledger is the single source of truth: the
-            // SettlementRecorded fact commits with this transaction and the LedgerPostingConsumer
-            // posts it (idempotent on the settlement source).
+            // "Mark my share paid" = the member settles their share into the account that funded the
+            // bill, per the charge's FundingSource: a member fronted it (PayerMember → settle to the
+            // payer, Dr Member:payer / Cr Member:debtor — "pay them back") or it came from the shared
+            // pot (GroupCash → Dr Cash / Cr Member:debtor — "pay into pot"). The ledger is the single
+            // source of truth: the SettlementRecorded fact commits with this transaction and the
+            // LedgerPostingConsumer posts the matching entry (idempotent on the settlement source).
             var userId = UserId.Create(request.UserId);
             var split = await _splitRepository.GetByChargeAndUserAsync(expense.Id, userId, cancellationToken)
                 ?? throw new InvalidOperationException("No allocation found for this user on this charge.");
@@ -334,9 +334,9 @@ internal sealed class ChargeManager : IChargeManager
             if (await _ledgerQuery.IsAllocationSettledAsync(split.Id.Value, occurrenceDate, cancellationToken))
                 return null;
 
-            // The pot is the counterpart (GroupCash → Cash). The settlement fact carries a nominal
-            // payee (the bill owner) for the activity feed, but the money is recorded moving into the
-            // household account — the ledger is the truth.
+            // The counterpart is the payer (PayerMember) or the pot (GroupCash). The fact carries the
+            // payer as the nominal payee; the LedgerPostingConsumer resolves the funding account from
+            // the charge's FundingSource.
             var nominalTo = UserId.Create(expense.PayerUserId ?? expense.CreatedBy?.Value ?? request.UserId);
             var valueDate = DateTime.UtcNow.Date;
             split.Settle(nominalTo, occurrenceDate, valueDate);
@@ -347,7 +347,7 @@ internal sealed class ChargeManager : IChargeManager
                 userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
                 occurrenceDate, valueDate,
                 LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.UserId),
-                FundingSource.GroupCash);
+                expense.FundingSource);
         }
 
         // Personal expense: record direct payment (no group ledger involved).
@@ -392,7 +392,7 @@ internal sealed class ChargeManager : IChargeManager
                 userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
                 occurrenceDate, DateTime.UtcNow.Date,
                 LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.UserId),
-                FundingSource.GroupCash);
+                expense.FundingSource);
         }
 
         var payment = await _paymentRepository.GetAsync(ChargeId.Create(request.ChargeId), occurrenceDate, cancellationToken);
@@ -411,7 +411,7 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null || expense.GroupId is null) return null;
 
-        // Collect-first: only the bill's owner pays the vendor, from the shared pot.
+        // Only the bill's owner records that the vendor was paid.
         if (expense.CreatedBy?.Value != request.CallerId)
             throw new InvalidOperationException("Only the bill's owner can mark it paid to the vendor.");
 
@@ -421,14 +421,17 @@ internal sealed class ChargeManager : IChargeManager
         if (await _ledgerQuery.IsVendorPaidAsync(request.ChargeId, cancellationToken))
             return null;
 
-        // Paid from the shared pot — Dr Vendor Payable / Cr Cash. The VendorPaid fact commits with
-        // this transaction; the LedgerPostingConsumer posts the ledger transfer from it.
-        expense.RecordVendorPayment(occurrenceDate, FundingSource.GroupCash, null);
+        // The funding of record drives the ledger transfer (Dr Vendor Payable / Cr funding): a member
+        // fronted it from their own pocket (PayerMember → Cr Member:payer) or it came from the shared
+        // pot (GroupCash → Cr Cash). The VendorPaid fact commits with this transaction and carries the
+        // funding source; the LedgerPostingConsumer posts the matching transfer from it.
+        var paidByUserId = expense.FundingSource == FundingSource.PayerMember ? expense.PayerUserId : null;
+        expense.RecordVendorPayment(occurrenceDate, expense.FundingSource, paidByUserId);
         await _repository.CommitAsync(cancellationToken);
 
         return new VendorPaymentOutcome(
             expense.GroupId.Value.Value, expense.Id.Value, expense.Amount.Amount, expense.Amount.Currency,
-            FundingSource.GroupCash, null, occurrenceDate, DateTime.UtcNow.Date,
+            expense.FundingSource, paidByUserId, occurrenceDate, DateTime.UtcNow.Date,
             LedgerSources.VendorPayment(request.ChargeId, occurrenceDate));
     }
 
@@ -463,6 +466,13 @@ internal sealed class ChargeManager : IChargeManager
     /// Sum of the charge's OTHER active allocations — every allocation on the charge except the one
     /// optionally being replaced (<paramref name="excluding"/>). Feeds the Σ allocations ≤ charge
     /// total invariant so an upsert can't push the total past the bill.
+    /// <para>
+    /// This invariant spans the WHOLE set of a charge's allocations, but <see cref="Allocation"/> is
+    /// its own aggregate root (it has no reference to its siblings — that boundary is deliberate, so a
+    /// single share can be journaled and reversed independently in the ledger). A cross-aggregate
+    /// invariant cannot live on one aggregate, so it is enforced HERE, in the application layer, by
+    /// loading the siblings — not an anemic-domain leak but the correct home for a set-level rule.
+    /// </para>
     /// </summary>
     private async Task<decimal> SumAllocationsExcludingAsync(ChargeId chargeId, AllocationId? excluding, CancellationToken cancellationToken)
     {

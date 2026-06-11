@@ -1,6 +1,6 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Aggregates;
+namespace Finance.Domain.ReadModels;
 
 /// <summary>
 /// Application-layer data model for a single transaction synced from a linked financial institution.

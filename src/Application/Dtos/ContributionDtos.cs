@@ -1,44 +1,37 @@
 namespace Finance.Application.Dtos;
 
-/// <summary>Shared core fields for every split occurrence view.</summary>
-public abstract record SplitOccurrenceBaseDto(
-    Guid SplitId,
+/// <summary>
+/// A single split occurrence shown within a contribution period. GroupId + PaidAt are populated
+/// for personal-period contexts (where one user sees their own splits) and may be null for
+/// per-household member breakdowns (where the group is already implied by the enclosing dto).
+/// </summary>
+public sealed record ContributionItemDto(
+    Guid AllocationId,
     Guid BillId,
     string BillTitle,
     string BillCategory,
     decimal Amount,
     string Currency,
     DateTime DueDate,
-    bool IsClaimed);
+    bool IsPaid,
+    Guid? GroupId = null,
+    DateTime? PaidAt = null);
 
-/// <summary>A single split the user is responsible for, shown within a contribution period.</summary>
-public sealed record ContributionItemDto(
-    Guid SplitId, Guid BillId, string BillTitle, string BillCategory,
-    decimal Amount, string Currency, DateTime DueDate, bool IsClaimed,
-    Guid GroupId, DateTime? ClaimedAt)
-    : SplitOccurrenceBaseDto(SplitId, BillId, BillTitle, BillCategory, Amount, Currency, DueDate, IsClaimed);
-
-/// <summary>A single contribution item shown inside a household's per-member breakdown — household fields omitted.</summary>
-public sealed record HouseholdContributionItemDto(
-    Guid SplitId, Guid BillId, string BillTitle, string BillCategory,
-    decimal Amount, string Currency, DateTime DueDate, bool IsClaimed)
-    : SplitOccurrenceBaseDto(SplitId, BillId, BillTitle, BillCategory, Amount, Currency, DueDate, IsClaimed);
-
-/// <summary>A member's total obligation for one calendar month within a specific household.</summary>
-public sealed record HouseholdMemberContributionDto(
+/// <summary>A member's total obligation for one calendar month within a specific group. Renamed from GroupMemberContributionDto.</summary>
+public sealed record GroupMemberContributionDto(
     Guid UserId,
     string? DisplayName,
     decimal TotalDue,
     decimal TotalPaid,
-    IReadOnlyCollection<HouseholdContributionItemDto> Contributions);
+    IReadOnlyCollection<ContributionItemDto> Contributions);
 
-/// <summary>Per-household monthly contributions, grouped by member.</summary>
-public sealed record HouseholdMonthlyContributionsDto(
+/// <summary>Per-group monthly contributions, grouped by member. Renamed from GroupMonthlyContributionsDto.</summary>
+public sealed record GroupMonthlyContributionsDto(
     string PeriodLabel,
     DateTime PeriodStart,
     decimal Total,
     string Currency,
-    IReadOnlyCollection<HouseholdMemberContributionDto> Members);
+    IReadOnlyCollection<GroupMemberContributionDto> Members);
 
 /// <summary>
 /// A rolled-up summary of a user's financial obligations for a specific calendar month,
@@ -49,9 +42,9 @@ public sealed record ContributionPeriodSummaryDto(
     string PeriodLabel,
     DateTime PeriodStart,
     DateTime PeriodEnd,
-    /// <summary>Sum of all household split amounts due this month (claimed + unclaimed).</summary>
+    /// <summary>Sum of all group split amounts due this month (claimed + unclaimed).</summary>
     decimal TotalDue,
-    /// <summary>Sum of household splits already marked as paid/claimed.</summary>
+    /// <summary>Sum of group splits already marked as paid.</summary>
     decimal TotalPaid,
     /// <summary>Gross income projected to arrive this month, respecting each source's frequency.</summary>
     decimal ProjectedIncome,
@@ -76,7 +69,7 @@ public sealed record ContributionPeriodSummaryDto(
 
 /// <summary>A single personal bill occurrence within a contribution period.</summary>
 public sealed record PersonalBillItemDto(
-    Guid ExpenseId,
+    Guid ChargeId,
     string Title,
     string Category,
     decimal Amount,

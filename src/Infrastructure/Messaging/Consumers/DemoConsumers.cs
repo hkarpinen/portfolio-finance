@@ -1,6 +1,7 @@
 using Finance.Application.Managers.Demo;
 using Finance.Domain.ValueObjects;
 using Finance.Infrastructure.Persistence.Projections;
+using Domain.Events;
 using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
 using MassTransit;
@@ -11,9 +12,9 @@ namespace Infrastructure.Messaging.Consumers;
 
 internal sealed class DemoUserCreatedConsumer(
     FinanceDbContext db,
-    IDemoSeedManager demoSeedManager) : IConsumer<DemoUserCreatedEvent>
+    IDemoSeedManager demoSeedManager) : IConsumer<DemoUserCreated>
 {
-    public async Task Consume(ConsumeContext<DemoUserCreatedEvent> context)
+    public async Task Consume(ConsumeContext<DemoUserCreated> context)
     {
         var message = context.Message;
         if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
@@ -45,7 +46,7 @@ internal sealed class DemoUserCreatedConsumer(
         // Application concern: seed domain aggregates via manager
         await demoSeedManager.SeedAsync(message.UserId, context.CancellationToken);
 
-        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserCreatedEvent), DateTime.UtcNow));
+        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserCreated), DateTime.UtcNow));
 
         try
         {
@@ -65,7 +66,7 @@ internal sealed class DemoHouseholdSeededConsumer(
         if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
             return;
 
-        await demoSeedManager.SeedGroupExpensesAsync(message.UserId, message.HouseholdId, context.CancellationToken);
+        await demoSeedManager.SeedGroupChargesAsync(message.UserId, message.HouseholdId, context.CancellationToken);
 
         db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoHouseholdSeededEvent), DateTime.UtcNow));
 
@@ -79,9 +80,9 @@ internal sealed class DemoHouseholdSeededConsumer(
 
 internal sealed class DemoUserExpiredConsumer(
     FinanceDbContext db,
-    IDemoSeedManager demoSeedManager) : IConsumer<DemoUserExpiredEvent>
+    IDemoSeedManager demoSeedManager) : IConsumer<DemoUserExpired>
 {
-    public async Task Consume(ConsumeContext<DemoUserExpiredEvent> context)
+    public async Task Consume(ConsumeContext<DemoUserExpired> context)
     {
         var message = context.Message;
         if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
@@ -98,7 +99,7 @@ internal sealed class DemoUserExpiredConsumer(
         if (projection is not null)
             db.UserProjections.Remove(projection);
 
-        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserExpiredEvent), DateTime.UtcNow));
+        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserExpired), DateTime.UtcNow));
 
         try
         {

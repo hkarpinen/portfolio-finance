@@ -20,7 +20,7 @@ public interface IFinancialConnectionManager
     Task SyncByExternalItemIdAsync(string externalItemId, CancellationToken cancellationToken = default);
 
     // ── Recurring suggestions ─────────────────────────────────────────────────
-    Task<ListSuggestionsDto> RefreshSuggestionsAsync(Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default);
+    Task<RecurringSuggestionListDto> RefreshSuggestionsAsync(Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default);
     Task<AcceptSuggestionDto> AcceptSuggestionAsync(Guid userId, AcceptSuggestionCommand request, CancellationToken ct = default);
 
     // ── Bank-sync suggestions ─────────────────────────────────────────────────

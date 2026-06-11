@@ -128,6 +128,22 @@ public sealed class IncomeController : ControllerBase
     }
 
     /// <summary>
+    /// Aggregate net-pay summary across every active income source for the
+    /// authenticated user — used by the income page's stats strip so it can
+    /// render Gross/Net/Tax/Annual in one round-trip instead of one
+    /// per-source call.
+    /// </summary>
+    [HttpGet("/api/finance/income/net-pay/summary")]
+    public async Task<IActionResult> GetNetPaySummary([FromQuery] int? year, [FromQuery] int? month, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var userId = User.GetUserId();
+        var result = await _incomeQuery.GetNetPaySummaryAsync(
+            new GetNetPaySummaryParams(userId.Value, year ?? now.Year, month ?? now.Month), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Returns the full per-month contribution/budget summary for the authenticated user.
     /// Covers projected income, household split obligations, personal bill obligations and
     /// (where available) real-balance disposable income.

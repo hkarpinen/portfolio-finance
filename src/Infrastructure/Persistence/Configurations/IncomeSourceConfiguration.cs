@@ -17,6 +17,7 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             .HasConversion(id => id.Value, v => new UserId(v));
 
         builder.Property(i => i.Source).HasMaxLength(300).IsRequired();
+        builder.Property(i => i.Notes).HasMaxLength(500);
         builder.Property(i => i.PaymentFrequency)
             .HasColumnName("payment_frequency")
             .HasConversion<string>()
@@ -59,6 +60,8 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
         });
 
         // Voluntary deductions stored as a JSON array column.
+        // PropertyAccessMode.Field lets EF write directly to _deductions so the
+        // public IReadOnlyList<PayrollDeduction> Deductions wrapper stays read-only.
         builder.OwnsMany(i => i.Deductions, d =>
         {
             d.ToJson("deductions");
@@ -66,5 +69,8 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             d.Property(p => p.Method).HasConversion<string>();
             d.Property(p => p.Label).HasMaxLength(200);
         });
+        builder.Navigation(i => i.Deductions)
+            .HasField("_deductions")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

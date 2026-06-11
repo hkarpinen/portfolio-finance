@@ -1,4 +1,5 @@
-using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
+using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
 
@@ -7,7 +8,13 @@ namespace Finance.Domain.Engines;
 /// suggestion well enough to auto-pay the associated expense.
 /// Change driver: auto-pay tolerance rules and matching strategy.
 /// </summary>
-public static class BankSyncMatchingEngine
+public interface IBankSyncMatchingEngine
+{
+    bool IsMatch(RecurringSuggestion suggestion, Guid accountId, decimal transactionAmount);
+    RecurringFlowDirection ResolveDirection(decimal amount);
+}
+
+internal sealed class BankSyncMatchingEngine : IBankSyncMatchingEngine
 {
     /// <summary>
     /// A transaction is considered a match when it is for the same account and
@@ -15,7 +22,7 @@ public static class BankSyncMatchingEngine
     /// </summary>
     private const decimal ToleranceRate = 0.05m;
 
-    public static bool IsMatch(RecurringSuggestion suggestion, Guid accountId, decimal transactionAmount)
+    public bool IsMatch(RecurringSuggestion suggestion, Guid accountId, decimal transactionAmount)
     {
         if (suggestion.AccountId != accountId) return false;
         var deviation = Math.Abs(suggestion.AverageAmount.Amount - transactionAmount)
@@ -23,5 +30,6 @@ public static class BankSyncMatchingEngine
         return deviation <= ToleranceRate;
     }
 
-    public static string ResolveDirection(decimal amount) => amount > 0 ? "expense" : "income";
+    public RecurringFlowDirection ResolveDirection(decimal amount)
+        => amount > 0 ? RecurringFlowDirection.Outflow : RecurringFlowDirection.Inflow;
 }

@@ -1,6 +1,6 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Utilities;
+namespace Finance.Domain.Engines;
 
 /// <summary>
 /// Federal and state income tax withholding estimates.

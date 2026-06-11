@@ -1,7 +1,7 @@
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Utilities;
+namespace Finance.Domain.Engines;
 
 /// <summary>
 /// Shared helpers for computing a user's personal budget figures (income and obligations).
@@ -40,7 +40,7 @@ public static class UserBudgetCalculator
     /// one-time bills are counted if their DueDate falls inside the month.
     /// </summary>
     public static decimal MonthlyObligationsForUser(
-        IEnumerable<(ExpenseSplit Split, Expense Expense)> splits,
+        IEnumerable<(Allocation Allocation, Charge Charge)> splits,
         int year, int month)
     {
         var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -49,10 +49,10 @@ public static class UserBudgetCalculator
         decimal total = 0m;
         foreach (var s in splits)
         {
-            int occurrences = s.Expense.RecurrenceSchedule is not null
-                ? s.Expense.RecurrenceSchedule.GetOccurrencesInRange(monthStart, monthEndExclusive).Count
-                : (s.Expense.DueDate >= monthStart && s.Expense.DueDate < monthEndExclusive) ? 1 : 0;
-            total += occurrences * s.Split.Amount.Amount;
+            int occurrences = s.Charge.RecurrenceSchedule is not null
+                ? s.Charge.RecurrenceSchedule.GetOccurrencesInRange(monthStart, monthEndExclusive).Count
+                : (s.Charge.DueDate >= monthStart && s.Charge.DueDate < monthEndExclusive) ? 1 : 0;
+            total += occurrences * s.Allocation.Amount.Amount;
         }
         return total;
     }

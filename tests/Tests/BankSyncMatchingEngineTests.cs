@@ -1,11 +1,13 @@
-using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
 public class BankSyncMatchingEngineTests
 {
+    private readonly IBankSyncMatchingEngine _engine = new BankSyncMatchingEngine();
+
     private static RecurringSuggestion CreateSuggestion(Guid accountId, decimal averageAmount) =>
         RecurringSuggestion.Create(
             new FinancialConnectionId(Guid.NewGuid()),
@@ -29,7 +31,7 @@ public class BankSyncMatchingEngineTests
         var accountId = Guid.NewGuid();
         var suggestion = CreateSuggestion(accountId, 100m);
 
-        Assert.True(BankSyncMatchingEngine.IsMatch(suggestion, accountId, 100m));
+        Assert.True(_engine.IsMatch(suggestion, accountId, 100m));
     }
 
     [Fact]
@@ -39,7 +41,7 @@ public class BankSyncMatchingEngineTests
         var suggestion = CreateSuggestion(accountId, 100m);
 
         // 4.99% deviation — within tolerance
-        Assert.True(BankSyncMatchingEngine.IsMatch(suggestion, accountId, 104.99m));
+        Assert.True(_engine.IsMatch(suggestion, accountId, 104.99m));
     }
 
     [Fact]
@@ -49,7 +51,7 @@ public class BankSyncMatchingEngineTests
         var suggestion = CreateSuggestion(accountId, 100m);
 
         // 10% deviation — exceeds 5% tolerance
-        Assert.False(BankSyncMatchingEngine.IsMatch(suggestion, accountId, 110m));
+        Assert.False(_engine.IsMatch(suggestion, accountId, 110m));
     }
 
     [Fact]
@@ -59,7 +61,7 @@ public class BankSyncMatchingEngineTests
         var differentAccountId = Guid.NewGuid();
         var suggestion = CreateSuggestion(accountId, 100m);
 
-        Assert.False(BankSyncMatchingEngine.IsMatch(suggestion, differentAccountId, 100m));
+        Assert.False(_engine.IsMatch(suggestion, differentAccountId, 100m));
     }
 
     [Fact]
@@ -67,16 +69,16 @@ public class BankSyncMatchingEngineTests
     {
         var suggestion = CreateSuggestion(Guid.NewGuid(), 100m);
 
-        Assert.False(BankSyncMatchingEngine.IsMatch(suggestion, Guid.NewGuid(), 200m));
+        Assert.False(_engine.IsMatch(suggestion, Guid.NewGuid(), 200m));
     }
 
     [Theory]
-    [InlineData(1, "expense")]
-    [InlineData(100, "expense")]
-    [InlineData(-1, "income")]
-    [InlineData(-100, "income")]
-    public void ResolveDirection_PositiveAmountIsExpense_NegativeAmountIsIncome(decimal amount, string expected)
+    [InlineData(1, RecurringFlowDirection.Outflow)]
+    [InlineData(100, RecurringFlowDirection.Outflow)]
+    [InlineData(-1, RecurringFlowDirection.Inflow)]
+    [InlineData(-100, RecurringFlowDirection.Inflow)]
+    public void ResolveDirection_PositiveAmountIsOutflow_NegativeAmountIsInflow(decimal amount, RecurringFlowDirection expected)
     {
-        Assert.Equal(expected, BankSyncMatchingEngine.ResolveDirection(amount));
+        Assert.Equal(expected, _engine.ResolveDirection(amount));
     }
 }

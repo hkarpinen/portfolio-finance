@@ -1,6 +1,6 @@
 using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Application.Repositories;
-using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;

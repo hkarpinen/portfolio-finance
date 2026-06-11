@@ -1,6 +1,6 @@
 using Finance.Domain;
 using Finance.Domain.Aggregates;
-using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence.Configurations;
@@ -11,11 +11,17 @@ namespace Infrastructure.Persistence;
 public sealed class FinanceDbContext : DbContext
 {
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
-    public DbSet<Expense> Expenses => Set<Expense>();
-    public DbSet<ExpensePayment> ExpensePayments => Set<ExpensePayment>();
-    public DbSet<ExpenseSplit> ExpenseSplits => Set<ExpenseSplit>();
-    public DbSet<ExpenseSplitPayment> ExpenseSplitPayments => Set<ExpenseSplitPayment>();
+    public DbSet<Charge> Charges => Set<Charge>();
+    public DbSet<ChargePayment> ChargePayments => Set<ChargePayment>();
+    public DbSet<Allocation> Allocations => Set<Allocation>();
+
+    // Double-entry ledger
+    public DbSet<Ledger> Ledgers => Set<Ledger>();
+    public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<Posting> Postings => Set<Posting>();
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();
+    public DbSet<GroupMemberProjection> GroupMemberProjections => Set<GroupMemberProjection>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 

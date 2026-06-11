@@ -107,7 +107,7 @@ public sealed class ConnectionsController : ControllerBase
 
     /// <summary>
     /// Promotes a detected suggestion to a tracked <c>IncomeSource</c> (inflow)
-    /// or <c>Expense</c> (outflow). Idempotent — calling twice returns the same linked entity.
+    /// or <c>Charge</c> (outflow). Idempotent — calling twice returns the same linked entity.
     /// </summary>
     [HttpPost("suggestions/{suggestionId:guid}/accept")]
     public async Task<IActionResult> AcceptSuggestion(Guid suggestionId, CancellationToken ct)
@@ -149,14 +149,14 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Accepts a suggestion, creating a pre-filled Expense or IncomeSource.</summary>
+    /// <summary>Accepts a suggestion, creating a pre-filled Charge or IncomeSource.</summary>
     [HttpPost("bank-sync-suggestions/{suggestionId:guid}/accept")]
     public async Task<IActionResult> AcceptBankSyncSuggestion(Guid suggestionId, [FromBody] AcceptBankSyncSuggestionBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
         var result = await _manager.AcceptBankSyncSuggestionAsync(
             userId.Value,
-            new AcceptBankSyncSuggestionCommand(suggestionId, body.AsIncome, body.HouseholdId),
+            new AcceptBankSyncSuggestionCommand(suggestionId, body.AsIncome, body.GroupId),
             ct);
         return Ok(result);
     }
@@ -221,4 +221,4 @@ public sealed class ConnectionsController : ControllerBase
     }
 }
 
-public sealed record AcceptBankSyncSuggestionBody(bool AsIncome, Guid? HouseholdId = null);
+public sealed record AcceptBankSyncSuggestionBody(bool AsIncome, Guid? GroupId = null);

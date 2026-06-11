@@ -6,7 +6,6 @@ using Finance.Application.Mappers;
 using Finance.Application.Utilities;
 using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
-using Finance.Domain.Utilities;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -17,14 +16,19 @@ internal sealed class IncomeQuery : IIncomeQuery
 {
     private readonly FinanceDbContext _db;
     private readonly IIncomeSourceRepository _incomeRepository;
+    private readonly IContributionCalculator _contributionCalculator;
+    private readonly IPayrollDeductionEngine _deductionEngine;
 
     public IncomeQuery(
         FinanceDbContext db,
-        IIncomeSourceRepository incomeRepository
-)
+        IIncomeSourceRepository incomeRepository,
+        IContributionCalculator contributionCalculator,
+        IPayrollDeductionEngine deductionEngine)
     {
         _db = db;
         _incomeRepository = incomeRepository;
+        _contributionCalculator = contributionCalculator;
+        _deductionEngine = deductionEngine;
     }
 
     public async Task<IncomeListDto> ListAsync(ListIncomeParams request, CancellationToken cancellationToken = default)
@@ -69,7 +73,7 @@ internal sealed class IncomeQuery : IIncomeQuery
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
 
-        var breakdown = PayrollDeductionEngine.ComputeBreakdown(
+        var breakdown = _deductionEngine.ComputeBreakdown(
             income.Id.Value,
             income.Amount.Amount,
             income.RecurrenceSchedule.Frequency,
@@ -89,6 +93,78 @@ internal sealed class IncomeQuery : IIncomeQuery
             breakdown.TotalDeductions,
             breakdown.NetPay);
     }
+
+    public async Task<NetPaySummaryDto> GetNetPaySummaryAsync(GetNetPaySummaryParams request, CancellationToken cancellationToken = default)
+    {
+        var uid = UserId.Create(request.UserId);
+        var sources = await _db.IncomeSources
+            .AsNoTracking()
+            .Where(i => i.UserId == uid && i.IsActive)
+            .ToListAsync(cancellationToken);
+
+        if (sources.Count == 0)
+        {
+            return new NetPaySummaryDto(request.Year, request.Month, "USD",
+                MonthlyGross: 0m, MonthlyNet: 0m, TotalTaxWithheld: 0m,
+                TotalDeductions: 0m, AnnualGross: 0m, SourceCount: 0);
+        }
+
+        decimal monthlyGross = 0m, monthlyNet = 0m, totalDeductions = 0m, totalTax = 0m;
+        // Track gross-by-currency so the summary can advertise the dominant
+        // currency. Mixed-currency portfolios are rare in this app; cross-
+        // currency conversion is out of scope here and would belong in a
+        // dedicated FX engine, not a list aggregation.
+        var grossByCurrency = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var income in sources)
+        {
+            var breakdown = _deductionEngine.ComputeBreakdown(
+                income.Id.Value,
+                income.Amount.Amount,
+                income.RecurrenceSchedule.Frequency,
+                income.Amount.Currency,
+                income.TaxProfile,
+                income.Deductions,
+                request.Year,
+                request.Month);
+
+            monthlyGross += breakdown.GrossPay;
+            monthlyNet += breakdown.NetPay;
+            totalDeductions += breakdown.TotalDeductions;
+            foreach (var d in breakdown.Deductions)
+            {
+                if (IsTaxDeduction(d.Type)) totalTax += d.Amount;
+            }
+
+            grossByCurrency.TryGetValue(breakdown.Currency, out var sofar);
+            grossByCurrency[breakdown.Currency] = sofar + breakdown.GrossPay;
+        }
+
+        var dominantCurrency = grossByCurrency
+            .OrderByDescending(kv => kv.Value)
+            .Select(kv => kv.Key)
+            .FirstOrDefault() ?? "USD";
+
+        return new NetPaySummaryDto(
+            request.Year, request.Month, dominantCurrency,
+            MonthlyGross: monthlyGross,
+            MonthlyNet: monthlyNet,
+            TotalTaxWithheld: totalTax,
+            TotalDeductions: totalDeductions,
+            AnnualGross: monthlyGross * 12,
+            SourceCount: sources.Count);
+    }
+
+    /// <summary>
+    /// Returns true for deduction types the engine emits to represent
+    /// statutory tax withholdings (vs employee-elected benefits). Kept in
+    /// sync with the labels produced by <see cref="IPayrollDeductionEngine.ComputeBreakdown"/>.
+    /// </summary>
+    private static bool IsTaxDeduction(string type) => type switch
+    {
+        "FederalIncomeTax" or "StateIncomeTax" or "SocialSecurity" or "Medicare" => true,
+        _ => false,
+    };
 
     public Task<bool> ExistsForUserAsync(UserId userId, string source, decimal amount, CancellationToken cancellationToken = default)
         => _db.IncomeSources.AsNoTracking()
@@ -115,82 +191,85 @@ internal sealed class IncomeQuery : IIncomeQuery
             .OrderBy(i => i.Source)
             .ToListAsync(cancellationToken);
 
-        var personalExpenses = await _db.Expenses
+        var personalCharges = await _db.Charges
             .AsNoTracking()
             .Where(e => e.UserId == uid && e.IsActive && e.GroupId == null)
             .OrderBy(e => e.DueDate)
             .ToListAsync(cancellationToken);
 
-        var splits = await FetchSplitsWithBillDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
-        var paidSplits = await FetchPaidSplitOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var splits = await FetchAllocationsWithBillDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var paidAllocations = await FetchPaidAllocationOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
         var paidPersonal = await FetchPaidPersonalBillOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
 
-        return ContributionCalculator.BuildSummaries(
+        return _contributionCalculator.BuildSummaries(
             now, monthCount, pastMonths,
-            incomeEntities, personalExpenses,
-            splits, paidSplits, paidPersonal);
+            incomeEntities, personalCharges,
+            splits, paidAllocations, paidPersonal);
     }
 
     // ── Private DB fetch helpers ──────────────────────────────────────────────
 
-    private async Task<IReadOnlyList<(ExpenseSplit Split, Expense Expense)>> FetchSplitsWithBillDetailsAsync(
+    private async Task<IReadOnlyList<(Allocation Allocation, Charge Charge)>> FetchAllocationsWithBillDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splits = await _db.ExpenseSplits
+        var splits = await _db.Allocations
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
         if (splits.Count == 0) return [];
 
-        var expenseIds = splits.Select(s => s.ExpenseId).Distinct().ToList();
+        var expenseIds = splits.Select(s => s.ChargeId).Distinct().ToList();
 
-        var expenses = await _db.Expenses
+        var expenses = await _db.Charges
             .AsNoTracking()
             .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.GroupId != null)
             .ToListAsync(cancellationToken);
 
-        var relevantExpenses = expenses.Where(b =>
+        var relevantCharges = expenses.Where(b =>
             b.RecurrenceSchedule == null
                 ? b.DueDate >= from && b.DueDate <= to
                 : b.RecurrenceSchedule.StartDate <= to &&
                   (b.RecurrenceSchedule.EndDate == null || b.RecurrenceSchedule.EndDate >= from)
         ).ToDictionary(b => b.Id);
 
-        if (relevantExpenses.Count == 0) return [];
+        if (relevantCharges.Count == 0) return [];
 
         return splits
-            .Where(s => relevantExpenses.ContainsKey(s.ExpenseId))
-            .Select(s => (s, relevantExpenses[s.ExpenseId]))
+            .Where(s => relevantCharges.ContainsKey(s.ChargeId))
+            .Select(s => (s, relevantCharges[s.ChargeId]))
             .ToList();
     }
 
-    private async Task<IReadOnlyDictionary<(Guid SplitId, DateTime OccurrenceDate), DateTime>> FetchPaidSplitOccurrencesAsync(
+    private async Task<IReadOnlyDictionary<(Guid AllocationId, DateTime OccurrenceDate), DateTime>> FetchPaidAllocationOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splitIds = await _db.ExpenseSplits
+        var splits = await _db.Allocations
             .AsNoTracking()
             .Where(s => s.UserId == userId)
-            .Select(s => s.Id)
             .ToListAsync(cancellationToken);
 
-        if (splitIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
+        if (splits.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
-        var payments = await _db.ExpenseSplitPayments
-            .AsNoTracking()
-            .Where(p => splitIds.Contains(p.ExpenseSplitId) && p.OccurrenceDate >= from && p.OccurrenceDate <= to)
-            .Select(p => new { ExpenseSplitId = p.ExpenseSplitId.Value, p.OccurrenceDate, p.PaidAt })
-            .ToListAsync(cancellationToken);
+        var splitIds = splits.Select(s => s.Id.Value).ToList();
+        var shareByAllocation = splits.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
 
-        return payments
-            .GroupBy(p => (p.ExpenseSplitId, p.OccurrenceDate.Date))
-            .ToDictionary(g => g.Key, g => g.Max(p => p.PaidAt));
+        // A (allocation, occurrence) counts as paid when ledger settlements cover the share
+        // (signed sum, partial-aware). The representative timestamp is the latest value date —
+        // when the money actually moved.
+        var settledMap = await SettlementReads.GetSettledByAllocationOccurrenceAsync(
+            _db, splitIds, cancellationToken);
+
+        return settledMap
+            .Where(kv => kv.Key.Occurrence >= from && kv.Key.Occurrence <= to
+                      && kv.Value.Settled >= (shareByAllocation.TryGetValue(kv.Key.AllocationId, out var share) ? share : 0m))
+            .ToDictionary(kv => kv.Key, kv => kv.Value.LatestValueDate);
     }
 
-    private async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
+    private async Task<IReadOnlyDictionary<(Guid ChargeId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var expenseIds = await _db.Expenses
+        var expenseIds = await _db.Charges
             .AsNoTracking()
             .Where(b => b.UserId == userId && b.GroupId == null)
             .Select(b => b.Id)
@@ -198,14 +277,14 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         if (expenseIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
-        var payments = await _db.ExpensePayments
+        var payments = await _db.ChargePayments
             .AsNoTracking()
-            .Where(p => expenseIds.Contains(p.ExpenseId) && p.OccurrenceDate >= from && p.OccurrenceDate <= to)
-            .Select(p => new { ExpenseId = p.ExpenseId.Value, p.OccurrenceDate, p.PaidAt })
+            .Where(p => expenseIds.Contains(p.ChargeId) && p.OccurrenceDate >= from && p.OccurrenceDate <= to)
+            .Select(p => new { ChargeId = p.ChargeId.Value, p.OccurrenceDate, p.PaidAt })
             .ToListAsync(cancellationToken);
 
         return payments
-            .GroupBy(p => (p.ExpenseId, p.OccurrenceDate.Date))
+            .GroupBy(p => (p.ChargeId, p.OccurrenceDate.Date))
             .ToDictionary(g => g.Key, g => g.Max(p => p.PaidAt));
     }
 }

@@ -1,7 +1,13 @@
 namespace Finance.Domain.ValueObjects;
 
 /// <summary>
-/// Money value object representing amount and currency.
+/// Money value object — a <em>signed</em> monetary amount in a currency (the classic
+/// Money pattern). Sign is meaningful: balances go negative, refunds and ledger
+/// contra/reversing entries are negative, and bank inflows are negative (Plaid
+/// convention — see <c>FinancialTransaction.IsInflow</c>). Non-negativity is NOT an
+/// intrinsic property of money; it is a context-specific invariant enforced by the
+/// aggregates where it actually holds (<c>Charge</c>, <c>Allocation</c> and
+/// <c>IncomeSource</c> each guard <c>amount &lt; 0</c> in their own factories).
 /// </summary>
 public readonly record struct Money
 {
@@ -10,12 +16,9 @@ public readonly record struct Money
 
     private Money(decimal amount, string currency)
     {
-        if (amount < 0)
-            throw new ArgumentException("Amount cannot be negative.", nameof(amount));
-        
         if (string.IsNullOrWhiteSpace(currency))
             throw new ArgumentException("Currency cannot be empty.", nameof(currency));
-        
+
         if (currency.Length != 3)
             throw new ArgumentException("Currency must be a 3-letter ISO code.", nameof(currency));
 
@@ -23,52 +26,10 @@ public readonly record struct Money
         Currency = currency.ToUpperInvariant();
     }
 
+    /// <summary>The additive inverse — the contra amount for a reversing ledger entry.</summary>
+    public Money Negate() => new(-Amount, Currency);
+
     public static Money Create(decimal amount, string currency) => new(amount, currency);
-
-    public Money Add(Money other)
-    {
-        if (other.Currency != Currency)
-            throw new InvalidOperationException($"Cannot add money with different currencies: {Currency} and {other.Currency}");
-        
-        return new Money(Amount + other.Amount, Currency);
-    }
-
-    public Money Subtract(Money other)
-    {
-        if (other.Currency != Currency)
-            throw new InvalidOperationException($"Cannot subtract money with different currencies: {Currency} and {other.Currency}");
-        
-        return new Money(Amount - other.Amount, Currency);
-    }
-
-    public Money Multiply(decimal factor)
-    {
-        if (factor < 0)
-            throw new ArgumentException("Factor cannot be negative.", nameof(factor));
-        
-        return new Money(Amount * factor, Currency);
-    }
-
-    public bool IsGreaterThan(Money other)
-    {
-        if (other.Currency != Currency)
-            throw new InvalidOperationException($"Cannot compare money with different currencies: {Currency} and {other.Currency}");
-        
-        return Amount > other.Amount;
-    }
-
-    public bool IsLessThan(Money other)
-    {
-        if (other.Currency != Currency)
-            throw new InvalidOperationException($"Cannot compare money with different currencies: {Currency} and {other.Currency}");
-        
-        return Amount < other.Amount;
-    }
-
-    public bool IsEqual(Money other)
-    {
-        return Currency == other.Currency && Amount == other.Amount;
-    }
 
     public override string ToString() => $"{Amount:F2} {Currency}";
 }

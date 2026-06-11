@@ -113,6 +113,7 @@ public class FinancialConnection : IAggregateRoot
         if (Status == FinancialConnectionStatus.Healthy) return;
         Status = FinancialConnectionStatus.Healthy;
         UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new FinancialConnectionHealthy(Id, UserId));
     }
 
     public void MarkRevoked()

@@ -16,6 +16,12 @@ namespace Client.Controllers;
 /// domain events it raised in one transaction (outbox), and the LedgerPostingConsumer brings the
 /// books in step from those events — so a charge row can never be durably saved without its
 /// ledger posting eventually following.
+/// <para>
+/// ROUTE NAMING: the URL segments <c>/expenses</c> and <c>/splits</c> are intentionally FROZEN for
+/// API compatibility even though the domain renamed Expense→Charge and ExpenseSplit→Allocation. The
+/// frontend (<c>frontend/lib/api/*</c>) calls these exact paths; renaming them is a breaking change
+/// that must be a coordinated frontend+backend change, not a unilateral edit here.
+/// </para>
 /// </summary>
 [ApiController]
 [Authorize]

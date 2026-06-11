@@ -25,11 +25,10 @@ public record IncomeSourceDeductionAdded(
     IncomeId IncomeId,
     PayrollDeduction Deduction) : DomainEvent;
 
+public record IncomeSourceActivated(
+    IncomeId IncomeId) : DomainEvent;
+
 public record IncomeSourceDeductionRemoved(
     IncomeId IncomeId,
     DeductionType DeductionType,
     string Label) : DomainEvent;
-
-public record IncomeSourceDeductionUpdated(
-    IncomeId IncomeId,
-    PayrollDeduction Deduction) : DomainEvent;

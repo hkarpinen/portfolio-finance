@@ -15,6 +15,10 @@ public sealed record FinancialConnectionRevoked(
     FinancialConnectionId ConnectionId,
     UserId UserId) : DomainEvent;
 
+public sealed record FinancialConnectionHealthy(
+    FinancialConnectionId ConnectionId,
+    UserId UserId) : DomainEvent;
+
 public sealed record FinancialConnectionSynced(
     FinancialConnectionId ConnectionId,
     UserId UserId,

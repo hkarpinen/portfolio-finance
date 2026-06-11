@@ -1,57 +1,81 @@
 using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
-using Finance.Domain.Utilities;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Utilities;
 
 /// <summary>
-/// Assembles per-month contribution summaries from pre-fetched domain entities
-/// and payment-occurrence dictionaries.
-///
-/// Computation (recurrence scheduling, paycheck counting, net-pay math) is
-/// delegated to <see cref="IncomeSource"/> entity methods and
-/// <see cref="IPayrollDeductionEngine"/> — no DTO unpacking occurs here.
-/// Callers are responsible for fetching domain entities; this class maps the
-/// computed results to response DTOs at the output boundary.
+/// Builds the forward-looking contributions view (one summary per calendar month across a window
+/// that spans future months).
+/// <para>
+/// <b>Derivation contract.</b> The contributions window deliberately projects future occurrences,
+/// which do not exist in the ledger (only the current accrual is ever posted). So the two halves of
+/// each item come from different sources, by design:
+/// </para>
+/// <list type="bullet">
+///   <item><description><b>Amounts due</b> (future-month projections) come from the charge /
+///   allocation <i>rows</i> — the recurrence schedule projected over the window. This is a schedule
+///   projection, NOT a ledger read, and cannot be derived from the ledger.</description></item>
+///   <item><description><b>Settled / paid status</b> always comes from the ledger
+///   (<c>SettlementReads</c> / <c>VendorPaymentReads</c>, surfaced here as
+///   <c>paidAllocationOccurrences</c> / <c>paidPersonalBillOccurrences</c>). The lone exception is
+///   the payer's own share, which is implicitly covered by fronting the bill and so has no payment
+///   row — mirrored from <c>ChargeQuery.ListAllocationsByGroupAsync</c> so both views agree.</description></item>
+/// </list>
+/// This is why <c>/balances</c> (a pure ledger derivation) and this view can legitimately differ on
+/// future months yet must agree on settled status for posted occurrences.
 /// </summary>
-public static class ContributionCalculator
+internal sealed class ContributionCalculator : IContributionCalculator
 {
-    public static IReadOnlyCollection<ContributionPeriodSummaryDto> BuildSummaries(
+    private readonly IPayrollDeductionEngine _deductionEngine;
+
+    public ContributionCalculator(IPayrollDeductionEngine deductionEngine)
+    {
+        _deductionEngine = deductionEngine;
+    }
+
+    public IReadOnlyCollection<ContributionPeriodSummaryDto> BuildSummaries(
         DateTime now,
         int monthCount,
         int pastMonths,
         IReadOnlyList<IncomeSource> incomeSources,
-        IReadOnlyList<Expense> personalExpenses,
-        IReadOnlyList<(ExpenseSplit Split, Expense Expense)> splits,
-        IReadOnlyDictionary<(Guid SplitId, DateTime OccurrenceDate), DateTime> paidSplitOccurrences,
-        IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
+        IReadOnlyList<Charge> personalCharges,
+        IReadOnlyList<(Allocation Allocation, Charge Charge)> splits,
+        IReadOnlyDictionary<(Guid AllocationId, DateTime OccurrenceDate), DateTime> paidAllocationOccurrences,
+        IReadOnlyDictionary<(Guid ChargeId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
     {
         var windowStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-pastMonths);
         var windowEndExclusive = windowStart.AddMonths(monthCount);
 
         var activeSources = incomeSources.Where(s => s.IsActive).ToList();
-        var activePersonal = personalExpenses.Where(e => e.IsActive).ToList();
+        var activePersonal = personalCharges.Where(e => e.IsActive).ToList();
 
         // ── Project split occurrences across the window ──────────────────────
 
         var projected = new List<(DateTime OccurrenceDate, ContributionItemDto Item)>();
         foreach (var s in splits)
         {
-            IEnumerable<DateTime> occurrenceDates = s.Expense.RecurrenceSchedule is not null
-                ? s.Expense.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
-                : (IEnumerable<DateTime>)[s.Expense.DueDate];
+            IEnumerable<DateTime> occurrenceDates = s.Charge.RecurrenceSchedule is not null
+                ? s.Charge.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
+                : (IEnumerable<DateTime>)[s.Charge.DueDate];
+
+            // The payer's own share is covered by paying the bill — they never
+            // reimburse themselves. Mirror of the household-contributions read
+            // (ChargeQuery.ListAllocationsByGroupAsync) so both views agree. A
+            // payer-covered share has no explicit payment record, hence no PaidAt.
+            var isPayerOwnShare = s.Charge.PayerUserId == s.Allocation.UserId.Value;
 
             foreach (var date in occurrenceDates)
             {
-                var isClaimed = paidSplitOccurrences.TryGetValue((s.Split.Id.Value, date.Date), out var claimedAt);
+                var hasPayment = paidAllocationOccurrences.TryGetValue((s.Allocation.Id.Value, date.Date), out var paidAt);
+                var isPaid = hasPayment || isPayerOwnShare;
                 projected.Add((date, new ContributionItemDto(
-                    s.Split.Id.Value, s.Expense.Id.Value, s.Expense.Title, s.Expense.Category.ToString(),
-                    s.Split.Amount.Amount, s.Split.Amount.Currency, date,
-                    isClaimed,
-                    s.Split.GroupId.Value,
-                    isClaimed ? claimedAt : null)));
+                    s.Allocation.Id.Value, s.Charge.Id.Value, s.Charge.Title, s.Charge.Category.ToString(),
+                    s.Allocation.Amount.Amount, s.Allocation.Amount.Currency, date,
+                    isPaid,
+                    s.Allocation.GroupId.Value,
+                    hasPayment ? paidAt : null)));
             }
         }
 
@@ -82,7 +106,7 @@ public static class ContributionCalculator
             var mEndExclusive = mStart.AddMonths(1);
             var label = mStart.ToString("MMMM yyyy");
 
-            var monthSplits = projected
+            var monthAllocations = projected
                 .Where(x => x.OccurrenceDate >= mStart && x.OccurrenceDate < mEndExclusive)
                 .Select(x => x.Item)
                 .OrderBy(i => i.DueDate)
@@ -94,12 +118,11 @@ public static class ContributionCalculator
                 .OrderBy(i => i.DueDate)
                 .ToList();
 
-            var totalDue = monthSplits.Sum(s => s.Amount);
-            var totalPaid = monthSplits.Where(s => s.IsClaimed).Sum(s => s.Amount);
+            var totalDue = monthAllocations.Sum(s => s.Amount);
+            var totalPaid = monthAllocations.Where(s => s.IsPaid).Sum(s => s.Amount);
             var personalDue = monthPersonal.Sum(p => p.Amount);
             var personalPaid = monthPersonal.Where(p => p.IsPaid).Sum(p => p.Amount);
 
-            // Gross and net income — entity methods own the computation
             var projectedIncome = activeSources.Sum(src => src.ProjectGrossForMonth(mStart.Year, mStart.Month));
 
             var projectedNetIncome = activeSources.Sum(src =>
@@ -107,7 +130,7 @@ public static class ContributionCalculator
                 var paychecksThisMonth = src.PaychecksInRange(mStart, mEndExclusive);
                 if (paychecksThisMonth == 0) return 0m;
 
-                var monthlyNet = PayrollDeductionEngine.ComputeMonthlyNetPay(
+                var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(
                     src.PerPaycheckGross(),
                     src.PaymentFrequency,
                     src.TaxProfile,
@@ -127,10 +150,9 @@ public static class ContributionCalculator
             }
             else if (now >= mStart)
             {
-                var sharedDueToDate = monthSplits.Where(s => s.DueDate < now).Sum(s => s.Amount);
+                var sharedDueToDate = monthAllocations.Where(s => s.DueDate < now).Sum(s => s.Amount);
                 var personalDueToDate = monthPersonal.Where(p => p.DueDate < now).Sum(p => p.Amount);
-                var incomeReceivedNet = ComputeNetReceivedByCutoff(
-                    activeSources, mStart, now);
+                var incomeReceivedNet = ComputeNetReceivedByCutoff(activeSources, mStart, now);
                 disposableIncome = incomeReceivedNet - sharedDueToDate - personalDueToDate;
                 disposableIncomeSource = "estimate";
             }
@@ -138,7 +160,7 @@ public static class ContributionCalculator
             summaries.Add(new ContributionPeriodSummaryDto(
                 label, mStart, mEndExclusive.AddDays(-1),
                 totalDue, totalPaid, projectedIncome,
-                monthSplits,
+                monthAllocations,
                 personalDue,
                 monthPersonal,
                 projectedNetIncome,
@@ -152,7 +174,7 @@ public static class ContributionCalculator
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
-    private static decimal ComputeNetReceivedByCutoff(
+    private decimal ComputeNetReceivedByCutoff(
         IEnumerable<IncomeSource> sources,
         DateTime periodStart,
         DateTime cutoffExclusive)
@@ -164,7 +186,7 @@ public static class ContributionCalculator
             var received = src.PaychecksInRange(periodStart, cutoffExclusive);
             if (received == 0) continue;
 
-            var monthlyNet = PayrollDeductionEngine.ComputeMonthlyNetPay(
+            var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(
                 src.PerPaycheckGross(),
                 src.PaymentFrequency,
                 src.TaxProfile,

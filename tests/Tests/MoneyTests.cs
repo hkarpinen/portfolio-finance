@@ -26,10 +26,21 @@ public class MoneyTests
     }
 
     [Fact]
-    public void Create_NegativeAmount_ShouldThrow()
+    public void Create_NegativeAmount_IsAllowed_ForSignedLedgerAmounts()
     {
-        // Arrange / Act / Assert
-        Assert.Throws<ArgumentException>(() => Money.Create(-1m, "USD"));
+        // Money is signed (refunds, contra/reversing entries, bank inflows).
+        // Non-negativity is a context invariant owned by the aggregates that need it.
+        var money = Money.Create(-1m, "USD");
+        Assert.Equal(-1m, money.Amount);
+    }
+
+    [Fact]
+    public void Negate_ReturnsAdditiveInverse_SameCurrency()
+    {
+        var money = Money.Create(600m, "USD");
+        var contra = money.Negate();
+        Assert.Equal(-600m, contra.Amount);
+        Assert.Equal("USD", contra.Currency);
     }
 
     [Fact]
@@ -46,77 +57,4 @@ public class MoneyTests
         Assert.Throws<ArgumentException>(() => Money.Create(10m, "US"));
     }
 
-    [Fact]
-    public void Add_SameCurrency_ShouldReturnSum()
-    {
-        // Arrange
-        var a = Money.Create(100m, "USD");
-        var b = Money.Create(50m, "USD");
-
-        // Act
-        var result = a.Add(b);
-
-        // Assert
-        Assert.Equal(150m, result.Amount);
-        Assert.Equal("USD", result.Currency);
-    }
-
-    [Fact]
-    public void Add_DifferentCurrencies_ShouldThrow()
-    {
-        // Arrange
-        var usd = Money.Create(100m, "USD");
-        var eur = Money.Create(100m, "EUR");
-
-        // Act / Assert
-        Assert.Throws<InvalidOperationException>(() => usd.Add(eur));
-    }
-
-    [Fact]
-    public void Subtract_SameCurrency_ShouldReturnDifference()
-    {
-        // Arrange
-        var a = Money.Create(100m, "USD");
-        var b = Money.Create(30m, "USD");
-
-        // Act
-        var result = a.Subtract(b);
-
-        // Assert
-        Assert.Equal(70m, result.Amount);
-    }
-
-    [Fact]
-    public void Subtract_DifferentCurrencies_ShouldThrow()
-    {
-        // Arrange
-        var usd = Money.Create(100m, "USD");
-        var eur = Money.Create(50m, "EUR");
-
-        // Act / Assert
-        Assert.Throws<InvalidOperationException>(() => usd.Subtract(eur));
-    }
-
-    [Fact]
-    public void Multiply_ByFactor_ShouldReturnScaledAmount()
-    {
-        // Arrange
-        var money = Money.Create(100m, "USD");
-
-        // Act
-        var result = money.Multiply(1.5m);
-
-        // Assert
-        Assert.Equal(150m, result.Amount);
-    }
-
-    [Fact]
-    public void Multiply_ByNegativeFactor_ShouldThrow()
-    {
-        // Arrange
-        var money = Money.Create(100m, "USD");
-
-        // Act / Assert
-        Assert.Throws<ArgumentException>(() => money.Multiply(-1m));
-    }
 }

@@ -27,7 +27,7 @@ public sealed record LinkedAccountDto(
     decimal? CurrentBalance,
     decimal? AvailableBalance);
 
-public sealed record ListConnectionsDto(IReadOnlyList<ConnectionDto> Connections);
+public sealed record ConnectionListDto(IReadOnlyList<ConnectionDto> Items, int TotalCount);
 
 /// <summary>Outcome of an incremental sync round-trip; surfaces counts so the UI can show what changed.</summary>
 public sealed record SyncConnectionDto(
@@ -65,7 +65,7 @@ public sealed record RecurringSuggestionDto(
     bool IsActive,
     bool IsLinked);
 
-public sealed record ListSuggestionsDto(IReadOnlyList<RecurringSuggestionDto> Suggestions);
+public sealed record RecurringSuggestionListDto(IReadOnlyList<RecurringSuggestionDto> Items, int TotalCount);
 
 public sealed record AcceptSuggestionDto(
     Guid SuggestionId,
@@ -99,4 +99,4 @@ public sealed record BankSyncSuggestionDto(
     bool IsLinked,
     bool Dismissed);
 
-public sealed record ListBankSyncSuggestionsDto(IReadOnlyList<BankSyncSuggestionDto> Suggestions);
+public sealed record BankSyncSuggestionListDto(IReadOnlyList<BankSyncSuggestionDto> Items, int TotalCount);

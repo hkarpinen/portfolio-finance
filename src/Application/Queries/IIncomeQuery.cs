@@ -22,12 +22,24 @@ public sealed record GetNetPayBreakdownParams(
     int Year,
     int Month);
 
+/// <summary>
+/// Aggregate net-pay figures for the caller across every active income
+/// source in the given month. Replaces the N+1 client-side aggregation
+/// that the income page used to do (one GetNetPayBreakdown call per
+/// source) with one server-side roll-up.
+/// </summary>
+public sealed record GetNetPaySummaryParams(
+    Guid UserId,
+    int Year,
+    int Month);
+
 public interface IIncomeQuery
 {
     Task<IncomeListDto> ListAsync(ListIncomeParams request, CancellationToken cancellationToken = default);
     Task<IncomeListDto> ListByUserAsync(ListUserIncomeParams request, CancellationToken cancellationToken = default);
     Task<IncomeDto?> GetDetailAsync(IncomeDetailParams request, CancellationToken cancellationToken = default);
     Task<NetPayBreakdownDto?> GetNetPayBreakdownAsync(GetNetPayBreakdownParams request, CancellationToken cancellationToken = default);
+    Task<NetPaySummaryDto> GetNetPaySummaryAsync(GetNetPaySummaryParams request, CancellationToken cancellationToken = default);
     Task<bool> ExistsForUserAsync(UserId userId, string source, decimal amount, CancellationToken cancellationToken = default);
 
     // ── Contribution / budget timeline ────────────────────────────────────────

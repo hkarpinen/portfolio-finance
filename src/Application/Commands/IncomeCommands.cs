@@ -16,7 +16,8 @@ public sealed record CreateIncomeCommand(
     /// <summary>Date of the most recent paycheck — used as the recurrence anchor for exact pay-date calculation.</summary>
     DateTime? LastPaycheckDate = null,
     DateTime? EndDate = null,
-    IReadOnlyList<PayrollDeductionDto>? InitialDeductions = null);
+    IReadOnlyList<PayrollDeductionDto>? InitialDeductions = null,
+    string? Notes = null);
 
 public sealed record UpdateIncomeCommand(
     Guid IncomeId,
@@ -30,7 +31,8 @@ public sealed record UpdateIncomeCommand(
     DateTime StartDate,
     /// <summary>Date of the most recent paycheck — recurrence anchor.</summary>
     DateTime? LastPaycheckDate = null,
-    DateTime? EndDate = null);
+    DateTime? EndDate = null,
+    string? Notes = null);
 
 public sealed record SetTaxProfileCommand(
     Guid IncomeId,

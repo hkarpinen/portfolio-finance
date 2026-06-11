@@ -1,7 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Finance.Domain.Events;
-using Infrastructure.Messaging.Events;
 using Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -16,15 +14,34 @@ internal sealed class OutboxPublisher : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OutboxPublisher> _logger;
 
+    // EventType column stores domainEvent.GetType().Name (see OutboxExtensions.AddToOutbox),
+    // so map by simple class name. Publishing the domain-event records directly relies on
+    // MassTransit's namespace+name routing — consumers must declare matching types in the
+    // Finance.Domain.Events namespace. Household consumes ChargeCreated and
+    // SettlementRecorded for its W2-H4 activity feed; finance's own LedgerPostingConsumer
+    // consumes the charge/allocation/settlement/vendor events to keep the ledger in step;
+    // the rest are listed so future consumers do not silently dead-letter.
     private static readonly Dictionary<string, Type> EventTypeMap = new()
     {
+        [nameof(ChargeCreated)] = typeof(ChargeCreated),
+        [nameof(ChargeUpdated)] = typeof(ChargeUpdated),
+        [nameof(ChargeDeactivated)] = typeof(ChargeDeactivated),
+        [nameof(ChargeActivated)] = typeof(ChargeActivated),
+        [nameof(ChargePaid)] = typeof(ChargePaid),
+        [nameof(ChargeUnpaid)] = typeof(ChargeUnpaid),
+        [nameof(VendorPaid)] = typeof(VendorPaid),
+        [nameof(VendorPaymentReversed)] = typeof(VendorPaymentReversed),
+        [nameof(AllocationCreated)] = typeof(AllocationCreated),
+        [nameof(AllocationUpdated)] = typeof(AllocationUpdated),
+        [nameof(AllocationRemoved)] = typeof(AllocationRemoved),
+        [nameof(SettlementRecorded)] = typeof(SettlementRecorded),
+        [nameof(SettlementReversed)] = typeof(SettlementReversed),
     };
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
+    // Read with the same converters AddToOutbox writes with — otherwise round-trip
+    // fails on value objects whose constructors are private (Money, RecurrenceSchedule)
+    // or whose JSON shape is flattened (ChargeId, AllocationId, GroupId, UserId).
+    private static readonly JsonSerializerOptions JsonOptions = OutboxExtensions.JsonOptions;
 
     public OutboxPublisher(IServiceScopeFactory scopeFactory, ILogger<OutboxPublisher> logger)
     {
@@ -45,7 +62,9 @@ internal sealed class OutboxPublisher : BackgroundService
                 _logger.LogError(ex, "Error processing outbox messages");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            // Short cadence: ledger postings ride this loop (state change → outbox → consumer),
+            // so the poll interval is the ceiling on how stale a just-written balance can read.
+            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
     }
 

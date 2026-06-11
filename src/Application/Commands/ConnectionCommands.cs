@@ -16,19 +16,19 @@ public sealed record RefreshSuggestionsCommand(Guid ConnectionId);
 
 /// <summary>
 /// Promotes a detected recurring cash-flow to a tracked IncomeSource (inflow)
-/// or Expense (outflow). Idempotent — calling twice returns the same linked entity.
+/// or Charge (outflow). Idempotent — calling twice returns the same linked entity.
 /// </summary>
 public sealed record AcceptSuggestionCommand(Guid SuggestionId);
 
 public sealed record DisconnectCommand(Guid ConnectionId);
 
 /// <summary>
-/// Accepts a bank-sync suggestion, creating an Expense (outflow) or IncomeSource (inflow).
-/// AsIncome overrides the detected direction. HouseholdId creates a household-scoped expense.
+/// Accepts a bank-sync suggestion, creating an Charge (outflow) or IncomeSource (inflow).
+/// AsIncome overrides the detected direction. GroupId creates a household-scoped expense.
 /// </summary>
 public sealed record AcceptBankSyncSuggestionCommand(
     Guid SuggestionId,
     bool AsIncome,
-    Guid? HouseholdId = null);
+    Guid? GroupId = null);
 
 public sealed record DismissBankSyncSuggestionCommand(Guid SuggestionId);

@@ -14,7 +14,7 @@ internal sealed class ChargeQuery : IChargeQuery
 
     public ChargeQuery(FinanceDbContext db) => _db = db;
 
-    // ── Personal expense queries ──────────────────────────────────────────────
+    // ── Personal charge queries ──────────────────────────────────────────────
 
     public async Task<ChargeListDto> ListByUserAsync(ListChargesParams request, CancellationToken cancellationToken = default)
     {
@@ -70,7 +70,7 @@ internal sealed class ChargeQuery : IChargeQuery
         return ChargeMapper.ToResponse(expense, payment is not null);
     }
 
-    // ── Group expense queries ─────────────────────────────────────────────
+    // ── Group charge queries ─────────────────────────────────────────────
 
     public async Task<GroupChargeListDto> ListByGroupAsync(ListGroupChargesParams request, CancellationToken cancellationToken = default)
     {

@@ -12,6 +12,8 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Infrastructure;
 
@@ -38,6 +40,13 @@ public static class InfrastructureServiceExtensions
             x.AddConsumer<DemoUserCreatedConsumer>();
             x.AddConsumer<DemoHouseholdSeededConsumer>();
             x.AddConsumer<DemoUserExpiredConsumer>();
+            x.AddConsumer<GroupAllocationAssignedConsumer>();
+            x.AddConsumer<HouseholdMembershipConsumer>();
+            x.AddConsumer<HouseholdDeletedConsumer>();
+            // Finance consumes its OWN charge/allocation/settlement/vendor events to keep the
+            // double-entry ledger in step — the outbox makes posting reliable, the consumer
+            // definition serializes it (one message at a time).
+            x.AddConsumer<LedgerPostingConsumer, LedgerPostingConsumerDefinition>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -49,18 +58,39 @@ public static class InfrastructureServiceExtensions
                     if (!string.IsNullOrWhiteSpace(password)) h.Password(password);
                 });
 
+                // Reuse the outbox-side custom converters so what MassTransit puts on
+                // the wire matches what `OutboxExtensions.JsonOptions` writes on disk:
+                // flat GUIDs for value-object IDs, camelCase enum-name strings, and a
+                // nested-but-flat `RecurrenceSchedule` object. Without this MT defaults
+                // produce `{"value":"..."}` envelopes for every value-object, which
+                // breaks every cross-service consumer (they declare flat Guid fields).
+                cfg.ConfigureJsonSerializerOptions(opts =>
+                {
+                    opts.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                    opts.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+                    opts.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+                    opts.Converters.Add(new ChargeIdConverter());
+                    opts.Converters.Add(new AllocationIdConverter());
+                    opts.Converters.Add(new GroupIdConverter());
+                    opts.Converters.Add(new BillsUserIdConverter());
+                    opts.Converters.Add(new MoneyConverter());
+                    opts.Converters.Add(new RecurrenceScheduleConverter());
+                    return opts;
+                });
+
                 cfg.ConfigureEndpoints(context);
             });
         });
 
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
-        services.AddScoped<IExpenseRepository, ExpenseRepository>();
-        services.AddScoped<IExpensePaymentRepository, ExpensePaymentRepository>();
-        services.AddScoped<IExpenseSplitRepository, ExpenseSplitRepository>();
-        services.AddScoped<IExpenseSplitPaymentRepository, ExpenseSplitPaymentRepository>();
+        services.AddScoped<IChargeRepository, ChargeRepository>();
+        services.AddScoped<IChargePaymentRepository, ChargePaymentRepository>();
+        services.AddScoped<IAllocationRepository, AllocationRepository>();
+        services.AddScoped<ILedgerRepository, LedgerRepository>();
 
         services.AddScoped<IIncomeQuery, IncomeQuery>();
-        services.AddScoped<IExpenseQuery, ExpenseQuery>();
+        services.AddScoped<IChargeQuery, ChargeQuery>();
+        services.AddScoped<ILedgerQuery, LedgerQuery>();
         services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
 
         services.AddHostedService<OutboxPublisher>();
@@ -84,5 +114,12 @@ public static class InfrastructureServiceExtensions
         });
 
         return services;
+    }
+
+    public static async Task ApplyMigrationsAsync(this IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
+        await db.Database.MigrateAsync();
     }
 }

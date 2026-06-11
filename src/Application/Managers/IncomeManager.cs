@@ -26,19 +26,20 @@ internal sealed class IncomeManager : IIncomeManager
             request.Source,
             RecurrenceSchedule.Create(request.QuotedAs, request.StartDate, request.EndDate),
             request.PaidEvery,
-            lastPaycheckDate);
+            lastPaycheckDate,
+            request.Notes);
 
         if (request.InitialDeductions is { Count: > 0 })
         {
             foreach (var d in request.InitialDeductions)
             {
                 income.AddDeduction(PayrollDeduction.Create(
-                    Enum.Parse<DeductionType>(d.Type, ignoreCase: true),
+                    d.Type,
                     d.Label,
-                    Enum.Parse<DeductionCalculationMethod>(d.Method, ignoreCase: true),
+                    d.Method,
                     d.Value,
                     d.IsEmployerSponsored,
-                    Enum.TryParse<RecurrenceFrequency>(d.Frequency, ignoreCase: true, out var df) ? df : RecurrenceFrequency.Monthly,
+                    d.Frequency,
                     d.IsTaxExempt));
             }
         }
@@ -63,7 +64,8 @@ internal sealed class IncomeManager : IIncomeManager
             request.Source,
             RecurrenceSchedule.Create(request.QuotedAs, request.StartDate, request.EndDate),
             request.PaidEvery,
-            lastPaycheckDate);
+            lastPaycheckDate,
+            request.Notes);
 
         await _incomeRepository.UpdateAsync(income, cancellationToken);
         await _incomeRepository.CommitAsync(cancellationToken);
@@ -116,7 +118,7 @@ internal sealed class IncomeManager : IIncomeManager
             income.ClearTaxProfile();
         else
             income.SetTaxProfile(TaxWithholdingProfile.Create(
-                Enum.Parse<FilingStatus>(request.TaxProfile.FilingStatus, ignoreCase: true),
+                request.TaxProfile.FilingStatus,
                 request.TaxProfile.StateCode,
                 request.TaxProfile.FederalAllowances,
                 request.TaxProfile.StateAllowances));
@@ -133,12 +135,12 @@ internal sealed class IncomeManager : IIncomeManager
 
         var dto = request.Deduction;
         income.AddDeduction(PayrollDeduction.Create(
-            Enum.Parse<DeductionType>(dto.Type, ignoreCase: true),
+            dto.Type,
             dto.Label,
-            Enum.Parse<DeductionCalculationMethod>(dto.Method, ignoreCase: true),
+            dto.Method,
             dto.Value,
             dto.IsEmployerSponsored,
-            Enum.TryParse<RecurrenceFrequency>(dto.Frequency, ignoreCase: true, out var freq) ? freq : RecurrenceFrequency.Monthly,
+            dto.Frequency,
             dto.IsTaxExempt));
 
         await _incomeRepository.UpdateAsync(income, cancellationToken);

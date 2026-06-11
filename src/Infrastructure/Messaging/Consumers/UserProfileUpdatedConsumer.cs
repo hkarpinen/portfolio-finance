@@ -1,6 +1,6 @@
 using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
-using Infrastructure.Messaging.Events;
+using Domain.Events;
 using Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -8,13 +8,13 @@ using Npgsql;
 
 namespace Infrastructure.Messaging.Consumers;
 
-internal sealed class UserProfileUpdatedConsumer : IConsumer<UserProfileUpdatedEvent>
+internal sealed class UserProfileUpdatedConsumer : IConsumer<UserProfileUpdated>
 {
     private readonly FinanceDbContext _dbContext;
 
     public UserProfileUpdatedConsumer(FinanceDbContext dbContext) => _dbContext = dbContext;
 
-    public async Task Consume(ConsumeContext<UserProfileUpdatedEvent> context)
+    public async Task Consume(ConsumeContext<UserProfileUpdated> context)
     {
         var message = context.Message;
         if (await _dbContext.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
@@ -42,7 +42,7 @@ internal sealed class UserProfileUpdatedConsumer : IConsumer<UserProfileUpdatedE
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        _dbContext.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(UserProfileUpdatedEvent), DateTime.UtcNow));
+        _dbContext.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(UserProfileUpdated), DateTime.UtcNow));
 
         try
         {

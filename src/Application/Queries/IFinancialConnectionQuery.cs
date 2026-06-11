@@ -1,5 +1,6 @@
 using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Queries;
@@ -12,7 +13,7 @@ public sealed record ListTransactionsParams(
 public interface IFinancialConnectionQuery
 {
     // ── Connections & transactions ────────────────────────────────────────────
-    Task<ListConnectionsDto> ListConnectionsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<ConnectionListDto> ListConnectionsAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task<TransactionListDto> ListTransactionsAsync(
         Guid userId,
@@ -24,8 +25,8 @@ public interface IFinancialConnectionQuery
     Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForUserAsync(UserId userId, CancellationToken cancellationToken = default);
 
     // ── Bank sync suggestions ─────────────────────────────────────────────────
-    Task<ListSuggestionsDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<ListBankSyncSuggestionsDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default);
+    Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<BankSyncSuggestionListDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default);
 
     // ── Account balances ──────────────────────────────────────────────────────
     /// <summary>Returns the summed available balance across all linked depository accounts for a user.</summary>
