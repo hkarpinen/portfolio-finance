@@ -1,5 +1,7 @@
 # portfolio-finance
 
+> Bounded context: see [/ARCHITECTURE-boundaries.md](../ARCHITECTURE-boundaries.md). This service references households by opaque `Guid` only (`groupId`) and must never return a `Household*Dto`.
+
 Personal finance service. Tracks income sources, recurring personal expenses, household shared expenses with configurable splits, and produces a budget coverage analysis showing how much of your obligations your income actually covers.
 
 Also integrates with Plaid for bank linking and transaction sync — so instead of manually entering every bill, you can connect a bank account and have recurring transactions detected automatically.
@@ -11,7 +13,18 @@ Also integrates with Plaid for bank linking and transaction sync — so instead 
 - **Household expenses** — shared bills attached to a household (from the household service); split equally or by custom amounts; tracks payment status per member
 - **Contributions** — monthly snapshot of what each household member has contributed vs what they owe; used to compute "your share" on the frontend
 - **Budget analysis** — gross income vs total obligations, coverage percentage, surplus/deficit
+- **Double-entry ledger** — the single source of truth for who-owes-whom; balances and `isPaid` are *derived* from postings, never stored as flags
 - **Plaid** — bank link flow (link token → public token exchange), cursor-based transaction sync, recurring stream detection
+
+### Ledger posting is event-driven
+
+Controllers never coordinate bookkeeping. Every charge/allocation/settlement mutation commits its
+aggregate change **and the domain events it raised** in one transaction (outbox); `LedgerPostingConsumer`
+then consumes those events (outbox → RabbitMQ → consumer) and *converges* the books onto current DB
+state — posting when missing, reverse-and-reposting when stale, no-op when already matching. The
+consumer is serialized (one message at a time) and backed by a partial unique index on active journal
+entries. Ledger-derived reads therefore lag a mutation by ~1–2s (the outbox poll interval); the
+frontend patches `isPaid`/balances optimistically rather than waiting. See `docs/Domain.md`.
 
 ## Stack
 
