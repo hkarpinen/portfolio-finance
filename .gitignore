@@ -8,6 +8,10 @@ obj/
 *.sln.docstates
 project.lock.json
 
+## Local tooling / caches
+.claude/
+__pycache__/
+
 ## Secrets
 appsettings.Development.json
 appsettings.Production.json
