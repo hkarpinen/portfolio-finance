@@ -95,6 +95,9 @@ internal sealed class ChargeQuery : IChargeQuery
             !owedToVendor.TryGetValue(chargeId, out var owed) || owed <= 0.005m;
 
         HashSet<Guid> paidChargeIds = [];
+        // The caller's own share amount per charge (their allocation) — drives "your share" on the
+        // client, which must reflect the real (possibly uneven) split, not an even-split estimate.
+        Dictionary<Guid, decimal> callerShareByCharge = [];
         if (request.CallerId.HasValue)
         {
             var callerUserId = UserId.Create(request.CallerId.Value);
@@ -103,6 +106,10 @@ internal sealed class ChargeQuery : IChargeQuery
                 .AsNoTracking()
                 .Where(s => s.UserId == callerUserId && expenseIds.Contains(s.ChargeId))
                 .ToListAsync(cancellationToken);
+
+            callerShareByCharge = callerAllocations
+                .GroupBy(s => s.ChargeId.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(s => s.Amount.Amount));
 
             if (callerAllocations.Count > 0)
             {
@@ -135,7 +142,9 @@ internal sealed class ChargeQuery : IChargeQuery
         {
             var occurrence = b.RecurrenceSchedule?.CurrentOccurrence(b.DueDate) ?? b.DueDate;
             var isPaid = paidChargeIds.Contains(b.Id.Value);
-            return ChargeMapper.ToResponse(b, isPaid, VendorPaidFor(b.Id.Value)) with { CurrentOccurrenceDate = occurrence };
+            var callerShare = callerShareByCharge.TryGetValue(b.Id.Value, out var cs) ? (decimal?)cs : null;
+            return ChargeMapper.ToResponse(b, isPaid, VendorPaidFor(b.Id.Value))
+                with { CurrentOccurrenceDate = occurrence, CallerShare = callerShare };
         }).ToArray();
 
         return new GroupChargeListDto(responses, total);

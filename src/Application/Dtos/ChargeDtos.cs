@@ -40,7 +40,11 @@ public sealed record ChargeResponseDto(
     // Group only: has the VENDOR been paid (the bill itself), distinct from the caller's share
     // (IsPaid). Derived from the ledger (Vendor Payable balance); PayerUserId/FundingSource describe
     // who paid / how. Legacy cash-basis charges read as vendor-paid.
-    bool VendorPaid = false);
+    bool VendorPaid = false,
+    // Group only: the caller's OWN share amount on this charge (their allocation). Null when the
+    // caller has no allocation, or for personal charges. Lets "your share" reflect the real (possibly
+    // uneven) split instead of an even-split estimate.
+    decimal? CallerShare = null);
 
 public sealed record ChargeListDto(IReadOnlyCollection<ChargeResponseDto> Items, int TotalCount);
 
