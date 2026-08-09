@@ -3,10 +3,7 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Records that a user has paid a specific occurrence of their expense.
-/// Keyed on (ChargeId, OccurrenceDate) — each unique occurrence can have at most one payment record.
-/// </summary>
+// Keyed on (ChargeId, OccurrenceDate): each occurrence can have at most one payment record.
 public class ChargePayment : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();

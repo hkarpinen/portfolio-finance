@@ -8,14 +8,9 @@ using Npgsql;
 
 namespace Infrastructure.Messaging.Consumers;
 
-/// <summary>
-/// Applies a household-authorized allocation to finance. Household owns the role check (a member
-/// may assign their own share; Owner/Admin may assign another member's), then emits
-/// <see cref="GroupAllocationAssigned"/>; finance just applies it. The event's UserId is
-/// authoritative — there is no caller to override here, which is exactly why the role-gated
-/// "add a split for another member" must arrive this way rather than via the public /splits
-/// endpoint (which force-attributes to the caller). Fully async, no service-to-service call.
-/// </summary>
+// The event's UserId is authoritative and there is no caller to override it. That is exactly why a
+// role-gated "add a split for another member" has to arrive this way rather than through the
+// public /splits endpoint, which force-attributes the allocation to the caller.
 internal sealed class GroupAllocationAssignedConsumer : IConsumer<GroupAllocationAssigned>
 {
     private readonly FinanceDbContext _dbContext;
@@ -33,9 +28,8 @@ internal sealed class GroupAllocationAssignedConsumer : IConsumer<GroupAllocatio
         if (await _dbContext.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
             return;
 
-        // The upsert commits an AllocationCreated/AllocationUpdated event with it; the
-        // LedgerPostingConsumer journals the share (Dr Member / Cr Expense) from that —
-        // the same single path every other allocation write takes.
+        // Journaling rides the AllocationCreated/AllocationUpdated event the upsert raises — the same
+        // single path every other allocation write takes — so nothing is posted to the ledger here.
         await _charges.AssignAllocationAsync(
             message.GroupId, message.ChargeId, message.UserId, message.Amount, message.Currency,
             context.CancellationToken);

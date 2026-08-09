@@ -31,9 +31,8 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
 
         builder.Property(e => e.ReversedByEntryId);
 
-        // Postings are the entry's children (separate table, but the JournalEntry aggregate
-        // owns them — they're only created via JournalEntry.Post). Mapped through the private
-        // backing field, with the navigation set to field access.
+        // Postings live in their own table but belong to the JournalEntry aggregate — they can only be
+        // created via JournalEntry.Post, so the mapping goes through the private backing field.
         builder.HasMany(typeof(Posting), "_postings")
             .WithOne()
             .HasForeignKey(nameof(Posting.EntryId))
@@ -44,8 +43,7 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
 
         builder.HasIndex(e => new { e.LedgerId, e.Date });
 
-        // Structured source provenance (§11.4) — the settled-state read keys on
-        // (allocation, occurrence); charge postings are looked up by charge.
+        // The settled-state read keys on (allocation, occurrence); charge postings are looked up by charge.
         builder.HasIndex(e => new { e.SourceAllocationId, e.SourceOccurrence });
         builder.HasIndex(e => e.SourceChargeId);
 
@@ -86,7 +84,6 @@ internal sealed class PostingConfiguration : IEntityTypeConfiguration<Posting>
             money.Property(m => m.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         });
 
-        // SignedAmount is derived — not stored.
         builder.Ignore(p => p.SignedAmount);
 
         builder.HasIndex(p => p.AccountId);

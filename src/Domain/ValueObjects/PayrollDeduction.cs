@@ -1,34 +1,22 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Represents a single voluntary payroll deduction line item stored on an
-/// <see cref="Finance.Domain.Aggregates.IncomeSource"/>.
-/// Tax deductions (Federal, State, FICA) are NOT stored here — they are engine-computed
-/// from the income source's <see cref="TaxWithholdingProfile"/>.
-/// </summary>
+/// <summary>Voluntary deductions only — tax is computed, never stored as one of these.</summary>
 public sealed class PayrollDeduction
 {
     public DeductionType Type { get; private set; }
 
-    /// <summary>
-    /// Display label for the deduction, e.g. "Blue Cross PPO", "401(k) 6%".
-    /// Allows multiple deductions of the same type (e.g. two health plans).
-    /// </summary>
+    /// <summary>Free-form, so a member can hold two deductions of the same type.</summary>
     public string Label { get; private set; } = string.Empty;
 
     public DeductionCalculationMethod Method { get; private set; }
 
     /// <summary>
-    /// The deduction value: a percentage (e.g. 6.0 = 6%) for <see cref="DeductionCalculationMethod.PercentOfGross"/>,
-    /// or a flat amount per pay period for <see cref="DeductionCalculationMethod.FixedAmount"/>.
+    /// Meaning depends on the method: a PERCENT (6.0 = 6%) for PercentOfGross, or a
+    /// flat per-period amount for FixedAmount.
     /// </summary>
     public decimal Value { get; private set; }
 
-    /// <summary>
-    /// True when the deduction is part of an employer-sponsored benefit plan
-    /// (e.g. employer-paid portion of health insurance). Informational only —
-    /// the amount still reduces the employee's gross pay for budgeting purposes.
-    /// </summary>
+    /// <summary>Informational only — the amount still reduces gross pay either way.</summary>
     public bool IsEmployerSponsored { get; private set; }
 
     /// <summary>

@@ -23,7 +23,6 @@ internal sealed class DemoUserCreatedConsumer(
         var userId = new UserId(message.UserId);
         var nameParts = (message.DisplayName ?? "").Split(' ', 2);
 
-        // Infrastructure concern: create or update user projection
         var existing = await db.UserProjections
             .FirstOrDefaultAsync(u => u.UserId == userId, context.CancellationToken);
 
@@ -43,7 +42,6 @@ internal sealed class DemoUserCreatedConsumer(
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        // Application concern: seed domain aggregates via manager
         await demoSeedManager.SeedAsync(message.UserId, context.CancellationToken);
 
         db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserCreated), DateTime.UtcNow));
@@ -90,10 +88,8 @@ internal sealed class DemoUserExpiredConsumer(
 
         var userId = new UserId(message.UserId);
 
-        // Application concern: delete domain aggregates via manager
         await demoSeedManager.CleanupAsync(message.UserId, context.CancellationToken);
 
-        // Infrastructure concern: remove user projection
         var projection = await db.UserProjections
             .FirstOrDefaultAsync(u => u.UserId == userId, context.CancellationToken);
         if (projection is not null)

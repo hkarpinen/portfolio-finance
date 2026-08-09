@@ -3,11 +3,7 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// One line of a journal entry against one account. Stores a true <see cref="EntryDirection"/>
-/// (Debit/Credit) and a positive <see cref="Money"/> amount — the direction carries the sign,
-/// matching how an accountant reads the books rather than hiding everything behind a signed number.
-/// </summary>
+/// <summary>The DIRECTION carries the sign; the amount is always positive.</summary>
 public sealed class Posting
 {
     public PostingId Id { get; private set; }
@@ -32,10 +28,8 @@ public sealed class Posting
 }
 
 /// <summary>
-/// The book of original entry: one economic event posted to one ledger as a set of
-/// balanced postings. The consistency boundary for double-entry (P2) — an entry cannot
-/// exist unless Σ debits == Σ credits. Immutable once posted (P4): corrections are
-/// <see cref="Reverse"/> entries (mirror the debits/credits) referencing the original.
+/// An entry cannot exist unless Σ debits == Σ credits, and is immutable once posted —
+/// corrections are mirror entries referencing the original, never edits.
 /// </summary>
 public sealed class JournalEntry : IAggregateRoot
 {
@@ -50,16 +44,13 @@ public sealed class JournalEntry : IAggregateRoot
     public DateTime RecordedAt { get; private set; }    // booking date — when entered into the system
     public JournalEntryId? ReversalOfEntryId { get; private set; }
 
-    // Set on THIS entry when it is reversed (points at the reversing entry). Together with
-    // ReversalOfEntryId this makes "active" a declared state — an entry is in effect iff it is
-    // neither a reversal nor itself reversed — instead of a derived reversal-pair scan, and lets a
-    // partial unique index forbid a second active posting under the same source.
+    // Makes "active" a DECLARED state — in effect iff neither a reversal nor itself
+    // reversed — so a partial unique index can forbid a second active posting per source.
     public Guid? ReversedByEntryId { get; private set; }
 
-    // Structured source provenance (P9, §11.4) — nullable, opaque to the ledger. Lets read
-    // models attribute an entry back to its originating (charge, allocation, occurrence, member)
-    // by column rather than by parsing the free-text Source. Set on settlement entries; charge
-    // postings carry only SourceChargeId.
+    // Opaque to the ledger. Lets a read model attribute an entry by column instead of
+    // parsing the free-text Source. Settlement entries set all of these; charge postings
+    // carry only SourceChargeId.
     public Guid? SourceChargeId { get; private set; }
     public Guid? SourceAllocationId { get; private set; }
     public DateTime? SourceOccurrence { get; private set; }

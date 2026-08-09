@@ -1,14 +1,10 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Money value object — a <em>signed</em> monetary amount in a currency (the classic
-/// Money pattern). Sign is meaningful: balances go negative, refunds and ledger
-/// contra/reversing entries are negative, and bank inflows are negative (Plaid
-/// convention — see <c>FinancialTransaction.IsInflow</c>). Non-negativity is NOT an
-/// intrinsic property of money; it is a context-specific invariant enforced by the
-/// aggregates where it actually holds (<c>Charge</c>, <c>Allocation</c> and
-/// <c>IncomeSource</c> each guard <c>amount &lt; 0</c> in their own factories).
-/// </summary>
+// A SIGNED monetary amount. The sign is meaningful: balances go negative, refunds and ledger
+// contra/reversing entries are negative, and bank inflows are negative (the provider's
+// convention). Non-negativity is NOT an intrinsic property of money — it is a context-specific
+// invariant, enforced by the aggregates where it actually holds (Charge, Allocation and
+// IncomeSource each guard amount < 0 in their own factories).
 public readonly record struct Money
 {
     public decimal Amount { get; }
@@ -26,7 +22,6 @@ public readonly record struct Money
         Currency = currency.ToUpperInvariant();
     }
 
-    /// <summary>The additive inverse — the contra amount for a reversing ledger entry.</summary>
     public Money Negate() => new(-Amount, Currency);
 
     public static Money Create(decimal amount, string currency) => new(amount, currency);

@@ -6,11 +6,8 @@ using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
-/// <summary>
-/// Proves the per-charge funding model reaches the ledger: a settlement (and a vendor payment)
-/// posts against the funding account the charge's <see cref="FundingSource"/> dictates —
-/// PayerMember → the payer's Member account, GroupCash → the shared Cash pool.
-/// </summary>
+// A settlement (and a vendor payment) posts against the funding account the charge's FundingSource
+// dictates: PayerMember → the payer's Member account, GroupCash → the shared Cash pool.
 public class BookkeepingManagerTests
 {
     private static readonly Guid Group = Guid.NewGuid();
@@ -22,9 +19,8 @@ public class BookkeepingManagerTests
     private static BookkeepingManager NewManager(out FakeLedgerRepository repo)
     {
         repo = new FakeLedgerRepository();
-        // These tests exercise the direct ledger-posting methods (RecordSettlementAsync /
-        // RecordVendorPaymentAsync), which never touch the charge/allocation repos — those are only
-        // used by the Converge*/*FromEvent convergence wrappers. Stubs are sufficient here.
+        // The direct ledger-posting methods never touch the charge/allocation repos — only the convergence
+        // wrappers do — so the nulls below are never dereferenced.
         return new BookkeepingManager(repo, new CashBasisJournalizingEngine(), null!, null!);
     }
 
@@ -96,8 +92,6 @@ public class BookkeepingManagerTests
             poolRepo.CodeOf(poolEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
-    /// <summary>Minimal in-memory <see cref="ILedgerRepository"/> — enough to exercise the
-    /// bookkeeping workflow (ensure ledger/accounts, post entries, idempotency by source).</summary>
     private sealed class FakeLedgerRepository : ILedgerRepository
     {
         private readonly List<Ledger> _ledgers = new();

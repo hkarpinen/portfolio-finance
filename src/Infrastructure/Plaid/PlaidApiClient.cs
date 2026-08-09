@@ -6,14 +6,8 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Plaid;
 
-/// <summary>
-/// HttpClient-based Plaid REST client. We deliberately avoid the official
-/// <c>Going.Plaid</c> SDK to keep deployment surface small and to give the team
-/// full control over retry / timeout policies.
-///
-/// All requests authenticate via the <c>client_id</c> + <c>secret</c> body fields
-/// Plaid expects (Plaid does not use Authorization headers).
-/// </summary>
+// Every request authenticates via the client_id + secret BODY fields Plaid expects; Plaid does
+// not use Authorization headers.
 internal sealed class PlaidApiClient : IBankDataProvider
 {
     private readonly HttpClient _http;
@@ -32,8 +26,6 @@ internal sealed class PlaidApiClient : IBankDataProvider
         _options = options.Value;
         _http.BaseAddress = new Uri(_options.BaseUrl);
     }
-
-    // ── Link token ──────────────────────────────────────────────────────────
 
     public async Task<BankLinkToken> CreateLinkTokenAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -54,8 +46,6 @@ internal sealed class PlaidApiClient : IBankDataProvider
         return new BankLinkToken(token, expiration);
     }
 
-    // ── Public token exchange ───────────────────────────────────────────────
-
     public async Task<BankConnectionCredentials> ExchangePublicTokenAsync(string publicToken, CancellationToken cancellationToken = default)
     {
         var body = new { client_id = _options.ClientId, secret = _options.Secret, public_token = publicToken };
@@ -64,8 +54,6 @@ internal sealed class PlaidApiClient : IBankDataProvider
             raw.GetProperty("access_token").GetString()!,
             raw.GetProperty("item_id").GetString()!);
     }
-
-    // ── Accounts ────────────────────────────────────────────────────────────
 
     public async Task<ExternalAccountsResult> GetAccountsAsync(string accessToken, CancellationToken cancellationToken = default)
     {
@@ -98,11 +86,10 @@ internal sealed class PlaidApiClient : IBankDataProvider
         return new ExternalAccountsResult(accounts);
     }
 
-    // ── Transactions sync (cursor-based) ────────────────────────────────────
 
     public async Task<TransactionSyncPage> SyncTransactionsAsync(string accessToken, string? cursor, CancellationToken cancellationToken = default)
     {
-        // Plaid expects an empty cursor on first call; null is rejected.
+        // Plaid expects an empty cursor on the first call; null is rejected.
         var body = new
         {
             client_id = _options.ClientId,
@@ -124,8 +111,6 @@ internal sealed class PlaidApiClient : IBankDataProvider
         return new TransactionSyncPage(added, modified, removed, nextCursor, hasMore);
     }
 
-    // ── Recurring transactions ──────────────────────────────────────────────
-
     public async Task<RecurringStreamsResult> GetRecurringTransactionsAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         var body = new { client_id = _options.ClientId, secret = _options.Secret, access_token = accessToken };
@@ -142,15 +127,11 @@ internal sealed class PlaidApiClient : IBankDataProvider
         return new RecurringStreamsResult(inflow, outflow);
     }
 
-    // ── Item removal ────────────────────────────────────────────────────────
-
     public async Task RemoveItemAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         var body = new { client_id = _options.ClientId, secret = _options.Secret, access_token = accessToken };
         await PostAsync("/item/remove", body, cancellationToken);
     }
-
-    // ── Internals ───────────────────────────────────────────────────────────
 
     private async Task<JsonElement> PostAsync(string path, object body, CancellationToken cancellationToken)
     {
@@ -218,8 +199,6 @@ internal sealed class PlaidApiClient : IBankDataProvider
             s.GetProperty("last_date").GetDateTime(),
             s.TryGetProperty("predicted_next_date", out var pnd) && pnd.ValueKind != JsonValueKind.Null
                 ? pnd.GetDateTime() : null,
-            // Plaid uses `is_active` plus `status`. We treat the stream as active when
-            // `is_active==true` AND status is `MATURE` or `EARLY_DETECTION`.
             s.TryGetProperty("is_active", out var ia) && ia.GetBoolean());
     }
 

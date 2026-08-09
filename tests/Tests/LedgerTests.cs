@@ -4,11 +4,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
-/// <summary>
-/// Proves the accounting engine in isolation — the invariants a domain expert holds us to:
-/// double-entry balance (P2), normal-balance orientation (P3), immutable reversing entries
-/// (P4), trial balance (P5), conservation (P6).
-/// </summary>
 public class LedgerTests
 {
     private static readonly LedgerId L = LedgerId.New();
@@ -16,8 +11,6 @@ public class LedgerTests
     private static readonly AccountId MemberHank = AccountId.New();
     private static readonly AccountId MemberBob = AccountId.New();
     private static Money Usd(decimal a) => Money.Create(a, "USD");
-
-    // ── P3: normal balances ──────────────────────────────────────────────────
 
     [Theory]
     [InlineData(AccountType.Asset, NormalBalance.Debit)]
@@ -30,8 +23,6 @@ public class LedgerTests
         Assert.Equal(expected, type.NormalBalance());
         Assert.Equal(expected, Account.Open(L, "1000", "x", type).NormalBalance);
     }
-
-    // ── P2: double-entry balance ─────────────────────────────────────────────
 
     [Fact]
     public void Post_BalancedEntry_Succeeds()
@@ -89,8 +80,6 @@ public class LedgerTests
             }));
     }
 
-    // ── P3: account balance orientation ──────────────────────────────────────
-
     [Fact]
     public void AccountBalance_DebitNormal_Asset()
     {
@@ -108,8 +97,8 @@ public class LedgerTests
     [Fact]
     public void AccountBalance_CreditNormal_Equity_PositiveWhenNetCredited()
     {
-        // Hank (equity, credit-normal): +700 contributed, −700 consumed his share, then
-        // the group still owes him for fronting nothing here → exactly 0 after one cycle.
+        // Hank (equity, credit-normal): +700 contributed, −700 consumed as his share → exactly 0 after
+        // one full cycle.
         var entries = new[]
         {
             JournalEntry.Post(L, DateTime.UtcNow, "in",  new[] { PostingLine.Debit(Cash, Usd(700)), PostingLine.Credit(MemberHank, Usd(700)) }),
@@ -122,8 +111,6 @@ public class LedgerTests
         var contributedOnly = entries[0].Postings.Where(p => p.AccountId == MemberHank);
         Assert.Equal(700m, LedgerMath.AccountBalance(NormalBalance.Credit, contributedOnly));
     }
-
-    // ── P5 + P6: trial balance / conservation across the canonical scenario ───
 
     [Fact]
     public void PooledScenario_TrialBalances_AndConserves()
@@ -147,13 +134,10 @@ public class LedgerTests
         Assert.Equal(2000m, credits);
         Assert.True(LedgerMath.IsBalanced(all));
 
-        // Every account nets to zero after a full cycle.
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, all.Where(p => p.AccountId == Cash)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberHank)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberBob)));
     }
-
-    // ── P4: reversing entry ──────────────────────────────────────────────────
 
     [Fact]
     public void Reverse_MirrorsPostings_AndNetsToZero()
@@ -170,11 +154,9 @@ public class LedgerTests
         Assert.True(LedgerMath.IsBalanced(reversal.Postings));
         Assert.IsType<JournalEntryReversed>(reversal.GetDomainEvents()[0]);
 
-        // Direction flipped on each account.
         var revBob = reversal.Postings.Single(p => p.AccountId == MemberBob);
         Assert.Equal(EntryDirection.Credit, revBob.Direction);
 
-        // Original + reversal net to zero on every account.
         var both = original.Postings.Concat(reversal.Postings).ToList();
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberHank)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberBob)));
@@ -218,8 +200,8 @@ public class LedgerTests
         });
         original.Reverse(DateTime.UtcNow);
 
-        // The original now carries ReversedByEntryId — reversing it again must be rejected so the
-        // partial unique index can never see two active postings under one source.
+        // The original now carries ReversedByEntryId — reversing it again must be rejected so the partial
+        // unique index can never see two active postings under one source.
         Assert.Throws<InvalidOperationException>(() => original.Reverse(DateTime.UtcNow));
     }
 }

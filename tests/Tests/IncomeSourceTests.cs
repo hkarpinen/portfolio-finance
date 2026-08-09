@@ -19,15 +19,12 @@ public class IncomeSourceTests
     [Fact]
     public void Create_ShouldSetProperties()
     {
-        // Arrange
         var userId = UserId.New();
         var amount = Money.Create(2500m, "USD");
         var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
 
-        // Act
         var income = IncomeSource.Create(userId, amount, "Contracting", schedule);
 
-        // Assert
         Assert.Equal(userId, income.UserId);
         Assert.Equal(2500m, income.Amount.Amount);
         Assert.Equal("Contracting", income.Source);
@@ -53,15 +50,12 @@ public class IncomeSourceTests
     [Fact]
     public void Update_ShouldChangeAmountSourceAndSchedule()
     {
-        // Arrange
         var income = CreateIncome();
         income.ClearDomainEvents();
         var newSchedule = RecurrenceSchedule.Create(RecurrenceFrequency.Weekly, new DateTime(2024, 6, 1));
 
-        // Act
         income.Update(Money.Create(3000m, "USD"), "NewSource", newSchedule);
 
-        // Assert
         Assert.Equal(3000m, income.Amount.Amount);
         Assert.Equal("NewSource", income.Source);
         Assert.Equal(RecurrenceFrequency.Weekly, income.RecurrenceSchedule.Frequency);

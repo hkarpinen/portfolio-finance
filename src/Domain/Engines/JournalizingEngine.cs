@@ -3,12 +3,8 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Engines;
 
 /// <summary>
-/// Turns a business event (a household expense allocation, a reimbursement) into balanced
-/// journal-entry drafts.
-/// Change driver: the accounting policy — the recognition basis (cash vs accrual) and the
-/// debit/credit structure for the domain's events. Swapping the basis swaps this engine
-/// without touching the orchestrating manager. Pure: performs no I/O; account ids are
-/// resolved by the caller.
+/// Turns a business event into balanced journal-entry drafts. Pure — no I/O, and
+/// account ids are resolved by the caller.
 /// </summary>
 public interface IJournalizingEngine
 {
@@ -20,10 +16,9 @@ public interface IJournalizingEngine
     IReadOnlyList<JournalEntryDraft> JournalizeCharge(ChargeAllocationContext context);
 
     /// <summary>
-    /// Journalize a charge on an ACCRUAL basis: the cost is incurred and owed to the vendor, but
-    /// not yet funded. Postconditions: every draft is balanced; after posting, Vendor Payable
-    /// equals the total owed to the vendor and each member's account reflects the share they bear.
-    /// Funding (who actually pays the vendor) is recorded later via <see cref="JournalizeTransfer"/>.
+    /// ACCRUAL basis: incurred and owed, but not yet funded. Postconditions — every draft
+    /// balances; Vendor Payable equals the total owed; each member's account reflects the
+    /// share they bear. Who actually pays the vendor is a later transfer.
     /// </summary>
     IReadOnlyList<JournalEntryDraft> JournalizeAccrual(AccrualContext context);
 
@@ -33,9 +28,8 @@ public interface IJournalizingEngine
 }
 
 /// <summary>
-/// Cash-basis policy (v1). An expense becomes two balanced entries — the cost incurred and
-/// funded by the payer, then the cost borne by members per share — so member equity reflects
-/// who fronted vs who consumed, and the nominal expense account records the cost.
+/// Cash basis: two balanced entries, so member equity separates who FRONTED a cost from
+/// who BORE it.
 /// </summary>
 internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
 {

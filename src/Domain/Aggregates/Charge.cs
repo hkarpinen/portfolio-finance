@@ -3,10 +3,7 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Charge aggregate root representing either a personal expense (GroupId is
-/// null) or a household shared expense (GroupId is set, CreatedBy is the author).
-/// </summary>
+/// <summary>GroupId discriminates: null is personal, set is shared.</summary>
 public class Charge : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
@@ -14,25 +11,16 @@ public class Charge : IAggregateRoot
     public ChargeId Id { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>Non-null for group (shared) expenses; null for personal expenses.</summary>
     public GroupId? GroupId { get; private set; }
 
-    /// <summary>The member who created the household expense. Null for personal expenses.</summary>
     public UserId? CreatedBy { get; private set; }
 
-    /// <summary>
-    /// Identity userId of the person who paid (fronted) the bill. Distinct from CreatedBy: the
-    /// creator of the expense and the payer can differ. Finance keys actors on the person, not the
-    /// household membership. Null for personal expenses.
-    /// </summary>
+    /// <summary>Who FRONTED the bill — not necessarily who created it.</summary>
     public Guid? PayerUserId { get; private set; }
 
     /// <summary>
-    /// Which account funds the vendor payment for this group charge (ledger-design.md §11.1).
-    /// <see cref="FundingSource.PayerMember"/> = the payer fronts it (debtors repay the payer);
-    /// <see cref="FundingSource.GroupCash"/> = paid from the shared pool (every member, the payer
-    /// included, settles reversibly). Defaults to <see cref="FundingSource.PayerMember"/> and is
-    /// meaningless for personal expenses.
+    /// PayerMember: the payer fronts it and debtors repay them. GroupCash: paid from the
+    /// pool, and EVERY member settles — the payer included. Meaningless when personal.
     /// </summary>
     public FundingSource FundingSource { get; private set; }
 
@@ -97,7 +85,7 @@ public class Charge : IAggregateRoot
         return expense;
     }
 
-    /// <summary>Creates a group shared expense (GroupId set, UserId = createdBy).</summary>
+    /// <summary>UserId is set to the CREATOR here, unlike a personal charge's owner.</summary>
     public static Charge CreateGroup(
         GroupId groupId,
         UserId createdBy,

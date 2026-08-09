@@ -1,10 +1,7 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// An input line for composing a <c>JournalEntry</c>: which account, which side,
-/// how much (always positive — the side carries the sign). Distinct from the
-/// persisted <c>Posting</c> entity, which additionally has identity.
-/// </summary>
+// Amount is ALWAYS positive — the direction carries the sign. Distinct from the persisted Posting
+// entity, which is the same data plus identity.
 public readonly record struct PostingLine(AccountId AccountId, EntryDirection Direction, Money Amount)
 {
     public static PostingLine Debit(AccountId account, Money amount) => new(account, EntryDirection.Debit, amount);

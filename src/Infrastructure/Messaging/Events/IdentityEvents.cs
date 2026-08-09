@@ -1,11 +1,8 @@
 // Wire contract for identity events consumed from RabbitMQ.
 //
-// MassTransit derives the AMQP exchange name from the .NET FQN
-// (`Namespace:TypeName`), so this namespace + each record name MUST exactly
-// match what the identity service publishes from `Domain.Events` — otherwise
-// the bindings end up on a different exchange and finance silently misses
-// every user-projection event. Mirrors the same wire-contract file in the
-// household and forum services.
+// MassTransit derives the AMQP exchange name from the .NET FQN (`Namespace:TypeName`), so this
+// namespace and each record name MUST exactly match what the publisher declares — otherwise the
+// bindings land on a different exchange and every user-projection event is missed silently.
 namespace Domain.Events;
 
 public sealed record UserRegistered(

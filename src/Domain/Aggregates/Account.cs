@@ -3,14 +3,10 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// A single line in a ledger's chart of accounts — the atomic unit every posting
-/// hits. Typed (P3): <see cref="NormalBalance"/> is derived from <see cref="AccountType"/>,
-/// so increases/decreases map to debit/credit correctly. Hierarchical via
-/// <see cref="ParentAccountId"/> for rollups (a parent's balance = its own postings +
-/// its children). Balances are NEVER stored here — they are derived from postings,
-/// which keeps the account from drifting out of sync with the journal.
-/// </summary>
+// NormalBalance is derived from AccountType, never stored, so increases/decreases always map to
+// debit/credit correctly. ParentAccountId makes accounts hierarchical for rollups: a parent's
+// balance is its own postings plus its children's. Balances are never stored on the account —
+// always derived from postings, so an account cannot drift out of sync with the journal.
 public sealed class Account : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
@@ -24,7 +20,6 @@ public sealed class Account : IAggregateRoot
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
-    /// <summary>The side this account's balance normally sits on (derived, never stored redundantly).</summary>
     public NormalBalance NormalBalance => AccountType.NormalBalance();
 
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();

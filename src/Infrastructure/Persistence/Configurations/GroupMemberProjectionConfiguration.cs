@@ -10,7 +10,7 @@ internal sealed class GroupMemberProjectionConfiguration : IEntityTypeConfigurat
     {
         builder.ToTable("group_member_projections");
 
-        // One row per person per group — membership churn (leave, rejoin) mutates the row.
+        // One row per person per group: leaving and rejoining mutates the same row rather than adding one.
         builder.HasKey(m => new { m.GroupId, m.UserId });
 
         builder.Property(m => m.Role).HasMaxLength(50).IsRequired();

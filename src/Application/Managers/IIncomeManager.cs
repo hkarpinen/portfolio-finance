@@ -10,8 +10,6 @@ public interface IIncomeManager
     Task<IncomeDto?> DeleteAsync(DeleteIncomeCommand request, CancellationToken cancellationToken = default);
     Task<IncomeDto?> DeactivateAsync(DeactivateIncomeCommand request, CancellationToken cancellationToken = default);
 
-    // ── Payroll deductions ───────────────────────────────────────────────────
-
     Task<IncomeDto?> SetTaxProfileAsync(SetTaxProfileCommand request, CancellationToken cancellationToken = default);
     Task<IncomeDto?> AddDeductionAsync(AddDeductionCommand request, CancellationToken cancellationToken = default);
     Task<IncomeDto?> RemoveDeductionAsync(RemoveDeductionCommand request, CancellationToken cancellationToken = default);

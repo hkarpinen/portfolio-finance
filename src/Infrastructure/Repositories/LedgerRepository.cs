@@ -47,7 +47,6 @@ internal sealed class LedgerRepository : ILedgerRepository
 
     public async Task<IReadOnlyList<Posting>> GetPostingsByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
     {
-        // Postings whose entry belongs to this ledger.
         var query =
             from p in _db.Postings.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id

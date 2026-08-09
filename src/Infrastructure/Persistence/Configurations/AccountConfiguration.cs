@@ -31,7 +31,6 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.IsActive).IsRequired();
         builder.Property(a => a.CreatedAt).IsRequired();
 
-        // NormalBalance is derived (AccountType) — not stored.
         builder.Ignore(a => a.NormalBalance);
 
         builder.HasIndex(a => a.LedgerId);

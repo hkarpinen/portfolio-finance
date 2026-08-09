@@ -3,11 +3,8 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Infrastructure.Plaid;
 
-/// <summary>
-/// Wraps ASP.NET Data Protection to encrypt Plaid <c>access_token</c>s at rest.
-/// We use a named purpose so rotating the protector for other secrets does not
-/// invalidate every linked bank account.
-/// </summary>
+// The named purpose matters: rotating the protector for other secrets must not invalidate every
+// linked bank account.
 internal sealed class AccessTokenProtector : IConnectionTokenProtector
 {
     private const string Purpose = "Finance.Plaid.AccessToken.v1";

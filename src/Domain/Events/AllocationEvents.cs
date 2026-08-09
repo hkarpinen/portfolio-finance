@@ -20,12 +20,9 @@ public record AllocationRemoved(
     ChargeId ChargeId,
     GroupId GroupId) : DomainEvent;
 
-// ── Settlement events ──────────────────────────────────────────────────────
-// A settlement is a member (FromUserId, the debtor) settling their share into the
-// funding account that fronted the bill (ToUserId, the payer). It lives as one journal
-// entry in the group ledger; these events let consumers (e.g. household's activity feed)
-// observe it. Reversal is a contra journal entry. Cross-service consumers declare matching
-// types in Finance.Domain.Events — see memory finance-publishes-domain-events-directly.
+// A settlement is the member FromUserId (the debtor) settling their share into the funding account
+// that fronted the bill, held by ToUserId (the payer). It is one journal entry in the group ledger;
+// a reversal is a contra entry.
 
 public record SettlementRecorded(
     AllocationId AllocationId,

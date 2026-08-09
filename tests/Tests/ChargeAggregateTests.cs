@@ -8,8 +8,6 @@ public class ChargeAggregateTests
     private static UserId NewUser() => UserId.Create(Guid.NewGuid());
     private static Money Usd(decimal amount) => Money.Create(amount, "USD");
 
-    // ── Create (personal) ────────────────────────────────────────────────────
-
     [Fact]
     public void Create_ValidPersonalCharge_SetsProperties()
     {
@@ -50,8 +48,6 @@ public class ChargeAggregateTests
             Charge.Create(NewUser(), "Bad", Usd(-1m), ChargeCategory.Other, DateTime.UtcNow));
     }
 
-    // ── CreateGroup ──────────────────────────────────────────────────────
-
     [Fact]
     public void CreateGroup_SetsGroupIdAndCreatedBy()
     {
@@ -87,8 +83,6 @@ public class ChargeAggregateTests
         Assert.Equal(FundingSource.GroupCash, expense.FundingSource);
     }
 
-    // ── Update ───────────────────────────────────────────────────────────────
-
     [Fact]
     public void Update_ChangesProperties()
     {
@@ -109,8 +103,6 @@ public class ChargeAggregateTests
         Assert.Throws<ArgumentException>(() =>
             expense.Update("", Usd(10m), ChargeCategory.Other, DateTime.UtcNow));
     }
-
-    // ── Deactivate / Activate ────────────────────────────────────────────────
 
     [Fact]
     public void Deactivate_SetsIsActiveFalse()

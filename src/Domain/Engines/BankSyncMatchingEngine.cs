@@ -3,11 +3,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
 
-/// <summary>
-/// Determines whether a synced bank outflow amount matches a linked recurring
-/// suggestion well enough to auto-pay the associated expense.
-/// Change driver: auto-pay tolerance rules and matching strategy.
-/// </summary>
 public interface IBankSyncMatchingEngine
 {
     bool IsMatch(RecurringSuggestion suggestion, Guid accountId, decimal transactionAmount);
@@ -16,10 +11,7 @@ public interface IBankSyncMatchingEngine
 
 internal sealed class BankSyncMatchingEngine : IBankSyncMatchingEngine
 {
-    /// <summary>
-    /// A transaction is considered a match when it is for the same account and
-    /// its amount is within 5 % of the suggestion's average amount.
-    /// </summary>
+    // A match is the same account AND an amount within this fraction of the suggestion's average.
     private const decimal ToleranceRate = 0.05m;
 
     public bool IsMatch(RecurringSuggestion suggestion, Guid accountId, decimal transactionAmount)

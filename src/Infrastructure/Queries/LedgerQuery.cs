@@ -53,7 +53,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .FirstOrDefaultAsync(a => a.LedgerId == ledger.Id && a.Id == accId, ct);
         if (account is null) return null;
 
-        // Postings on this account with their entry (date/description/source), oldest first.
+        // Oldest first — the running balance below depends on it.
         var rows = await (
             from p in _db.Postings.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
@@ -66,8 +66,8 @@ internal sealed class LedgerQuery : ILedgerQuery
         var lines = new List<StatementLineDto>(rows.Count);
         foreach (var r in rows)
         {
-            // Per-posting contribution to the oriented balance: a debit raises a debit-normal
-            // account and lowers a credit-normal one (and vice-versa).
+            // Per-posting contribution to the oriented balance: a debit raises a debit-normal account and
+            // lowers a credit-normal one, and vice-versa.
             var signed = r.Posting.Direction == EntryDirection.Debit
                 ? r.Posting.Amount.Amount
                 : -r.Posting.Amount.Amount;
@@ -89,8 +89,8 @@ internal sealed class LedgerQuery : ILedgerQuery
     {
         var memberCode = GroupChart.MemberCode(userId);
 
-        // Every Member:{userId} account across GROUP ledgers, with its postings + the group's id/currency.
-        // The user's cross-group position is the reciprocal of these — recorded once here, not double-posted.
+        // The user's cross-group position is the RECIPROCAL of these member-equity balances — recorded
+        // once, in the group ledger, never double-posted into a second book.
         var rows = await (
             from p in _db.Postings.AsNoTracking()
             join a in _db.Accounts.AsNoTracking() on p.AccountId equals a.Id

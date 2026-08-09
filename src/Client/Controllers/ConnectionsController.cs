@@ -35,7 +35,7 @@ public sealed class ConnectionsController : ControllerBase
         _webhookVerifier = webhookVerifier;
     }
 
-    /// <summary>Issues a single-use bank-link token. The SPA passes this straight to Plaid Link.</summary>
+    // The link token is single-use.
     [HttpPost("link-token")]
     public async Task<IActionResult> CreateLinkToken(CancellationToken ct)
     {
@@ -44,11 +44,7 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Receives the short-lived token from the bank-link flow's <c>onSuccess</c> callback,
-    /// exchanges it for a long-lived credential, and persists the linked connection.
-    /// Idempotent: re-linking the same institution overwrites the prior credential.
-    /// </summary>
+    // Idempotent: re-linking the same institution overwrites the prior credential.
     [HttpPost("exchange")]
     public async Task<IActionResult> Exchange([FromBody] LinkConnectionCommand request, CancellationToken ct)
     {
@@ -57,7 +53,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>List of every linked institution + accounts for the current user.</summary>
     [HttpGet]
     public async Task<IActionResult> ListConnections(CancellationToken ct)
     {
@@ -66,7 +61,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Manual trigger for a cursor-based incremental sync of a single linked connection.</summary>
     [HttpPost("{connectionId:guid}/sync")]
     public async Task<IActionResult> Sync(Guid connectionId, CancellationToken ct)
     {
@@ -75,7 +69,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Paginated listing of synced bank transactions for one linked connection.</summary>
     [HttpGet("{connectionId:guid}/transactions")]
     public async Task<IActionResult> ListTransactions(
         Guid connectionId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
@@ -86,7 +79,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Re-runs recurring-stream detection and refreshes suggested bills/deposits.</summary>
     [HttpPost("{connectionId:guid}/suggestions/refresh")]
     public async Task<IActionResult> RefreshSuggestions(Guid connectionId, CancellationToken ct)
     {
@@ -96,7 +88,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Lists every detected recurring suggestion (across all linked connections).</summary>
     [HttpGet("suggestions")]
     public async Task<IActionResult> ListSuggestions(CancellationToken ct)
     {
@@ -105,10 +96,7 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Promotes a detected suggestion to a tracked <c>IncomeSource</c> (inflow)
-    /// or <c>Charge</c> (outflow). Idempotent — calling twice returns the same linked entity.
-    /// </summary>
+    // Idempotent — calling twice returns the same linked entity.
     [HttpPost("suggestions/{suggestionId:guid}/accept")]
     public async Task<IActionResult> AcceptSuggestion(Guid suggestionId, CancellationToken ct)
     {
@@ -118,7 +106,7 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Removes a linked institution. Best-effort calls the provider's remove endpoint.</summary>
+    // The provider's remove endpoint is called best-effort; a failure there does not block removal.
     [HttpDelete("{connectionId:guid}")]
     public async Task<IActionResult> Disconnect(Guid connectionId, CancellationToken ct)
     {
@@ -127,9 +115,6 @@ public sealed class ConnectionsController : ControllerBase
         return NoContent();
     }
 
-    // ── Account balance ───────────────────────────────────────────────────────
-
-    /// <summary>Returns the summed available balance across all linked depository accounts.</summary>
     [HttpGet("balance")]
     public async Task<IActionResult> GetBalance(CancellationToken ct)
     {
@@ -138,9 +123,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    // ── Bank sync suggestions ─────────────────────────────────────────────────
-
-    /// <summary>Lists non-linked bank transactions as actionable suggestions.</summary>
     [HttpGet("bank-sync-suggestions")]
     public async Task<IActionResult> ListBankSyncSuggestions([FromQuery] bool includeDismissed = false, CancellationToken ct = default)
     {
@@ -149,7 +131,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Accepts a suggestion, creating a pre-filled Charge or IncomeSource.</summary>
     [HttpPost("bank-sync-suggestions/{suggestionId:guid}/accept")]
     public async Task<IActionResult> AcceptBankSyncSuggestion(Guid suggestionId, [FromBody] AcceptBankSyncSuggestionBody body, CancellationToken ct = default)
     {

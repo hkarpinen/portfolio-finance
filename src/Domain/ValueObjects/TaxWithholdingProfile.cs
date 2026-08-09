@@ -1,22 +1,15 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Captures the information needed to estimate federal and state income tax withholding
-/// for a given income source. Owned by <see cref="Finance.Domain.Aggregates.IncomeSource"/>.
-/// </summary>
 public sealed class TaxWithholdingProfile
 {
     public FilingStatus FilingStatus { get; private set; }
 
-    /// <summary>
-    /// Two-letter state code (e.g. "CA", "NY"). Empty string or "NONE" means no state income tax applies.
-    /// </summary>
+    // Two-letter state code. Empty string or "NONE" means no state income tax applies.
     public string StateCode { get; private set; } = string.Empty;
 
-    /// <summary>Number of federal withholding allowances claimed (each reduces annual taxable income by ~$4,300).</summary>
+    // Each allowance reduces annual taxable income by ~$4,300.
     public int FederalAllowances { get; private set; }
 
-    /// <summary>Number of state withholding allowances claimed.</summary>
     public int StateAllowances { get; private set; }
 
     // Required by EF Core — do not use directly.

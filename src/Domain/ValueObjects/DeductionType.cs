@@ -1,21 +1,16 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Categorises a payroll deduction line item.
-/// Tax types (Federal/State/FICA) are computed by the PayrollDeductionEngine from
-/// the income source's TaxWithholdingProfile.
-/// Voluntary types are stored on the aggregate and computed from their declared method/value.
-/// </summary>
+// Tax types (Federal/State/FICA) are never stored — the payroll engine computes them from the
+// income source's withholding profile. Voluntary types ARE stored on the aggregate and computed
+// from their declared method/value.
 public enum DeductionType
 {
-    // Note: IsPreTax() extension below is the single source of truth for pre-tax classification.
-    // ── Tax withholding (engine-computed) ───────────────────────────────────
+    // IsPreTax() below is the single source of truth for pre-tax classification.
     FederalIncomeTax,
     StateIncomeTax,
     SocialSecurity,
     Medicare,
 
-    // ── Employer-sponsored / voluntary benefits ─────────────────────────────
     HealthInsurance,
     DentalInsurance,
     VisionInsurance,
@@ -30,10 +25,8 @@ public enum DeductionType
 
 public static class DeductionTypeExtensions
 {
-    /// <summary>
-    /// Returns true when the deduction type reduces federal/state taxable wages (W-2 Box 1)
-    /// before income-tax brackets are applied (§125 cafeteria plan, §401(a), §106/125 HSA/FSA).
-    /// </summary>
+    // True when the type reduces federal/state taxable wages (W-2 Box 1) before income-tax brackets
+    // are applied — §125 cafeteria plan, §401(a), §106/125 HSA/FSA.
     public static bool IsPreTax(this DeductionType type) => type switch
     {
         DeductionType.Retirement401k  => true,   // §401(a) traditional 401(k)

@@ -1,8 +1,5 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Recurrence frequency enumeration.
-/// </summary>
 public enum RecurrenceFrequency
 {
     Daily = 0,
@@ -16,10 +13,6 @@ public enum RecurrenceFrequency
 
 public static class RecurrenceFrequencyExtensions
 {
-    /// <summary>
-    /// Returns the multiplier to convert one period's amount into a monthly equivalent.
-    /// e.g. Weekly → amount × (52/12); Annually → amount / 12.
-    /// </summary>
     public static decimal ToMonthlyFactor(this RecurrenceFrequency frequency) => frequency switch
     {
         RecurrenceFrequency.Daily        => 365m / 12m,
@@ -32,10 +25,6 @@ public static class RecurrenceFrequencyExtensions
         _                                => throw new InvalidOperationException($"Unknown frequency: {frequency}"),
     };
 
-    /// <summary>
-    /// How many times this frequency occurs in a standard year.
-    /// Used to convert between an "amount per [period]" and the per-paycheck amount.
-    /// </summary>
     public static decimal PeriodsPerYear(this RecurrenceFrequency frequency) => frequency switch
     {
         RecurrenceFrequency.Daily        => 365m,

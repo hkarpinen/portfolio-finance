@@ -30,7 +30,6 @@ internal sealed class BankSyncSuggestionConfiguration : IEntityTypeConfiguration
         builder.Property(s => s.TransactionDate).IsRequired();
         builder.Property(s => s.LinkedEntityType).HasMaxLength(100);
 
-        // One suggestion per transaction — prevents duplicates across syncs.
         builder.HasIndex(s => s.ExternalTransactionId).IsUnique();
         builder.HasIndex(s => new { s.UserId, s.Dismissed });
     }

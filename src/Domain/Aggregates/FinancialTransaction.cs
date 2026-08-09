@@ -2,14 +2,8 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.ReadModels;
 
-/// <summary>
-/// Application-layer data model for a single transaction synced from a linked financial institution.
-/// Identified by the immutable <see cref="ExternalTransactionId"/> which is the
-/// idempotency key for upserts across multiple sync calls.
-///
-/// Sign convention: the provider reports outflows as positive and inflows as negative.
-/// We preserve that via <see cref="IsInflow"/> for direction checks.
-/// </summary>
+// Sign convention: the provider reports outflows as POSITIVE and inflows as NEGATIVE, and that is
+// preserved as stored — IsInflow is the direction check, not the sign of Amount alone.
 public sealed class FinancialTransaction
 {
     public Guid Id { get; private set; }
@@ -17,7 +11,7 @@ public sealed class FinancialTransaction
     public Guid AccountId { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>Provider-issued stable transaction identifier. Globally unique; used as the idempotency key.</summary>
+    // Globally unique; the idempotency key for upserts across sync calls.
     public string ExternalTransactionId { get; private set; } = string.Empty;
 
     public Money Amount { get; private set; }

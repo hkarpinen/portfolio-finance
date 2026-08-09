@@ -102,7 +102,7 @@ try
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-    // Problem details for standardised error responses (RFC 7807)
+    // RFC 7807 problem details.
     builder.Services.AddProblemDetails(options =>
     {
         options.CustomizeProblemDetails = ctx =>
@@ -138,9 +138,8 @@ try
 
     var app = builder.Build();
 
-    // ProblemDetails-aware exception + status-code handling.
-    // The custom status-code mapping below is preserved by setting the status before
-    // re-throwing into the ProblemDetails middleware.
+    // The custom status-code mapping below survives only because the status is set BEFORE re-throwing
+    // into the ProblemDetails middleware.
     app.UseExceptionHandler(exceptionApp =>
     {
         exceptionApp.Run(async context =>

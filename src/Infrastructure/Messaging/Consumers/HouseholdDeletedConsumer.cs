@@ -7,18 +7,13 @@ using Npgsql;
 
 namespace Infrastructure.Messaging.Consumers;
 
-/// <summary>
-/// Tears down a group's finance state when its household is deleted (real deletion or demo expiry) —
-/// previously nothing ever closed a group ledger, so deleted/expired households left orphan books,
-/// accounts and member balances behind. Deletes the group's ledger graph (ledger → accounts →
-/// journal entries → postings), its member projections, and its charges/allocations.
-///
-/// Direct row deletion (not event-driven reversal) is acceptable HERE — and ONLY here — because the
-/// entire household graph is being destroyed: there is nothing left to reconcile the books against,
-/// so the usual "mutate financial state only via a domain event the LedgerPostingConsumer handles"
-/// rule does not apply. Household's events carry no event id, so dedup rides the transport MessageId;
-/// every delete is idempotent (a redelivery finds the rows already gone and no-ops).
-/// </summary>
+// Tears down a group's finance state when its household is deleted (real deletion or demo expiry).
+//
+// Direct row deletion (not event-driven reversal) is acceptable HERE — and ONLY here — because the
+// entire household graph is being destroyed: there is nothing left to reconcile the books against,
+// so the usual "mutate financial state only via a domain event" rule does not apply. These events
+// carry no event id, so dedup rides the transport MessageId; every delete is idempotent (a
+// redelivery finds the rows already gone and no-ops).
 internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
 {
     private readonly FinanceDbContext _db;
@@ -34,9 +29,8 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
 
         var groupId = context.Message.HouseholdId;
 
-        // 1. The group's ledger graph. Postings cascade from journal_entries
-        //    (fk_postings_journal_entries_entry_id, ON DELETE CASCADE), so deleting entries removes
-        //    their postings; accounts and the ledger row are then removed explicitly.
+        // Postings cascade from journal_entries (fk_postings_journal_entries_entry_id, ON DELETE CASCADE),
+        // so deleting entries removes their postings; accounts and the ledger row go explicitly.
         var ledger = await _db.Ledgers.FirstOrDefaultAsync(
             l => l.OwnerType == LedgerOwnerType.Group && l.OwnerId == groupId, ct);
         if (ledger is not null)
@@ -47,10 +41,8 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
             await _db.Ledgers.Where(l => l.Id == ledgerId).ExecuteDeleteAsync(ct);
         }
 
-        // 2. The group's member projections.
         await _db.GroupMemberProjections.Where(p => p.GroupId == groupId).ExecuteDeleteAsync(ct);
 
-        // 3. The group's charges and allocations — unreachable once the household is gone.
         var group = GroupId.Create(groupId);
         await _db.Allocations.Where(a => a.GroupId == group).ExecuteDeleteAsync(ct);
         await _db.Charges.Where(c => c.GroupId == group).ExecuteDeleteAsync(ct);

@@ -43,7 +43,6 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
             rs.Property(r => r.EndDate).HasColumnName("recurrence_end_date");
         });
 
-        // Optional tax withholding profile — columns are NULL when not configured.
         builder.OwnsOne(i => i.TaxProfile, tp =>
         {
             tp.Property(t => t.FilingStatus)
@@ -59,9 +58,8 @@ internal sealed class IncomeSourceConfiguration : IEntityTypeConfiguration<Incom
                 .HasColumnName("tax_state_allowances");
         });
 
-        // Voluntary deductions stored as a JSON array column.
-        // PropertyAccessMode.Field lets EF write directly to _deductions so the
-        // public IReadOnlyList<PayrollDeduction> Deductions wrapper stays read-only.
+        // PropertyAccessMode.Field lets EF write straight to _deductions, so the public Deductions wrapper
+        // can stay a read-only IReadOnlyList.
         builder.OwnsMany(i => i.Deductions, d =>
         {
             d.ToJson("deductions");

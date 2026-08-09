@@ -7,15 +7,11 @@ using Npgsql;
 
 namespace Infrastructure.Messaging.Consumers;
 
-/// <summary>
-/// Keeps finance's <see cref="GroupMemberProjection"/> in step with household membership —
-/// previously finance never learned that a member joined, left, was removed, or changed role.
-/// The projection is read-side only: a departing member's ledger accounts and balances stay on
-/// the books (debt does not vanish with departure); this just lets queries tell current members
-/// from departed ones and label allocations with real roles. Household's member events carry no
-/// event id (its DomainEvent base is an empty marker), so dedup rides the transport MessageId —
-/// and every handler is a state upsert, so redelivery is harmless regardless.
-/// </summary>
+// The projection is read-side only: a departing member's ledger accounts and balances stay on the
+// books (debt does not vanish with departure); this just lets queries tell current members from
+// departed ones and label allocations with real roles. These events carry no event id, so dedup
+// rides the transport MessageId — and every handler is a state upsert, so redelivery is harmless
+// either way.
 internal sealed class HouseholdMembershipConsumer :
     IConsumer<HouseholdMemberJoined>,
     IConsumer<HouseholdMemberLeft>,

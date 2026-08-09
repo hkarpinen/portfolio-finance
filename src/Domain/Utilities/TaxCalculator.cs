@@ -6,24 +6,14 @@ namespace Finance.Domain.Engines;
 /// Federal and state income tax withholding estimates.
 ///
 /// TAX YEAR
-/// ────────
 /// Federal constants and brackets: 2026 (IRS Rev. Proc. 2025-xx, inflation-adjusted).
 /// State figures: 2024–2025 per each state's revenue department. States that index
 /// their brackets annually may differ slightly; values should be reviewed each year.
 ///
-/// METHODOLOGY
-/// ───────────
-/// Federal withholding uses the IRS Pub. 15-T "Percentage Method for Automated Payroll":
-///   1. Annualise per-period gross:   annualGross = monthlyGross × 12
-///   2. Subtract standard deduction and withholding allowances → taxable income
-///   3. Apply progressive brackets via <see cref="ApplyBrackets"/>
-///   4. Divide annual tax by 12 to get the monthly withholding estimate
-///
-/// State withholding uses the same annualise → deduct → bracket approach,
-/// substituting each state's own standard deduction and rate table.
+/// Federal withholding follows IRS Pub. 15-T, "Percentage Method for Automated
+/// Payroll"; state withholding uses each state's own deduction and rate table.
 ///
 /// KNOWN LIMITATIONS
-/// ─────────────────
 /// • W-4 Step 3 (dependent/child credits) and Step 4b/4c (extra deductions/withholding)
 ///   are NOT modelled — these are the primary reason actual withholding may differ from
 ///   the computed liability estimate.
@@ -34,7 +24,7 @@ namespace Finance.Domain.Engines;
 /// </summary>
 public static class TaxCalculator
 {
-    // ── FICA rates (historically stable — no year variance) ─────────────────
+    // FICA rates (historically stable — no year variance)
     /// <summary>Employee share of Social Security. Employer also pays 6.2%; total OASDI rate is 12.4%.</summary>
     private const decimal SocialSecurityRate = 0.062m;
 
@@ -44,10 +34,8 @@ public static class TaxCalculator
     /// </summary>
     private const decimal MedicareRate = 0.0145m;
 
-    // ── Year-specific federal rules ───────────────────────────────────────────
     //
     // Federal constants change every year via IRS Rev. Proc. inflation adjustments.
-    // Add a new FederalRules entry each October when IRS publishes the following year's Rev. Proc.
     // Years outside the known range clamp to the nearest entry (≤2024 → Rules2024, >2026 → Rules2026).
     //
     // Sources:
@@ -65,7 +53,6 @@ public static class TaxCalculator
         (decimal Threshold, decimal Rate)[] MfjBrackets,
         (decimal Threshold, decimal Rate)[] HohBrackets)
     {
-        /// <summary>Returns the standard deduction for the given filing status.</summary>
         public decimal StandardDeduction(FilingStatus filingStatus) => filingStatus switch
         {
             FilingStatus.MarriedFilingJointly => MfjStdDed,
@@ -73,7 +60,6 @@ public static class TaxCalculator
             _                                 => SingleStdDed,
         };
 
-        /// <summary>Returns the bracket table for the given filing status.</summary>
         public (decimal Threshold, decimal Rate)[] Brackets(FilingStatus filingStatus) => filingStatus switch
         {
             FilingStatus.MarriedFilingJointly => MfjBrackets,
@@ -82,7 +68,7 @@ public static class TaxCalculator
         };
     }
 
-    // ── 2024 federal rules — IRS Rev. Proc. 2023-34 ──────────────────────────
+    // 2024 federal rules — IRS Rev. Proc. 2023-34
     private static readonly FederalRules Rules2024 = new(
         AllowanceValue:          4_300m,
         SocialSecurityWageBase: 168_600m,   // SSA Notice 2023
@@ -120,7 +106,7 @@ public static class TaxCalculator
             (      0m, 0.10m),   // 10 % on $0        – $16,550
         ]);
 
-    // ── 2025 federal rules — IRS Rev. Proc. 2024-40 ──────────────────────────
+    // 2025 federal rules — IRS Rev. Proc. 2024-40
     private static readonly FederalRules Rules2025 = new(
         AllowanceValue:          4_300m,
         SocialSecurityWageBase: 176_100m,   // SSA Notice 2024
@@ -158,7 +144,7 @@ public static class TaxCalculator
             (      0m, 0.10m),   // 10 % on $0        – $17,000
         ]);
 
-    // ── 2026 federal rules — IRS Rev. Proc. 2025-xx [ESTIMATE] ───────────────
+    // 2026 federal rules — IRS Rev. Proc. 2025-xx [ESTIMATE]
     // Rev. Proc. for tax year 2026 is typically published Oct/Nov 2025.
     // Amounts below are estimates; update when the official Rev. Proc. is published.
     private static readonly FederalRules Rules2026 = new(
@@ -199,9 +185,8 @@ public static class TaxCalculator
         ]);
 
     /// <summary>
-    /// Returns the federal rules for a given tax year.
-    /// Years ≤ 2024 use 2024 rules; years ≥ 2027 use the latest known rules.
-    /// Pass <c>0</c> to use the current calendar year.
+    /// Years ≤ 2024 clamp to 2024 rules; ≥ 2027 clamp to the latest known.
+    /// <c>0</c> means the current calendar year.
     /// </summary>
     private static FederalRules GetFederalRules(int year)
     {
@@ -214,14 +199,8 @@ public static class TaxCalculator
         };
     }
 
-    // ── Federal tax computation ───────────────────────────────────────────────
-
     /// <summary>
-    /// Estimates annual federal income tax using the Pub. 15-T Percentage Method.
-    ///
-    /// Steps:
-    ///   1. annualGross − standard deduction − (allowances × allowanceValue) − annualPreTaxDeductions
-    ///   2. Apply progressive brackets to the resulting taxable income.
+    /// Pub. 15-T Percentage Method.
     ///
     /// <paramref name="annualPreTaxDeductions"/> should be the annualised sum of deductions
     /// that reduce W-2 Box 1 taxable wages: Traditional 401(k), employer-sponsored
@@ -248,11 +227,8 @@ public static class TaxCalculator
         return ApplyBrackets(taxableIncome, rules.Brackets(profile.FilingStatus));
     }
 
-    // ── FICA ─────────────────────────────────────────────────────────────────
-
     /// <summary>
-    /// Employee Social Security (OASDI) withholding for one month.
-    /// Wages above the annual wage base are capped; we approximate by capping the monthly amount.
+    /// The annual wage base is approximated by capping the MONTHLY amount.
     /// Pass <paramref name="year"/> = 0 (default) to use the current calendar year's wage base.
     /// </summary>
     public static decimal ComputeMonthlySocialSecurity(decimal monthlyGross, int year = 0)
@@ -262,19 +238,15 @@ public static class TaxCalculator
         return Math.Round(Math.Min(monthlyGross, monthlyWageBase) * SocialSecurityRate, 2);
     }
 
-    /// <summary>Employee Medicare (HI) withholding for one month. No wage-base cap applies.</summary>
+    /// <summary>No wage-base cap applies, unlike Social Security.</summary>
     public static decimal ComputeMonthlyMedicare(decimal monthlyGross)
         => Math.Round(monthlyGross * MedicareRate, 2);
-
-    // ── State tax — entry point ───────────────────────────────────────────────
 
     /// <summary>States with no individual income tax — always return 0.</summary>
     private static readonly HashSet<string> NoTaxStates =
         ["AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"];
 
     /// <summary>
-    /// Estimates annual state income tax.
-    ///
     /// Most states conform to federal treatment of pre-tax deductions: Traditional 401(k),
     /// §125 health/dental/vision premiums, HSA, and FSA also reduce state taxable wages.
     /// Notable exceptions (PA, NJ) do NOT allow 401(k) pre-tax treatment — not yet modelled.
@@ -304,7 +276,6 @@ public static class TaxCalculator
         return StateTax(stateCode, taxableIncome, profile.FilingStatus);
     }
 
-    // ── State allowance / personal-exemption values ──────────────────────────
     // Dollar value of one state withholding allowance or personal exemption. States that
     // tie their value to the federal W-4 allowance ($4,300) are listed explicitly; states
     // that publish their own value override it; states using credits (not deductions)
@@ -340,7 +311,6 @@ public static class TaxCalculator
         _ => 0m,
     };
 
-    // ── State standard deductions ─────────────────────────────────────────────
     // Subtracted from annual gross before applying state rates, mirroring the federal approach.
     // States with no standard deduction (NJ, PA, IL, etc.) return 0.
     // "Federal-conforming" states match the 2026 federal amounts ($15,000 / $30,000).
@@ -351,7 +321,7 @@ public static class TaxCalculator
         bool mfj = filingStatus == FilingStatus.MarriedFilingJointly;
         return stateCode switch
         {
-            // ── Federal-conforming states (2026: $15,000 single / $30,000 MFJ) ──
+            // Federal-conforming states (2026: $15,000 single / $30,000 MFJ)
             "ID" => mfj ? 30_000m : 15_000m,   // ID conforms to federal (ID DOR)
             "AZ" => mfj ? 30_000m : 15_000m,   // AZ conforms to federal (ADOR)
             "CO" => mfj ? 30_000m : 15_000m,   // CO conforms to federal (CO DOR)
@@ -363,7 +333,7 @@ public static class TaxCalculator
             "VT" => mfj ? 30_000m : 15_000m,   // VT conforms to federal (VT DOR)
             "DC" => mfj ? 30_000m : 15_000m,   // DC conforms to federal (DC OTR)
 
-            // ── State-specific deductions (2024 values) ──────────────────────
+            // State-specific deductions (2024 values)
             "AL" => mfj ?  7_500m :  2_500m,   // AL DOR 2024
             "CA" => mfj ? 10_726m :  5_363m,   // CA FTB 2024 Schedule CA (540)
             "DE" =>                  3_250m,    // DE Division of Revenue 2024 (same single/MFJ)
@@ -382,7 +352,7 @@ public static class TaxCalculator
             "VA" => mfj ? 16_000m :  8_000m,   // VA DOR 2024
             "WI" => mfj ? 21_290m : 11_600m,   // WI DOR 2024 [approximate — sliding scale]
 
-            // ── States with no standard deduction ────────────────────────────
+            // States with no standard deduction
             "CT" => 0m,   // CT has no state standard deduction (CT DRS)
             "IL" => 0m,   // IL uses a personal exemption credit, not a deduction
             "IN" => 0m,   // IN uses a personal exemption, not a deduction
@@ -396,13 +366,11 @@ public static class TaxCalculator
         };
     }
 
-    // ── State tax rates ───────────────────────────────────────────────────────
     // taxableIncome here is already net of the state standard deduction (see ComputeAnnualStateTax).
 
     private static decimal StateTax(string stateCode, decimal taxableIncome, FilingStatus filingStatus)
         => stateCode switch
         {
-            // ══ Flat-rate states ══════════════════════════════════════════════
             // A single rate applies to all taxable income. Rates are 2024–2025.
 
             "AZ" => Flat(taxableIncome, 0.025m),    // 2.5 % flat (AZ DOR 2023+)
@@ -420,8 +388,7 @@ public static class TaxCalculator
             "PA" => Flat(taxableIncome, 0.0307m),   // 3.07 % flat (PA DOR)
             "UT" => Flat(taxableIncome, 0.0465m),   // 4.65 % flat (USTC 2024)
 
-            // ══ Bracket states ════════════════════════════════════════════════
-            // Full progressive bracket tables. See bracket methods below for sources.
+            // Full progressive bracket tables; sources cited per table below.
 
             "AL" => ApplyBrackets(taxableIncome, AlBrackets(filingStatus)),
             "CA" => ApplyBrackets(taxableIncome, CaBrackets(filingStatus)),
@@ -444,9 +411,8 @@ public static class TaxCalculator
             "VT" => ApplyBrackets(taxableIncome, VtBrackets(filingStatus)),
             "WI" => ApplyBrackets(taxableIncome, WiBrackets(filingStatus)),
 
-            // ══ [APPROX] States — top marginal rate used for all income ═══════
-            // These overestimate tax for lower-income filers. Full bracket tables
-            // are not yet implemented. Rates are 2024 top marginal rates.
+            // [APPROX] top marginal rate for ALL income — overestimates for low
+            // earners. 2024 top rates; full bracket tables not yet implemented.
 
             "AR" => Flat(taxableIncome, 0.039m),    // [APPROX] AR top rate 3.9 % (2024); has 3 brackets
             "LA" => Flat(taxableIncome, 0.0425m),   // [APPROX] LA top rate 4.25 % (2024); has 3 brackets
@@ -458,8 +424,6 @@ public static class TaxCalculator
 
             _ => 0m,
         };
-
-    // ── Pre-tax deduction classification ─────────────────────────────────────
 
     /// <summary>
     /// Returns true for deduction types that reduce federal AND state taxable wages
@@ -473,12 +437,9 @@ public static class TaxCalculator
     /// </summary>
     public static bool IsPreTaxDeduction(DeductionType deductionType) => deductionType.IsPreTax();
 
-    // ── Flat-rate helper ──────────────────────────────────────────────────────
-
     private static decimal Flat(decimal taxableIncome, decimal rate)
         => Math.Round(taxableIncome * rate, 2);
 
-    // ── State bracket tables ──────────────────────────────────────────────────
     // Format: (lower threshold of this bracket, marginal rate applied to income above it).
     // All tables are ordered highest threshold → lowest so ApplyBrackets works correctly.
     // Sources are cited per table. Thresholds are for the given tax year; verify annually.
@@ -604,7 +565,6 @@ public static class TaxCalculator
 
     // Minnesota (MN) — 4 brackets, 2024
     // Source: MN DOR Withholding Tax Tables 2024
-    // FIXED: second threshold corrected from $87,110 to $98,760 (prior value was wrong).
     private static (decimal Threshold, decimal Rate)[] MnBrackets(FilingStatus filingStatus)
     {
         if (filingStatus == FilingStatus.MarriedFilingJointly)
@@ -670,8 +630,6 @@ public static class TaxCalculator
 
     // New Jersey (NJ) — 7 brackets, 2024
     // Source: NJ Division of Taxation NJ-WT 2024
-    // FIXED: prior version had brackets out of order (thresholds 35k→40k→20k — invalid for ApplyBrackets)
-    // and used incorrect rates. This table is correct highest → lowest.
     private static (decimal Threshold, decimal Rate)[] NjBrackets() =>
     [
         (1_000_000m, 0.1075m),  // 10.75 % on income above $1,000,000
@@ -727,8 +685,6 @@ public static class TaxCalculator
 
     // Oregon (OR) — 4 brackets, 2024
     // Source: OR DOR Publication OR-WITHHOLDING 2024
-    // FIXED: prior thresholds ($8,750 / $17,400 / $250,000) were wrong.
-    // Correct single thresholds: $10,200 / $25,500 / $125,000.
     private static (decimal Threshold, decimal Rate)[] OrBrackets(FilingStatus filingStatus)
     {
         if (filingStatus == FilingStatus.MarriedFilingJointly)
@@ -828,22 +784,11 @@ public static class TaxCalculator
         ];
     }
 
-    // ── Core bracket engine ───────────────────────────────────────────────────
-
     /// <summary>
-    /// Applies a progressive bracket table to taxable income and returns the total tax.
+    /// Iterates highest bracket down, reducing the running income to each threshold
+    /// so lower brackets only see the remaining slice.
     ///
-    /// Algorithm: iterate from the highest bracket down. For each bracket, compute tax
-    /// on the slice of income above the bracket's lower threshold, then reduce the
-    /// running income to that threshold so lower brackets only see the remaining slice.
-    ///
-    /// Example for Single 2026 on $60,000 taxable income:
-    ///   $60,000 > $48,475 → tax += ($60,000 - $48,475) × 22 % = $2,535.50; income → $48,475
-    ///   $48,475 > $11,925 → tax += ($48,475 - $11,925) × 12 % = $4,386.00; income → $11,925
-    ///   $11,925 > $0      → tax += ($11,925 - $0)      × 10 % = $1,192.50; income → $0
-    ///   Total = $8,114.00
-    ///
-    /// Brackets MUST be ordered highest threshold first or the result will be wrong.
+    /// Brackets MUST be ordered highest threshold first or the result is wrong.
     /// </summary>
     private static decimal ApplyBrackets(decimal taxableIncome, (decimal Threshold, decimal Rate)[] brackets)
     {
@@ -852,7 +797,6 @@ public static class TaxCalculator
         {
             if (taxableIncome > threshold)
             {
-                // Tax only the slice above this threshold; lower brackets will handle the rest.
                 tax += (taxableIncome - threshold) * rate;
                 taxableIncome = threshold;
             }

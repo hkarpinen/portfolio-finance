@@ -49,9 +49,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         _logger = logger;
     }
 
-    // ── Transaction sync ─────────────────────────────────────────────────────
-
-    /// <inheritdoc />
     public async Task<(int Added, int Modified, int Removed, bool HasMore)> SyncConnectionAsync(
         FinancialConnection connection, CancellationToken cancellationToken = default)
     {
@@ -59,10 +56,10 @@ internal sealed class BankSyncManager : IBankSyncManager
         int totalAdded = 0, totalModified = 0, totalRemoved = 0;
         bool hasMore;
 
-        // Outflow transactions added this sync — candidates for auto-pay matching.
+        // Outflow transactions added this sync — the candidates for auto-pay matching.
         var addedOutflows = new List<(Guid AccountId, decimal Amount, DateTime Date)>();
 
-        // Cache account lookups to avoid hitting the DB once per transaction.
+        // Cached so the loop below does not hit the DB once per transaction.
         var accountsByExternalId = (await _connectionQuery.ListAccountsForConnectionAsync(connection.Id, cancellationToken))
             .ToDictionary(a => a.ExternalAccountId, a => a);
 
@@ -130,7 +127,7 @@ internal sealed class BankSyncManager : IBankSyncManager
                 totalRemoved++;
             }
 
-            // Advance cursor INSIDE the same commit as the row writes — crash-safe.
+            // Advance the cursor INSIDE the same commit as the row writes, so a crash cannot skip a page.
             connection.AdvanceCursor(page.NextCursor);
             await _repo.SaveConnectionAsync(connection, cancellationToken);
             await _repo.CommitAsync(cancellationToken);
@@ -173,9 +170,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         return (totalAdded, totalModified, totalRemoved, false);
     }
 
-    // ── Recurring suggestion refresh ─────────────────────────────────────────
-
-    /// <inheritdoc />
     public async Task RefreshSuggestionsAsync(
         FinancialConnection connection, CancellationToken ct = default)
     {
@@ -189,8 +183,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         await UpsertSuggestionsAsync(connection, result.Outflow, RecurringFlowDirection.Outflow, accountsByExternalId, ct);
         await _repo.CommitAsync(ct);
     }
-
-    // ── Upsert recurring suggestions ─────────────────────────────────────────
 
     private async Task UpsertSuggestionsAsync(
         FinancialConnection connection,
@@ -226,8 +218,6 @@ internal sealed class BankSyncManager : IBankSyncManager
             }
         }
     }
-
-    // ── Auto-link new suggestions to existing income / charge records ────────
 
     private async Task AutoLinkSuggestionAsync(Guid userId, RecurringSuggestion suggestion, CancellationToken ct)
     {
@@ -279,8 +269,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         }
     }
 
-    // ── Auto-pay matching ─────────────────────────────────────────────────────
-
     private async Task TryAutoPayChargesAsync(
         Guid connectionId,
         IReadOnlyList<(Guid AccountId, decimal Amount, DateTime Date)> outflows,
@@ -317,8 +305,6 @@ internal sealed class BankSyncManager : IBankSyncManager
 
         await _repo.CommitAsync(cancellationToken);
     }
-
-    // ── Account helpers ───────────────────────────────────────────────────────
 
     private async Task<FinancialAccount?> EnsureAccountAsync(
         FinancialConnection connection,

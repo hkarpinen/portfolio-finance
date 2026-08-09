@@ -1,9 +1,8 @@
-// Wire contract for household-service demo events consumed from RabbitMQ.
-// The namespace + type name must match what household publishes — its file
-// `HouseholdDemoEvents.cs` lives in `Infrastructure.Messaging.Events` with
-// the same `DemoHouseholdSeededEvent` name, so MassTransit binds both ends
-// to the same `Infrastructure.Messaging.Events:DemoHouseholdSeededEvent`
-// exchange. Identity-published demo events live in `IdentityEvents.cs`.
+// Wire contract for demo events consumed from RabbitMQ.
+//
+// The namespace and type names must match the publisher exactly — MassTransit binds both ends to
+// `Infrastructure.Messaging.Events:DemoHouseholdSeededEvent`, and a mismatch binds a different
+// exchange and misses every message silently.
 namespace Infrastructure.Messaging.Events;
 
 public sealed record DemoHouseholdSeededEvent(

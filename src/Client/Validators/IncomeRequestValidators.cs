@@ -7,8 +7,8 @@ public sealed class CreateIncomeRequestValidator : AbstractValidator<CreateIncom
 {
     public CreateIncomeRequestValidator()
     {
-        // UserId is injected from JWT by both IncomeController and UserIncomeController
-        // (request with { UserId = userId.Value }) — never supplied in the request body.
+        // UserId is injected from the JWT in the controller and is never read from the request body,
+        // which is why no rule guards it.
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.Source).NotEmpty().MaximumLength(200);

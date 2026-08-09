@@ -11,9 +11,9 @@ public sealed class CreateChargeRequestValidator : AbstractValidator<CreateCharg
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
-        // The DTO keeps Category as a free string (API compatibility), but it must name a real
-        // ChargeCategory (case-insensitive) — the manager already falls back to Other, so this only
-        // rejects genuinely bogus input rather than silently coercing it.
+        // Category stays a free string on the DTO for API compatibility, but must name a real
+        // ChargeCategory (case-insensitive). The manager already falls back to Other, so this rule only
+        // rejects genuinely bogus input instead of silently coercing it.
         RuleFor(x => x.Category).NotEmpty().Must(BeAChargeCategory)
             .WithMessage("Category must be a valid charge category.");
         RuleFor(x => x.DueDate).NotEmpty();

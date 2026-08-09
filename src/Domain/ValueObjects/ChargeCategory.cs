@@ -1,8 +1,5 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Charge category enumeration.
-/// </summary>
 public enum ChargeCategory
 {
     Rent = 0,

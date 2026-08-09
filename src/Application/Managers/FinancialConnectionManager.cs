@@ -10,11 +10,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Finance.Application.Managers;
 
-/// <summary>
-/// Owns the full FinancialConnection command surface: link lifecycle, cursor-based
-/// transaction sync, and recurring / bank-sync suggestion management.
-/// Single change driver: bank data provider API contract (Plaid Link, sync, recurring streams).
-/// </summary>
 internal sealed class FinancialConnectionManager : IFinancialConnectionManager
 {
     private readonly IBankDataProvider _api;
@@ -49,8 +44,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         _logger = logger;
     }
 
-    // ── Link token ──────────────────────────────────────────────────────────
-
     public async Task<LinkTokenDto> CreateLinkTokenAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
@@ -58,24 +51,21 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         return new LinkTokenDto(result.LinkToken, result.Expiration);
     }
 
-    // ── Exchange public_token → access_token ────────────────────────────────
-
     public async Task<ConnectionDto> ExchangePublicTokenAsync(
         Guid userId, LinkConnectionCommand request, CancellationToken cancellationToken = default)
     {
         var exchange = await _api.ExchangePublicTokenAsync(request.PublicToken, cancellationToken);
 
-        // Idempotency: if the user re-links the same institution, update in place
-        // rather than creating a duplicate. Plaid issues a new access_token on every
-        // exchange, so we always store the freshest one.
+        // Idempotency: re-linking the same institution updates in place rather than creating a duplicate.
+        // Plaid issues a new access_token on every exchange, so we always store the freshest one.
         var existing = await _repo.GetConnectionByExternalIdAsync(exchange.ItemId, cancellationToken);
         var encrypted = _tokenProtector.Protect(exchange.AccessToken);
         FinancialConnection connection;
 
         if (existing is not null)
         {
-            // Clean up expenses/income that were auto-created from this connection's suggestions
-            // before removing the connection (same logic as DisconnectAsync).
+            // Auto-created charges/income must go BEFORE the connection does, since they are found through
+            // its suggestions.
             var oldSuggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(existing.Id, cancellationToken);
             foreach (var suggestion in oldSuggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
             {
@@ -93,8 +83,8 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
                 }
             }
 
-            // Model "re-link" as remove + add because FinancialConnection has no public
-            // setter for EncryptedAccessToken (intentionally invariant-protected).
+            // Re-link is modelled as remove + add because FinancialConnection has no public setter for
+            // EncryptedAccessToken (intentionally invariant-protected).
             await _repo.RemoveConnectionAsync(existing, cancellationToken);
         }
 
@@ -108,7 +98,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         await _repo.AddConnectionAsync(connection, cancellationToken);
         await _repo.CommitAsync(cancellationToken);
 
-        // Fetch and persist accounts immediately so the UI has something to show.
         var accountsResult = await _api.GetAccountsAsync(exchange.AccessToken, cancellationToken);
         var persistedAccounts = new List<FinancialAccount>(accountsResult.Accounts.Count);
         foreach (var dto in accountsResult.Accounts)
@@ -130,7 +119,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         }
         await _repo.CommitAsync(cancellationToken);
 
-        // Kick off an initial sync so the UI sees transactions on first paint.
         try
         {
             await _syncService.SyncConnectionAsync(connection, cancellationToken);
@@ -153,8 +141,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
                 a.CurrencyCode, a.CurrentBalance, a.AvailableBalance)).ToList());
     }
 
-    // ── Unlink ──────────────────────────────────────────────────────────────
-
     public async Task DisconnectAsync(
         Guid userId, DisconnectCommand request, CancellationToken cancellationToken = default)
     {
@@ -173,7 +159,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             _logger.LogWarning(ex, "Provider item removal failed for connection {ConnectionId}", connection.ExternalId);
         }
 
-        // Remove domain entities that were auto-created from this connection's suggestions.
         var suggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(connection.Id, cancellationToken);
         foreach (var suggestion in suggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
         {
@@ -193,13 +178,11 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             }
         }
 
-        // Removing the connection cascades to accounts, transactions, and suggestions at the DB level.
+        // Removing the connection cascades to accounts, transactions and suggestions at the DB level.
         connection.MarkRevoked();
         await _repo.RemoveConnectionAsync(connection, cancellationToken);
         await _repo.CommitAsync(cancellationToken);
     }
-
-    // ── Sync ────────────────────────────────────────────────────────────────
 
     public async Task<SyncConnectionDto> SyncAsync(
         Guid userId, SyncConnectionCommand request, CancellationToken cancellationToken = default)
@@ -227,8 +210,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         connection.RecordWebhook();
         await _syncService.SyncConnectionAsync(connection, cancellationToken);
     }
-
-    // ── Recurring suggestions ────────────────────────────────────────────────
 
     public async Task<RecurringSuggestionListDto> RefreshSuggestionsAsync(
         Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default)
@@ -292,8 +273,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
         }
     }
-
-    // ── Bank-sync suggestions ────────────────────────────────────────────────
 
     public async Task<AcceptSuggestionDto> AcceptBankSyncSuggestionAsync(
         Guid userId, AcceptBankSyncSuggestionCommand request, CancellationToken ct = default)
@@ -372,8 +351,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
         await _repo.CommitAsync(ct);
     }
-
-    // ── Private helpers ──────────────────────────────────────────────────────
 
     private static RecurringSuggestionDto MapSuggestion(RecurringSuggestion s) => new(
         s.Id, s.FinancialConnectionId.Value, s.AccountId,

@@ -3,13 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Queries;
 
-/// <summary>
-/// Derives "settled per (allocation, occurrence)" from settlement journal entries — the ledger
-/// is the single source of truth (there is no reimbursements table). A settlement entry carries
-/// its <c>SourceAllocationId</c>/<c>SourceOccurrence</c> provenance and two equal postings; a
-/// reversal copies the provenance and negates, so the signed sum nets a reversed pair to zero —
-/// the same semantics the old reimbursement signed-sum had.
-/// </summary>
+// Derives "settled per (allocation, occurrence)" from settlement journal entries — the ledger is
+// the single source of truth and there is no reimbursements table. A settlement entry carries its
+// SourceAllocationId/SourceOccurrence provenance and two equal postings; a reversal copies the
+// provenance and negates, so the signed sum nets a reversed pair to zero.
 internal static class SettlementReads
 {
     public static async Task<Dictionary<(Guid AllocationId, DateTime Occurrence), (decimal Settled, DateTime LatestValueDate)>>
@@ -29,7 +26,7 @@ internal static class SettlementReads
                 Occurrence = e.SourceOccurrence!.Value,
                 ValueDate = e.Date,
                 IsReversal = e.ReversalOfEntryId != null,
-                // Both postings of a settlement carry the same amount; either gives the value.
+                // Both postings of a settlement carry the same amount; either one gives the value.
                 Amount = db.Postings.Where(p => p.EntryId == e.Id).Max(p => p.Amount.Amount),
             })
             .ToListAsync(ct);

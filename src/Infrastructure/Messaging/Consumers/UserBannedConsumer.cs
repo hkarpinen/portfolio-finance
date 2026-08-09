@@ -31,9 +31,8 @@ internal sealed class UserBannedConsumer : IConsumer<UserBanned>
         }
         else
         {
-            // UserRegistered was not yet processed (or was missed). Create a
-            // tombstone projection so the ban is not silently lost; the full
-            // profile will be populated when UserRegistered arrives.
+            // UserRegistered has not been processed yet (or was missed). Write a tombstone so the ban is not
+            // silently lost; the full profile fills in when UserRegistered arrives.
             var tombstone = UserProjection.Create(userId, string.Empty, string.Empty, string.Empty);
             tombstone.IsActive  = false;
             tombstone.UpdatedAt = DateTime.UtcNow;

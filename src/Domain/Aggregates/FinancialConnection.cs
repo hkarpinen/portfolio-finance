@@ -3,17 +3,9 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Represents a user's link to a financial institution via Plaid ("Item" in Plaid terms).
-/// This is the only Plaid-sourced concept that rises to a true domain aggregate: it holds
-/// an encrypted long-lived access token, a sync cursor, and emits domain events when the
-/// connection's status changes (established, requires reauth, revoked).
-///
-/// Performance contract: callers MUST pass <see cref="Cursor"/> to Plaid's sync endpoint
-/// and overwrite it with the value returned by Plaid only after persisting the resulting
-/// changes. This guarantees we never re-fetch data already known to the system, and
-/// recovers cleanly from partial failures.
-/// </summary>
+// Sync contract: callers MUST pass Cursor to the provider's sync endpoint and overwrite it with
+// the value the provider returns only AFTER persisting the resulting changes. That is what keeps
+// a partial failure from either re-fetching known data or skipping unseen data.
 public class FinancialConnection : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
@@ -21,28 +13,18 @@ public class FinancialConnection : IAggregateRoot
     public FinancialConnectionId Id { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>
-    /// Opaque identifier issued by the financial data provider for this connection;
-    /// stable for the lifetime of the link and used as the idempotency key on re-link.
-    /// </summary>
+    // Stable for the lifetime of the link; used as the idempotency key on re-link.
     public string ExternalId { get; private set; } = string.Empty;
 
-    /// <summary>The institution display name at link time (e.g. "Chase").</summary>
     public string InstitutionName { get; private set; } = string.Empty;
 
-    /// <summary>Plaid-issued institution identifier; null in sandbox for some flows.</summary>
+    // Null in sandbox for some flows.
     public string? InstitutionId { get; private set; }
 
-    /// <summary>
-    /// The <c>access_token</c> issued by <c>/item/public_token/exchange</c>, encrypted with
-    /// ASP.NET Data Protection. Plaintext access tokens MUST NEVER be persisted.
-    /// </summary>
+    // Encrypted with ASP.NET Data Protection. Plaintext access tokens MUST NEVER be persisted.
     public string EncryptedAccessToken { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// Plaid <c>/transactions/sync</c> cursor. Null until the first successful sync;
-    /// from then on always advances forward.
-    /// </summary>
+    // Null until the first successful sync; from then on only ever advances forward.
     public string? Cursor { get; private set; }
 
     public FinancialConnectionStatus Status { get; private set; }
@@ -86,7 +68,6 @@ public class FinancialConnection : IAggregateRoot
         return connection;
     }
 
-    /// <summary>Advances the sync cursor after a successful transaction sync round-trip.</summary>
     public void AdvanceCursor(string newCursor)
     {
         Cursor = newCursor ?? string.Empty;

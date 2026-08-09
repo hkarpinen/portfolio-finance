@@ -12,7 +12,6 @@ public sealed record ListTransactionsParams(
 
 public interface IFinancialConnectionQuery
 {
-    // ── Connections & transactions ────────────────────────────────────────────
     Task<ConnectionListDto> ListConnectionsAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task<TransactionListDto> ListTransactionsAsync(
@@ -24,11 +23,8 @@ public interface IFinancialConnectionQuery
     Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForConnectionAsync(FinancialConnectionId connectionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForUserAsync(UserId userId, CancellationToken cancellationToken = default);
 
-    // ── Bank sync suggestions ─────────────────────────────────────────────────
     Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<BankSyncSuggestionListDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default);
 
-    // ── Account balances ──────────────────────────────────────────────────────
-    /// <summary>Returns the summed available balance across all linked depository accounts for a user.</summary>
     Task<AccountBalanceSummaryDto> GetForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }

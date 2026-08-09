@@ -42,8 +42,6 @@ public record ChargeUnpaid(
     UserId UserId,
     DateTime OccurrenceDate) : DomainEvent;
 
-/// <summary>The vendor was paid for an occurrence of a shared charge — fronted by a member
-/// (<see cref="FundingSource.PayerMember"/>) or from the shared pot (<see cref="FundingSource.GroupCash"/>).</summary>
 public record VendorPaid(
     ChargeId ChargeId,
     DateTime OccurrenceDate,

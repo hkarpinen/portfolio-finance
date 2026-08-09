@@ -5,10 +5,6 @@ namespace Finance.Application.Mappers;
 
 public static class ChargeMapper
 {
-    /// <summary>
-    /// Unified expense → ChargeResponseDto mapper. Dispatches on whether the aggregate
-    /// is personal (no GroupId) or group-scoped (GroupId set).
-    /// </summary>
     public static ChargeResponseDto ToResponse(Charge expense, bool isPaid = false, bool vendorPaid = false)
     {
         if (expense.GroupId.HasValue)

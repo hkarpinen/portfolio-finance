@@ -3,13 +3,9 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// A self-balancing book of accounts, scoped to an owner — a <c>Group</c> (opaque
-/// GroupId) or a <c>User</c> (UserId). Finance knows nothing of "household": the
-/// owner is just a typed opaque id. Accounts and journal entries reference this
-/// ledger by id; the ledger root itself only fixes ownership and the reporting
-/// currency (P10 — one currency per ledger).
-/// </summary>
+// Finance knows nothing of "household" — the owner is just a typed opaque id. Accounts and journal
+// entries reference the ledger by id; the root itself only fixes ownership and the reporting
+// currency. One currency per ledger.
 public sealed class Ledger : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();

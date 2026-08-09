@@ -5,9 +5,8 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Managers;
 
-/// <summary>Input for syncing a group charge's accrual entry into its group ledger. Carries only
-/// what the accrual posting needs (Dr Expense / Cr Vendor Payable); the payer and funding source
-/// matter to vendor payments and settlements, which carry their own commands.</summary>
+/// <summary>Dr Expense / Cr Vendor Payable. Payer and funding source belong to the
+/// vendor-payment and settlement commands, not the accrual.</summary>
 public sealed record PostChargeToLedgerCommand(
     Guid GroupId,
     Guid ChargeId,
@@ -17,8 +16,6 @@ public sealed record PostChargeToLedgerCommand(
     string Currency,
     DateTime Date);
 
-/// <summary>Input for recording a settlement (a member settling their allocation into the
-/// funding account that fronted the bill) as one journal entry in the group ledger.</summary>
 public sealed record RecordSettlementCommand(
     Guid GroupId,
     Guid ChargeId,
@@ -32,11 +29,8 @@ public sealed record RecordSettlementCommand(
     string Source,
     FundingSource FundingSource = FundingSource.PayerMember);
 
-/// <summary>
-/// What a "mark allocation paid/unpaid" resolved to. The ledger posting itself is driven by the
-/// <c>SettlementRecorded</c>/<c>SettlementReversed</c> domain events (outbox → ledger-posting
-/// consumer), so this is informational for the caller.
-/// </summary>
+/// <summary>Informational only — the posting is driven by the emitted domain events,
+/// not by this return value.</summary>
 public sealed record SettlementOutcome(
     Guid GroupId,
     Guid ChargeId,
@@ -50,9 +44,8 @@ public sealed record SettlementOutcome(
     string Source,
     FundingSource FundingSource = FundingSource.PayerMember);
 
-/// <summary>Input for recording that the vendor was paid for an occurrence of a group charge:
-/// one transfer that clears the Vendor Payable into the funding account (the payer's Member account
-/// for front-and-reimburse, or the shared Cash pool for pooled).</summary>
+/// <summary>Clears Vendor Payable into the funding account — the payer's Member
+/// account when a member fronted it, the shared Cash pool when pooled.</summary>
 public sealed record RecordVendorPaymentCommand(
     Guid GroupId,
     Guid ChargeId,
@@ -64,9 +57,7 @@ public sealed record RecordVendorPaymentCommand(
     DateTime ValueDate,
     string Source);
 
-/// <summary>What "mark vendor paid/unpaid" resolved to. The ledger posting is driven by the
-/// <c>VendorPaid</c>/<c>VendorPaymentReversed</c> domain events — same pattern as
-/// <see cref="SettlementOutcome"/>.</summary>
+/// <summary>Informational only — the posting is driven by the emitted domain events.</summary>
 public sealed record VendorPaymentOutcome(
     Guid GroupId,
     Guid ChargeId,
@@ -94,48 +85,34 @@ public static class LedgerSources
     public static string Allocation(Guid allocationId) => $"allocation:{allocationId:N}";
 }
 
-/// <summary>
-/// Keeps the books — records financial events into the double-entry ledger. Encapsulates
-/// the WORKFLOW volatility (ensure the ledger and its accounts exist, journalize via the
-/// engine, persist the entries, commit as one transaction). It holds no accounting RULES:
-/// the debit/credit policy lives in <see cref="IJournalizingEngine"/>, the chart structure
-/// in <see cref="GroupChart"/>, the I/O in <see cref="ILedgerRepository"/>.
-/// </summary>
+/// <summary>Ensures the ledger and accounts exist, journalizes and commits as ONE transaction.
+/// Holds no debit/credit policy of its own.</summary>
 public interface IBookkeepingManager
 {
-    /// <summary>Brings the charge's accrual entry — <c>Dr Expense / Cr Vendor Payable</c> under the
-    /// charge source — in line with the charge: posts it when missing, reverses and re-posts when
-    /// the amount, category, title or date changed, and no-ops when the books already match.
-    /// Returns true when it re-journaled (the caller then re-syncs the allocation postings, which
-    /// credit the category's expense account). Idempotent — driven by the charge domain events,
-    /// which may be redelivered.</summary>
+    /// <summary>Dr Expense / Cr Vendor Payable. Posts when missing, reverses and re-posts on a
+    /// changed amount, category, title or date, no-ops when the books already match. Returns true
+    /// when it re-journaled, which invalidates the allocation postings. Idempotent.</summary>
     Task<bool> SyncChargeAccrualAsync(PostChargeToLedgerCommand command, CancellationToken ct = default);
 
-    /// <summary>Brings one member's share posting — <c>Dr Member / Cr Expense</c> under a
-    /// per-allocation source — in line with the allocation: posts when missing, reverses and
-    /// re-posts on a changed amount or expense account, no-ops when it already matches. Splits
-    /// added (or edited) after creation are tracked the same way as create-time ones. Idempotent.</summary>
+    /// <summary>Dr Member / Cr Expense, keyed per allocation so a share added after creation
+    /// reverses independently. Posts when missing, re-posts on a changed amount or account,
+    /// no-ops when it matches. Idempotent.</summary>
     Task SyncAllocationAsync(Guid groupId, Guid chargeId, string category, Guid userId, decimal amount, string currency, Guid allocationId, CancellationToken ct = default);
 
-    /// <summary>Records that the vendor was paid for an occurrence of a group charge: a single
-    /// transfer clearing the Vendor Payable into the funding account (<c>Dr Vendor Payable / Cr
-    /// Member:payer</c> when a member fronted it, <c>Dr Vendor Payable / Cr Cash</c> from the pot).
-    /// Idempotent on the command's source. "Is it paid" is derived from the Vendor Payable balance —
-    /// no separate paid-state is stored.</summary>
+    /// <summary><c>Dr Vendor Payable / Cr Member:payer</c> when a member fronted it,
+    /// <c>Dr Vendor Payable / Cr Cash</c> from the pot. Idempotent on the source.
+    /// "Is it paid" is DERIVED from the Vendor Payable balance — no paid-flag is stored.</summary>
     Task RecordVendorPaymentAsync(RecordVendorPaymentCommand command, CancellationToken ct = default);
 
-    /// <summary>Posts a settlement journal entry and emits <c>SettlementRecorded</c>. Idempotent
-    /// on the command's source — re-recording the same settlement is a no-op.</summary>
+    /// <summary>Idempotent on the command's source.</summary>
     Task RecordSettlementAsync(RecordSettlementCommand command, CancellationToken ct = default);
 
-    /// <summary>Reverses the active journal entries posted under <paramref name="source"/> with
-    /// mirror (reversing) entries and emits <c>SettlementReversed</c> for each. The single place a
+    /// <summary>Reverses with mirror entries rather than deleting. The only place a
     /// settlement is undone.</summary>
     Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default);
 
-    /// <summary>Records a direct member-to-member settle-up payment (the payer squaring what they
-    /// owe a creditor, outside any single charge): <c>Dr Member:to / Cr Member:from</c>, which moves
-    /// both toward zero. Idempotent on <paramref name="source"/>.</summary>
+    /// <summary><c>Dr Member:to / Cr Member:from</c> — moves both toward zero, outside any
+    /// single charge. Idempotent on <paramref name="source"/>.</summary>
     Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default);
 
     /// <summary>Unwinds a charge from the books — reverses every active journal entry tagged with it
@@ -143,33 +120,30 @@ public interface IBookkeepingManager
     /// Payable or member balances. Idempotent: nothing to do if already unwound.</summary>
     Task ReverseChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default);
 
-    // ── Event application (called by the LedgerPostingConsumer) ─────────────────
     // These CONVERGE the books from current DB state for a charge/allocation/settlement/vendor event:
     // they re-read the aggregate (the manager owns this orchestration, not the message consumer) and
     // sync the books to it, so the consumer stays a thin dedup-and-dispatch adapter with no domain I/O.
 
     /// <summary>Sync a group charge's accrual entry to its current state, then re-sync every share.
-    /// Reads the charge and its allocations; no-ops for a personal, deleted or deactivated charge.</summary>
+    /// No-ops for a personal, deleted or deactivated charge.</summary>
     Task ConvergeChargeAsync(Guid chargeId, CancellationToken ct = default);
 
     /// <summary>Sync one share posting to the allocation's current state, reversing instead if the
-    /// allocation has vanished (order-insensitive). Reads the allocation and its charge.</summary>
+    /// allocation has vanished, which is what makes it order-insensitive.</summary>
     Task ConvergeAllocationAsync(Guid groupId, Guid allocationId, CancellationToken ct = default);
 
-    /// <summary>Post a settlement from a <c>SettlementRecorded</c> fact, reading the charge so the
-    /// funding side mirrors its <see cref="FundingSource"/> (PayerMember → the payer, GroupCash → the pot).</summary>
+    /// <summary>The funding side mirrors the charge's <see cref="FundingSource"/>: PayerMember → the
+    /// payer, GroupCash → the pot.</summary>
     Task RecordSettlementFromEventAsync(
         Guid groupId, Guid chargeId, Guid allocationId, Guid fromUserId, Guid toUserId,
         decimal amount, string currency, DateTime occurrence, DateTime valueDate, CancellationToken ct = default);
 
-    /// <summary>Post a vendor payment from a <c>VendorPaid</c> fact, reading the charge for its amount
-    /// and group. No-ops for a personal charge.</summary>
+    /// <summary>No-ops for a personal charge.</summary>
     Task RecordVendorPaymentFromEventAsync(
         Guid chargeId, FundingSource fundingSource, Guid? paidByUserId,
         DateTime occurrence, DateTime paidAt, CancellationToken ct = default);
 
-    /// <summary>Reverse a vendor payment from a <c>VendorPaymentReversed</c> fact, reading the charge
-    /// for its group. No-ops for a personal charge.</summary>
+    /// <summary>No-ops for a personal charge.</summary>
     Task ReverseVendorPaymentFromEventAsync(Guid chargeId, DateTime occurrence, CancellationToken ct = default);
 }
 
@@ -378,8 +352,6 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.CommitAsync(ct);
     }
 
-    // ── Event application (charge-context reads + convergence) ─────────────────
-
     public async Task ConvergeChargeAsync(Guid chargeId, CancellationToken ct = default)
     {
         var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
@@ -454,8 +426,6 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             charge.GroupId.Value.Value, LedgerSources.VendorPayment(chargeId, occurrence), ct);
     }
 
-    // ── workflow helpers ──────────────────────────────────────────────────────
-
     /// <summary>True when the active accrual entry already reflects the charge — same expense
     /// account, amount, description (which carries the title) and value date.</summary>
     private static bool AccrualMatches(
@@ -484,10 +454,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             && debit.Amount.Currency == currency;
     }
 
-    /// <summary>Entries under a source that are still in effect — not reversals
-    /// (<see cref="JournalEntry.ReversalOfEntryId"/>), and not yet reversed
-    /// (<see cref="JournalEntry.ReversedByEntryId"/>). Both are declared columns, backfilled by the
-    /// <c>JournalEntryReversedBy</c> migration, so this no longer scans for reversal pairs.</summary>
+    /// <summary>Entries under a source that are still in effect — not themselves reversals, and not
+    /// yet reversed. Both are declared columns, so this never scans for reversal pairs.</summary>
     private static IReadOnlyList<JournalEntry> ActiveEntries(IReadOnlyList<JournalEntry> entries)
         => entries
             .Where(e => e.ReversalOfEntryId is null && e.ReversedByEntryId is null)

@@ -1,14 +1,9 @@
 namespace Finance.Infrastructure.Persistence.Projections;
 
-/// <summary>
-/// Denormalized projection of group (household) membership synced from the household service via
-/// domain events — who is in a group and with what role. Written by infrastructure event
-/// consumers; read by query classes (e.g. to label an allocation with the member's role and to
-/// tell current members from departed ones). Not a domain aggregate — no lifecycle, invariants,
-/// or domain events. Note the deliberate asymmetry with the ledger: when a member leaves, this
-/// row goes inactive but their Member account and balances stay on the books — debt does not
-/// vanish with departure.
-/// </summary>
+// Denormalized projection of group membership synced from the household service via domain
+// events. Note the deliberate asymmetry with the ledger: when a member leaves, this row goes
+// inactive but their Member account and balances stay on the books — debt does not vanish with
+// departure. Telling current members from departed ones is what this projection is for.
 public sealed class GroupMemberProjection
 {
     public Guid GroupId { get; set; }

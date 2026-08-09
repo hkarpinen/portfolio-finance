@@ -43,7 +43,6 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
         var monthlyGross = UserBudgetCalculator.MonthlyEquivalent(grossAmount, frequency);
         var lineItems = new List<DeductionLineItem>();
 
-        // ── Pre-tax voluntary deduction total ────────────────────────────────
         var monthlyPreTax = 0m;
         if (deductions is not null)
         {
@@ -60,7 +59,6 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
         monthlyPreTax = Math.Min(monthlyPreTax, monthlyGross);
         var annualPreTax = monthlyPreTax * 12m;
 
-        // ── Engine-computed tax withholding ───────────────────────────────────
         if (taxProfile is not null)
         {
             var annualGross = monthlyGross * 12m;
@@ -88,7 +86,6 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
             lineItems.Add(new DeductionLineItem("Medicare", "Medicare (1.45%)", false, medicare, currency));
         }
 
-        // ── Voluntary deductions ──────────────────────────────────────────────
         var taxLineSum = lineItems.Sum(l => l.Amount);
         var voluntaryRemaining = Math.Max(0m, monthlyGross - taxLineSum);
         var voluntaryRunning = 0m;

@@ -2,10 +2,7 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Dtos;
 
-/// <summary>
-/// Returned to the SPA when starting a bank-link session. The frontend passes
-/// LinkToken straight to Plaid Link; nothing about the underlying vendor API is ever exposed to the browser.
-/// </summary>
+// Nothing about the underlying vendor API is ever exposed to the browser — only this token.
 public sealed record LinkTokenDto(string LinkToken, DateTime Expiration);
 
 public sealed record ConnectionDto(
@@ -29,7 +26,6 @@ public sealed record LinkedAccountDto(
 
 public sealed record ConnectionListDto(IReadOnlyList<ConnectionDto> Items, int TotalCount);
 
-/// <summary>Outcome of an incremental sync round-trip; surfaces counts so the UI can show what changed.</summary>
 public sealed record SyncConnectionDto(
     Guid ConnectionId,
     int Added,
@@ -38,10 +34,7 @@ public sealed record SyncConnectionDto(
     bool HasMore,
     DateTime SyncedAt);
 
-/// <summary>
-/// Subset of the bank-link provider's webhook payload we care about.
-/// Field names intentionally match the wire shape so model-binding works out of the box.
-/// </summary>
+// Field names intentionally match the wire shape so model-binding works without attributes.
 public sealed record WebhookPayload(
     string WebhookType,
     string WebhookCode,

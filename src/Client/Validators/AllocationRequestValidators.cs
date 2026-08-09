@@ -7,7 +7,7 @@ public sealed class UpsertAllocationRequestValidator : AbstractValidator<UpsertA
 {
     public UpsertAllocationRequestValidator()
     {
-        // GroupId and UserId are injected from the route / JWT in the controller
+        // GroupId and UserId are injected from the route / JWT in the controller, never from the body.
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
     }

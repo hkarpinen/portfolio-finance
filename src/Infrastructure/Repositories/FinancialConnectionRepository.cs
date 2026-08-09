@@ -7,18 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
-/// <summary>
-/// Single-context repository for the FinancialConnection aggregate cluster.
-/// Methods are deliberately fine-grained so the manager can sequence DB writes
-/// precisely (and the unique index on <c>external_transaction_id</c> absorbs concurrent
-/// sync collisions). Child rows cascade on connection delete — see EF configuration.
-/// </summary>
+// Methods are deliberately fine-grained so the manager can sequence DB writes precisely. Concurrent
+// sync collisions are absorbed by the unique index on external_transaction_id rather than by
+// locking here.
 internal sealed class FinancialConnectionRepository : IFinancialConnectionRepository
 {
     private readonly FinanceDbContext _db;
     public FinancialConnectionRepository(FinanceDbContext db) => _db = db;
-
-    // ── Connections ──────────────────────────────────────────────────────────
 
     public Task<FinancialConnection?> GetConnectionAsync(FinancialConnectionId id, CancellationToken ct = default)
         => _db.FinancialConnections.FirstOrDefaultAsync(c => c.Id == id, ct);
@@ -41,8 +36,6 @@ internal sealed class FinancialConnectionRepository : IFinancialConnectionReposi
         return Task.CompletedTask;
     }
 
-    // ── Accounts ─────────────────────────────────────────────────────────────
-
     public Task<FinancialAccount?> GetAccountByExternalIdAsync(FinancialConnectionId connectionId, string externalAccountId, CancellationToken ct = default)
         => _db.FinancialAccounts.FirstOrDefaultAsync(a => a.FinancialConnectionId == connectionId && a.ExternalAccountId == externalAccountId, ct);
 
@@ -54,8 +47,6 @@ internal sealed class FinancialConnectionRepository : IFinancialConnectionReposi
         _db.FinancialAccounts.Update(account);
         return Task.CompletedTask;
     }
-
-    // ── Transactions ─────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyDictionary<string, FinancialTransaction>> LookupTransactionsByExternalIdsAsync(
         IEnumerable<string> externalTransactionIds, CancellationToken ct = default)
@@ -80,8 +71,6 @@ internal sealed class FinancialConnectionRepository : IFinancialConnectionReposi
 
     public Task CommitAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 
-    // ── Recurring suggestions ─────────────────────────────────────────────────
-
     public Task<RecurringSuggestion?> GetSuggestionByExternalIdAsync(string externalStreamId, CancellationToken ct = default)
         => _db.RecurringSuggestions.FirstOrDefaultAsync(s => s.ExternalStreamId == externalStreamId, ct);
 
@@ -98,8 +87,6 @@ internal sealed class FinancialConnectionRepository : IFinancialConnectionReposi
     {
         _db.RecurringSuggestions.Update(suggestion);
     }
-
-    // ── Bank sync suggestions ─────────────────────────────────────────────────
 
     public Task<BankSyncSuggestion?> GetBankSyncSuggestionByExternalTransactionIdAsync(string externalTransactionId, CancellationToken ct = default)
         => _db.BankSyncSuggestions.FirstOrDefaultAsync(s => s.ExternalTransactionId == externalTransactionId, ct);

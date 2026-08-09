@@ -25,15 +25,12 @@ public class ChargeTests
     [Fact]
     public void Create_ShouldSetProperties()
     {
-        // Arrange
         var userId = UserId.New();
         var dueDate = DateTime.UtcNow.Date.AddDays(7);
         var amount = Money.Create(120m, "USD");
 
-        // Act
         var bill = Charge.Create(userId, "Netflix", amount, ChargeCategory.Other, dueDate, description: "Streaming");
 
-        // Assert
         Assert.Equal(userId, bill.UserId);
         Assert.Equal("Netflix", bill.Title);
         Assert.Equal(120m, bill.Amount.Amount);
@@ -47,10 +44,8 @@ public class ChargeTests
     [Fact]
     public void Create_ShouldRaise_ChargeCreatedEvent()
     {
-        // Arrange / Act
         var bill = CreateValidCharge();
 
-        // Assert
         Assert.Single(bill.GetDomainEvents());
         Assert.IsType<ChargeCreated>(bill.GetDomainEvents()[0]);
     }
@@ -58,7 +53,6 @@ public class ChargeTests
     [Fact]
     public void Create_EmptyTitle_ShouldThrow()
     {
-        // Arrange / Act / Assert
         Assert.Throws<ArgumentException>(() =>
             Charge.Create(UserId.New(), "  ", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
@@ -75,13 +69,10 @@ public class ChargeTests
     [Fact]
     public void Create_WithRecurrenceSchedule_ShouldSetSchedule()
     {
-        // Arrange
         var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
 
-        // Act
         var bill = CreateValidCharge(schedule: schedule);
 
-        // Assert
         Assert.NotNull(bill.RecurrenceSchedule);
         Assert.Equal(RecurrenceFrequency.Monthly, bill.RecurrenceSchedule.Frequency);
     }
@@ -89,15 +80,12 @@ public class ChargeTests
     [Fact]
     public void Update_ShouldChangeTitleAmountCategoryAndDueDate()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.ClearDomainEvents();
         var newDueDate = DateTime.UtcNow.Date.AddDays(14);
 
-        // Act
         bill.Update("Updated Bill", Money.Create(200m, "USD"), ChargeCategory.Rent, newDueDate, description: "New desc");
 
-        // Assert
         Assert.Equal("Updated Bill", bill.Title);
         Assert.Equal(200m, bill.Amount.Amount);
         Assert.Equal(ChargeCategory.Rent, bill.Category);
@@ -108,14 +96,11 @@ public class ChargeTests
     [Fact]
     public void Update_ShouldRaise_ChargeUpdatedEvent()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.ClearDomainEvents();
 
-        // Act
         bill.Update("New Title", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(5));
 
-        // Assert
         Assert.Single(bill.GetDomainEvents());
         Assert.IsType<ChargeUpdated>(bill.GetDomainEvents()[0]);
     }
@@ -123,10 +108,8 @@ public class ChargeTests
     [Fact]
     public void Update_EmptyTitle_ShouldThrow()
     {
-        // Arrange
         var bill = CreateValidCharge();
 
-        // Act / Assert
         Assert.Throws<ArgumentException>(() =>
             bill.Update("", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
@@ -134,14 +117,11 @@ public class ChargeTests
     [Fact]
     public void Update_WithRecurrenceSchedule_ShouldUpdateSchedule()
     {
-        // Arrange
         var bill = CreateValidCharge();
         var newSchedule = RecurrenceSchedule.Create(RecurrenceFrequency.Weekly, new DateTime(2024, 6, 1));
 
-        // Act
         bill.Update("Title", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1), recurrenceSchedule: newSchedule);
 
-        // Assert
         Assert.NotNull(bill.RecurrenceSchedule);
         Assert.Equal(RecurrenceFrequency.Weekly, bill.RecurrenceSchedule.Frequency);
     }
@@ -149,27 +129,21 @@ public class ChargeTests
     [Fact]
     public void Deactivate_ShouldSetIsActiveFalse()
     {
-        // Arrange
         var bill = CreateValidCharge();
 
-        // Act
         bill.Deactivate();
 
-        // Assert
         Assert.False(bill.IsActive);
     }
 
     [Fact]
     public void Deactivate_ShouldRaise_ChargeDeactivatedEvent()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.ClearDomainEvents();
 
-        // Act
         bill.Deactivate();
 
-        // Assert
         Assert.Single(bill.GetDomainEvents());
         Assert.IsType<ChargeDeactivated>(bill.GetDomainEvents()[0]);
     }
@@ -177,24 +151,19 @@ public class ChargeTests
     [Fact]
     public void Deactivate_WhenAlreadyInactive_ShouldThrow()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.Deactivate();
 
-        // Act / Assert
         Assert.Throws<InvalidOperationException>(() => bill.Deactivate());
     }
 
     [Fact]
     public void TryDeactivate_WhenActive_ShouldReturnTrue_AndSetInactive()
     {
-        // Arrange
         var bill = CreateValidCharge();
 
-        // Act
         var result = bill.TryDeactivate();
 
-        // Assert
         Assert.True(result);
         Assert.False(bill.IsActive);
     }
@@ -202,14 +171,11 @@ public class ChargeTests
     [Fact]
     public void TryDeactivate_WhenAlreadyInactive_ShouldReturnFalse()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.Deactivate();
 
-        // Act
         var result = bill.TryDeactivate();
 
-        // Assert
         Assert.False(result);
         Assert.False(bill.IsActive);
     }
@@ -217,14 +183,11 @@ public class ChargeTests
     [Fact]
     public void ClearDomainEvents_ShouldEmptyEvents()
     {
-        // Arrange
         var bill = CreateValidCharge();
         Assert.NotEmpty(bill.GetDomainEvents());
 
-        // Act
         bill.ClearDomainEvents();
 
-        // Assert
         Assert.Empty(bill.GetDomainEvents());
     }
 }

@@ -4,9 +4,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Income source aggregate root representing a member's income contribution to the household.
-/// </summary>
 public class IncomeSource : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
@@ -17,32 +14,25 @@ public class IncomeSource : IAggregateRoot
     public string Source { get; private set; } = string.Empty;
     public RecurrenceSchedule RecurrenceSchedule { get; private set; } = null!;
     /// <summary>
-    /// How often a paycheck actually arrives (the payment cadence).
-    /// May differ from RecurrenceSchedule.Frequency, which represents
-    /// the period the <see cref="Amount"/> is quoted in (e.g. monthly salary paid bi-weekly).
-    /// Defaults to RecurrenceSchedule.Frequency when not specified.
+    /// How often a paycheck ARRIVES, which may differ from the period
+    /// <see cref="Amount"/> is quoted in — a monthly salary paid fortnightly.
     /// </summary>
     public RecurrenceFrequency PaymentFrequency { get; private set; }
-    /// <summary>The date of the most recent paycheck — used as the recurrence anchor
-    /// so the schedule generates exact real-world pay dates.</summary>
+    /// <summary>The recurrence anchor, so generated dates land on real pay days.</summary>
     public DateTime? LastPaymentDate { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public bool IsActive { get; private set; }
 
-    /// <summary>Optional free-form notes about the source (e.g. employer, job title). ≤ 500 chars.</summary>
+    /// <summary>≤ 500 chars.</summary>
     public string? Notes { get; private set; }
 
-    /// <summary>
-    /// Optional tax withholding profile used by the PayrollDeductionEngine to estimate
-    /// federal income tax, state income tax, and FICA deductions.
-    /// Null means no tax estimation is performed for this source.
-    /// </summary>
+    /// <summary>Null means no tax is estimated for this source at all.</summary>
     public TaxWithholdingProfile? TaxProfile { get; private set; }
 
     /// <summary>
-    /// Voluntary payroll deductions (health, dental, retirement, etc.).
-    /// Tax deductions are NOT stored here — they are engine-computed from <see cref="TaxProfile"/>.
+    /// VOLUNTARY deductions only. Tax is never stored here — it is computed from
+    /// <see cref="TaxProfile"/>.
     /// </summary>
     private readonly List<PayrollDeduction> _deductions = new();
     public IReadOnlyList<PayrollDeduction> Deductions => _deductions.AsReadOnly();
@@ -155,8 +145,6 @@ public class IncomeSource : IAggregateRoot
         _domainEvents.Add(new IncomeSourceActivated(Id));
     }
 
-    // ── Tax profile ──────────────────────────────────────────────────────────
-
     public void SetTaxProfile(TaxWithholdingProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -172,8 +160,6 @@ public class IncomeSource : IAggregateRoot
         UpdatedAt = DateTime.UtcNow;
         _domainEvents.Add(new IncomeSourceTaxProfileSet(Id, null));
     }
-
-    // ── Voluntary deductions ─────────────────────────────────────────────────
 
     public void AddDeduction(PayrollDeduction deduction)
     {
@@ -206,8 +192,6 @@ public class IncomeSource : IAggregateRoot
         UpdatedAt = DateTime.UtcNow;
         _domainEvents.Add(new IncomeSourceDeductionRemoved(Id, type, label));
     }
-
-    // ── Income projection ────────────────────────────────────────────────────
 
     /// <summary>
     /// The per-paycheck gross amount based on how the income is quoted and

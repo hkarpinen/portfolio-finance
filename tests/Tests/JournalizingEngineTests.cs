@@ -4,10 +4,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
-/// <summary>
-/// Proves the journalizing policy (the Engine) in isolation: every draft it emits is
-/// balanced, and once posted the member accounts net to the correct who-owes-whom.
-/// </summary>
 public class JournalizingEngineTests
 {
     private static readonly LedgerId L = LedgerId.New();
@@ -20,7 +16,6 @@ public class JournalizingEngineTests
 
     private readonly IJournalizingEngine _engine = new CashBasisJournalizingEngine();
 
-    /// <summary>Post the drafts into real journal entries (re-validates balance) and return all postings.</summary>
     private static List<Posting> Post(LedgerId ledger, IEnumerable<JournalEntryDraft> drafts) =>
         drafts.SelectMany(d => JournalEntry.Post(ledger, d.Date, d.Description, d.Lines, d.Source).Postings).ToList();
 
@@ -56,7 +51,6 @@ public class JournalizingEngineTests
         Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, postings.Where(p => p.AccountId == Bob)));
         // Nominal expense account is recorded then allocated → nets to 0 (cash-basis, no period accrual).
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, postings.Where(p => p.AccountId == Expense)));
-        // Whole thing trial-balances.
         Assert.True(LedgerMath.IsBalanced(postings));
     }
 
@@ -131,12 +125,10 @@ public class JournalizingEngineTests
         Assert.True(LedgerMath.IsBalanced(reimbPostings));
 
         var all = expensePostings.Concat(reimbPostings).ToList();
-        // Both members settle to zero.
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == Hank)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == Bob)));
     }
 
-    // ── Accrual basis (log unpaid → mark paid later) ──────────────────────────
 
     [Fact]
     public void JournalizeAccrual_OwesVendor_AndAllocatesToMembers()
@@ -278,7 +270,7 @@ public class JournalizingEngineTests
             DebitAccount: Hank, CreditAccount: Bob, Amount: Usd(300),
             ValueDate: DateTime.UtcNow, Description: "Settlement", Source: "settlement:z")));
 
-        // Delete the bill → reverse EVERY entry tagged with it (what ReverseChargeAsync does).
+        // Delete the bill → reverse EVERY entry tagged with it.
         var all = entries.SelectMany(e => e.Postings)
             .Concat(entries.SelectMany(e => e.Reverse(DateTime.UtcNow.Date).Postings))
             .ToList();

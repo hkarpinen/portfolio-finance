@@ -4,17 +4,11 @@ namespace Finance.Application.Dtos;
 
 public enum ChargeScope
 {
-    /// <summary>An expense owned by a single user.</summary>
     Personal,
-    /// <summary>An expense owned by a household (referenced by opaque GroupId per ARCHITECTURE-boundaries.md).</summary>
     Group
 }
 
-/// <summary>
-/// Unified expense response shape. Replaces the former pair `ChargeDto` (personal) and
-/// `GroupChargeDto` (shared). Fields specific to one scope are nullable; <see cref="Scope"/>
-/// is the discriminator.
-/// </summary>
+// Fields specific to one scope are nullable; Scope is the discriminator.
 public sealed record ChargeResponseDto(
     Guid ChargeId,
     ChargeScope Scope,
@@ -37,21 +31,18 @@ public sealed record ChargeResponseDto(
     DateTime? CurrentOccurrenceDate = null,
     Guid? PayerUserId = null,
     FundingSource? FundingSource = null,    // set when Scope == Group; null for personal
-    // Group only: has the VENDOR been paid (the bill itself), distinct from the caller's share
-    // (IsPaid). Derived from the ledger (Vendor Payable balance); PayerUserId/FundingSource describe
-    // who paid / how. Legacy cash-basis charges read as vendor-paid.
+    // Group only: has the VENDOR been paid (the bill itself), which is distinct from the caller's own
+    // share (IsPaid). Derived from the ledger's Vendor Payable balance. Legacy cash-basis charges
+    // never touched that account, so they read as vendor-paid.
     bool VendorPaid = false,
-    // Group only: the caller's OWN share amount on this charge (their allocation). Null when the
-    // caller has no allocation, or for personal charges. Lets "your share" reflect the real (possibly
-    // uneven) split instead of an even-split estimate.
+    // Group only: the caller's own allocation on this charge. Null when they have no allocation, and
+    // on personal charges.
     decimal? CallerShare = null);
 
 public sealed record ChargeListDto(IReadOnlyCollection<ChargeResponseDto> Items, int TotalCount);
 
-/// <summary>Renamed from GroupChargeListDto per ARCHITECTURE-boundaries.md (Group→Group).</summary>
 public sealed record GroupChargeListDto(IReadOnlyCollection<ChargeResponseDto> Items, int TotalCount);
 
-/// <summary>Allocation enriched with member display name.</summary>
 public sealed record AllocationDetailDto(
     Guid AllocationId,
     Guid UserId,
@@ -62,7 +53,6 @@ public sealed record AllocationDetailDto(
     string Currency,
     bool IsPaid);
 
-/// <summary>Composite read model — group expense with enriched splits. Renamed from GroupChargeDetailDto.</summary>
 public sealed record GroupChargeDetailDto(
     ChargeResponseDto Charge,
     IReadOnlyCollection<AllocationDetailDto> Allocations);

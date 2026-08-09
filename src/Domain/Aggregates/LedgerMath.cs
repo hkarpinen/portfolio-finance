@@ -2,18 +2,12 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Pure derivations over postings — balances and the trial balance. Balances are NEVER
-/// stored; they are always computed from the journal, so the sub-ledger can never drift
-/// from its source entries.
-/// </summary>
+// Balances are NEVER stored — always computed from the journal, so no derived total can drift
+// from the entries it came from.
 public static class LedgerMath
 {
-    /// <summary>
-    /// An account's balance from its postings, oriented to its normal balance (P3): a
-    /// debit-normal account (Asset/Expense) shows a positive balance when net-debited; a
-    /// credit-normal account (Liability/Equity/Income) when net-credited.
-    /// </summary>
+    // Oriented to the normal balance: a debit-normal account (Asset/Expense) shows positive when
+    // net-debited, a credit-normal one (Liability/Equity/Income) when net-credited.
     public static decimal AccountBalance(NormalBalance normal, IEnumerable<Posting> postings)
     {
         decimal debits = 0m, credits = 0m;
@@ -25,10 +19,6 @@ public static class LedgerMath
         return normal == NormalBalance.Debit ? debits - credits : credits - debits;
     }
 
-    /// <summary>
-    /// Trial balance (P5): total debits and total credits across a set of postings. A
-    /// healthy ledger always satisfies Debits == Credits; the difference is the imbalance.
-    /// </summary>
     public static (decimal Debits, decimal Credits) TrialBalance(IEnumerable<Posting> postings)
     {
         decimal debits = 0m, credits = 0m;
@@ -40,7 +30,6 @@ public static class LedgerMath
         return (debits, credits);
     }
 
-    /// <summary>True when total debits equal total credits — the ledger reconciles.</summary>
     public static bool IsBalanced(IEnumerable<Posting> postings)
     {
         var (d, c) = TrialBalance(postings);

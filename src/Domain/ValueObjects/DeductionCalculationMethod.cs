@@ -1,11 +1,10 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>How a <see cref="PayrollDeduction"/> amount is computed.</summary>
 public enum DeductionCalculationMethod
 {
-    /// <summary>The deduction value is a percentage of gross pay (e.g. 6 = 6%).</summary>
+    // Value is a percentage of gross pay: 6 means 6%.
     PercentOfGross,
 
-    /// <summary>The deduction value is a fixed dollar (or native-currency) amount per pay period.</summary>
+    // Value is a fixed amount PER PAY PERIOD, not per month.
     FixedAmount,
 }

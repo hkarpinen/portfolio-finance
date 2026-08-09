@@ -23,9 +23,8 @@ public sealed record IncomeDto(
     decimal Amount,
     string Currency,
     string Source,
-    /// <summary>The period the Amount is quoted in.</summary>
     RecurrenceFrequency QuotedAs,
-    /// <summary>How often a paycheck actually arrives. Equals QuotedAs when not separately specified.</summary>
+    // Equals QuotedAs when not separately specified.
     RecurrenceFrequency PaidEvery,
     DateTime StartDate,
     DateTime? EndDate,
@@ -39,9 +38,8 @@ public sealed record IncomeDto(
 
 public sealed record IncomeListDto(IReadOnlyCollection<IncomeDto> Items, int TotalCount);
 
-// Type is a string here (not the DeductionType enum) because PayrollDeductionEngine
-// produces engine-only categories like "SocialSecurity" and "Medicare" that aren't
-// part of the user-selectable DeductionType enum.
+// Type is a string here, not the DeductionType enum, because the payroll engine produces
+// engine-only categories ("SocialSecurity", "Medicare") that are not user-selectable.
 public sealed record DeductionLineItemDto(
     string Type,
     string Label,
@@ -57,14 +55,9 @@ public sealed record NetPayBreakdownDto(
     decimal TotalDeductions,
     decimal NetPay);
 
-/// <summary>
-/// Aggregated net-pay figures across every active income source for the
-/// caller. Served by the income page's stats strip so the UI does not have
-/// to fan out a separate /net-pay call per source. `Currency` is the
-/// currency of the largest-grossing source — sources in other currencies
-/// are still summed (raw, no FX) and the UI is expected to handle the
-/// mixed-currency edge case at the row level.
-/// </summary>
+// Currency is the currency of the largest-grossing source. Sources in other currencies are still
+// summed into the totals raw, with no FX — a mixed-currency total is therefore meaningless and
+// only the per-row figures are safe to show.
 public sealed record NetPaySummaryDto(
     int Year,
     int Month,

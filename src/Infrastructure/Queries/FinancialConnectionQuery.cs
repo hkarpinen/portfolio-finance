@@ -14,8 +14,6 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
 
     public FinancialConnectionQuery(FinanceDbContext db) => _db = db;
 
-    // ── Connections & transactions ────────────────────────────────────────────
-
     public async Task<ConnectionListDto> ListConnectionsAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
@@ -110,8 +108,6 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             .OrderByDescending(s => s.LastDate)
             .ToListAsync(cancellationToken);
 
-    // ── Bank sync suggestions ─────────────────────────────────────────────────
-
     public async Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var userIdVo = new UserId(userId);
@@ -151,8 +147,6 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             s.Dismissed)).ToList();
         return new BankSyncSuggestionListDto(dtos, dtos.Count);
     }
-
-    // ── Account balances ──────────────────────────────────────────────────────
 
     public async Task<AccountBalanceSummaryDto> GetForUserAsync(Guid userId, CancellationToken cancellationToken = default)
     {

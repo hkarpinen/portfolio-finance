@@ -2,12 +2,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.ReadModels;
 
-/// <summary>
-/// Application-layer data model for a recurring cash-flow pattern detected by the financial
-/// data provider. Used as the source of truth for auto-creating <c>Charge</c> (outflow)
-/// and <c>IncomeSource</c> (inflow) candidates.
-/// Not a domain aggregate — persisted via EF through <see cref="Finance.Application.Repositories.IFinancialConnectionRepository"/>.
-/// </summary>
 public sealed class RecurringSuggestion
 {
     public Guid Id { get; private set; }
@@ -15,7 +9,7 @@ public sealed class RecurringSuggestion
     public Guid AccountId { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>Provider-issued stable stream identifier; the idempotency key for upserts.</summary>
+    // The idempotency key for upserts.
     public string ExternalStreamId { get; private set; } = string.Empty;
 
     public RecurringFlowDirection Direction { get; private set; }
@@ -32,10 +26,8 @@ public sealed class RecurringSuggestion
 
     public bool IsActive { get; private set; }
 
-    /// <summary>True once auto-linked and a domain entity has been created from this suggestion.</summary>
     public bool IsLinked { get; private set; }
 
-    /// <summary>FK back to the created <c>Charge</c> or <c>IncomeSource</c>, if linked.</summary>
     public Guid? LinkedEntityId { get; private set; }
     public string? LinkedEntityType { get; private set; }
 

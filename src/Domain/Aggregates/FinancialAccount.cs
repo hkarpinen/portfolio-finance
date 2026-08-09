@@ -2,24 +2,19 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.ReadModels;
 
-/// <summary>
-/// Application-layer data model for a bank account sourced from a linked financial institution.
-/// Not a domain aggregate — has no invariants or domain events.
-/// Persisted via EF through <see cref="Finance.Application.Repositories.IFinancialConnectionRepository"/>.
-/// </summary>
 public sealed class FinancialAccount
 {
     public Guid Id { get; private set; }
     public FinancialConnectionId FinancialConnectionId { get; private set; }
     public UserId UserId { get; private set; }
 
-    /// <summary>Opaque account identifier issued by the provider; unique per connection and used as the upsert key.</summary>
+    // Unique per connection; the upsert key.
     public string ExternalAccountId { get; private set; } = string.Empty;
 
     public string Name { get; private set; } = string.Empty;
     public string? OfficialName { get; private set; }
 
-    /// <summary>Last 2-4 digits of the account number, when surfaced by the institution.</summary>
+    // Last 2-4 digits of the account number — null when the institution does not surface it.
     public string? Mask { get; private set; }
 
     public string Type { get; private set; } = string.Empty;

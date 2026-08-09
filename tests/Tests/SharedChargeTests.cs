@@ -24,14 +24,11 @@ public class SharedChargeTests
     [Fact]
     public void Create_ShouldSetProperties()
     {
-        // Arrange
         var (hId, uId) = NewIds();
         var dueDate = DateTime.UtcNow.Date.AddDays(5);
 
-        // Act
         var bill = Charge.CreateGroup(hId, uId, "Electricity", Money.Create(80m, "USD"), ChargeCategory.Utilities, dueDate);
 
-        // Assert
         Assert.Equal("Electricity", bill.Title);
         Assert.Equal(hId, bill.GroupId);
         Assert.Equal(uId, bill.CreatedBy);
@@ -42,10 +39,8 @@ public class SharedChargeTests
     [Fact]
     public void Create_ShouldRaise_ChargeCreatedEvent()
     {
-        // Arrange / Act
         var bill = CreateValidCharge();
 
-        // Assert
         Assert.Single(bill.GetDomainEvents());
         Assert.IsType<ChargeCreated>(bill.GetDomainEvents()[0]);
     }
@@ -53,10 +48,8 @@ public class SharedChargeTests
     [Fact]
     public void Create_EmptyTitle_ShouldThrow()
     {
-        // Arrange
         var (hId, uId) = NewIds();
 
-        // Act / Assert
         Assert.Throws<ArgumentException>(() =>
             Charge.CreateGroup(hId, uId, "", Money.Create(100m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
@@ -64,38 +57,30 @@ public class SharedChargeTests
     [Fact]
     public void Deactivate_ShouldSetIsActiveFalse()
     {
-        // Arrange
         var bill = CreateValidCharge();
 
-        // Act
         bill.Deactivate();
 
-        // Assert
         Assert.False(bill.IsActive);
     }
 
     [Fact]
     public void Deactivate_AlreadyInactive_ShouldThrow()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.Deactivate();
 
-        // Act / Assert
         Assert.Throws<InvalidOperationException>(() => bill.Deactivate());
     }
 
     [Fact]
     public void Deactivate_ShouldRaise_ChargeDeactivatedEvent()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.ClearDomainEvents();
 
-        // Act
         bill.Deactivate();
 
-        // Assert
         Assert.Single(bill.GetDomainEvents());
         Assert.IsType<ChargeDeactivated>(bill.GetDomainEvents()[0]);
     }
@@ -103,30 +88,23 @@ public class SharedChargeTests
     [Fact]
     public void Update_ShouldChangeTitleAndAmount()
     {
-        // Arrange
         var bill = CreateValidCharge();
         bill.ClearDomainEvents();
         var newDueDate = DateTime.UtcNow.Date.AddDays(10);
 
-        // Act
         bill.Update("Updated Title", Money.Create(200m, "USD"), ChargeCategory.Rent, newDueDate);
 
-        // Assert
         Assert.Equal("Updated Title", bill.Title);
         Assert.Equal(200m, bill.Amount.Amount);
         Assert.Equal(ChargeCategory.Rent, bill.Category);
     }
 
-    // ── Payer coherence (C1) ─────────────────────────────────────────────────
-
     [Fact]
     public void CreateGroup_WithPayer_ShouldStoreAndEmitPayer()
     {
-        // Arrange
         var (hId, uId) = NewIds();
         var payer = Guid.NewGuid();
 
-        // Act
         var bill = Charge.CreateGroup(
             hId, uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: payer);

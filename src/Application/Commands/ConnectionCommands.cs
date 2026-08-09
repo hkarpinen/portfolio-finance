@@ -1,10 +1,7 @@
 namespace Finance.Application.Commands;
 
-/// <summary>
-/// POSTed by the SPA after the bank-link flow's onSuccess callback fires.
-/// The PublicToken is single-use and short-lived; we exchange it server-side
-/// for the long-lived credential we encrypt and persist.
-/// </summary>
+// The PublicToken is single-use and short-lived; it is exchanged server-side for the long-lived
+// credential that gets encrypted and persisted.
 public sealed record LinkConnectionCommand(
     string PublicToken,
     string? InstitutionId,
@@ -14,18 +11,12 @@ public sealed record SyncConnectionCommand(Guid ConnectionId);
 
 public sealed record RefreshSuggestionsCommand(Guid ConnectionId);
 
-/// <summary>
-/// Promotes a detected recurring cash-flow to a tracked IncomeSource (inflow)
-/// or Charge (outflow). Idempotent — calling twice returns the same linked entity.
-/// </summary>
+// Idempotent — calling twice returns the same linked entity.
 public sealed record AcceptSuggestionCommand(Guid SuggestionId);
 
 public sealed record DisconnectCommand(Guid ConnectionId);
 
-/// <summary>
-/// Accepts a bank-sync suggestion, creating an Charge (outflow) or IncomeSource (inflow).
-/// AsIncome overrides the detected direction. GroupId creates a household-scoped expense.
-/// </summary>
+// AsIncome overrides the detected direction; GroupId makes the result household-scoped.
 public sealed record AcceptBankSyncSuggestionCommand(
     Guid SuggestionId,
     bool AsIncome,

@@ -12,10 +12,7 @@ namespace Infrastructure.Plaid;
 
 public interface IPlaidWebhookVerifier
 {
-    /// <summary>
-    /// Verifies the <c>Plaid-Verification</c> JWT and checks the body hash claim.
-    /// Returns false if the header is missing, the JWT is invalid, or the hash doesn't match.
-    /// </summary>
+    // Returns false — never throws — on a missing header, an invalid JWT, or a body-hash mismatch.
     Task<bool> VerifyAsync(string verificationJwt, byte[] rawBody, CancellationToken ct = default);
 }
 
@@ -35,7 +32,6 @@ internal sealed class PlaidWebhookVerifier : IPlaidWebhookVerifier
 
     public async Task<bool> VerifyAsync(string verificationJwt, byte[] rawBody, CancellationToken ct = default)
     {
-        // Step 1: read the kid from the unvalidated token header
         JsonWebToken unvalidated;
         try { unvalidated = _jwtHandler.ReadJsonWebToken(verificationJwt); }
         catch (Exception ex)
@@ -51,7 +47,6 @@ internal sealed class PlaidWebhookVerifier : IPlaidWebhookVerifier
             return false;
         }
 
-        // Step 2: fetch the signing key from Plaid
         var keyRequest = new { client_id = _options.ClientId, secret = _options.Secret, key_id = kid };
         HttpResponseMessage keyResponse;
         try
@@ -89,7 +84,6 @@ internal sealed class PlaidWebhookVerifier : IPlaidWebhookVerifier
             return false;
         }
 
-        // Step 3: validate the JWT signature
         var jwk = new JsonWebKey(JsonSerializer.Serialize(keyPayload.Key));
         var validationParams = new TokenValidationParameters
         {
@@ -106,7 +100,6 @@ internal sealed class PlaidWebhookVerifier : IPlaidWebhookVerifier
             return false;
         }
 
-        // Step 4: verify the body hash
         if (!result.Claims.TryGetValue("request_body_sha256", out var hashClaim) || hashClaim is not string bodyHash)
         {
             _logger.LogWarning("Plaid webhook: JWT missing request_body_sha256 claim");

@@ -7,10 +7,8 @@ public class MoneyTests
     [Fact]
     public void Create_ShouldSetAmountAndCurrency()
     {
-        // Arrange / Act
         var money = Money.Create(100.00m, "USD");
 
-        // Assert
         Assert.Equal(100.00m, money.Amount);
         Assert.Equal("USD", money.Currency);
     }
@@ -18,10 +16,8 @@ public class MoneyTests
     [Fact]
     public void Create_ShouldNormalizeCurrencyToUppercase()
     {
-        // Arrange / Act
         var money = Money.Create(50m, "usd");
 
-        // Assert
         Assert.Equal("USD", money.Currency);
     }
 
@@ -46,14 +42,12 @@ public class MoneyTests
     [Fact]
     public void Create_EmptyCurrency_ShouldThrow()
     {
-        // Arrange / Act / Assert
         Assert.Throws<ArgumentException>(() => Money.Create(10m, ""));
     }
 
     [Fact]
     public void Create_InvalidCurrencyLength_ShouldThrow()
     {
-        // Arrange / Act / Assert
         Assert.Throws<ArgumentException>(() => Money.Create(10m, "US"));
     }
 

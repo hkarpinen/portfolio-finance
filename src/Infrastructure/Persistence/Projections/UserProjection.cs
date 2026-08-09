@@ -2,14 +2,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Infrastructure.Persistence.Projections;
 
-/// <summary>
-/// Denormalized projection of user data synced from the Identity service via
-/// domain events. Written by infrastructure event consumers; read by query classes.
-/// Not a domain aggregate — has no lifecycle, invariants, or domain events.
-/// Belongs in Infrastructure because its shape is driven by what queries need,
-/// its persistence is managed by EF Core, and it is mutated by infrastructure
-/// consumers, not by domain logic.
-/// </summary>
 public sealed class UserProjection
 {
     public UserId UserId { get; set; }

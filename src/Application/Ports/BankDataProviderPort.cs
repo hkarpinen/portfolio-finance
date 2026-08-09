@@ -2,11 +2,7 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Ports;
 
-/// <summary>
-/// Application-layer port for fetching external bank/financial data.
-/// Infrastructure supplies the concrete adapter (e.g. Plaid).
-/// All types here use domain-oriented names — no vendor terminology.
-/// </summary>
+// Every type in this file uses domain-oriented names — no vendor terminology crosses this port.
 public interface IBankDataProvider
 {
     Task<BankLinkToken> CreateLinkTokenAsync(
@@ -33,14 +29,12 @@ public interface IBankDataProvider
     Task RemoveItemAsync(string accessToken, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Encapsulates encryption of the Plaid <c>access_token</c> at rest.</summary>
 public interface IConnectionTokenProtector
 {
     string Protect(string accessToken);
     string Unprotect(string encryptedAccessToken);
 }
 
-// ── Plaid HTTP DTOs (transport contract owned by the application layer) ─────
 
 public sealed record BankLinkToken(string LinkToken, DateTime Expiration);
 

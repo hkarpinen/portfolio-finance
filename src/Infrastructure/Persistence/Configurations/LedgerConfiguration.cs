@@ -20,7 +20,6 @@ internal sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
         builder.Property(l => l.Currency).HasMaxLength(3).IsRequired();
         builder.Property(l => l.CreatedAt).IsRequired();
 
-        // One ledger per owner (a group's book, a user's book).
         builder.HasIndex(l => new { l.OwnerType, l.OwnerId }).IsUnique();
     }
 }

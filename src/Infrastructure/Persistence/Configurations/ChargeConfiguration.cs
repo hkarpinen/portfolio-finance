@@ -18,7 +18,7 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
         builder.Property(b => b.UserId)
             .HasConversion(id => id.Value, v => new UserId(v));
 
-        // Nullable for personal expenses (null = personal, set = household).
+        // Null = personal, set = household.
         builder.Property(b => b.GroupId)
             .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new GroupId(v.Value) : (GroupId?)null)
             .IsRequired(false);
@@ -27,11 +27,9 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
             .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new UserId(v.Value) : (UserId?)null)
             .IsRequired(false);
 
-        // Identity userId of the payer (the person who fronted the bill). Null on personal expenses.
+        // The IDENTITY userId of the person who fronted the bill — not a membership id. Null on personal.
         builder.Property(b => b.PayerUserId).IsRequired(false);
 
-        // Which account funds the vendor payment (PayerMember = front-and-reimburse, GroupCash =
-        // pooled). Stored as text; defaults to PayerMember for legacy rows via the migration.
         builder.Property(b => b.FundingSource).HasConversion<string>().HasMaxLength(20).IsRequired();
 
         builder.Property(b => b.Title).HasMaxLength(300).IsRequired();

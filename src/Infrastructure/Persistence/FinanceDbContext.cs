@@ -15,7 +15,6 @@ public sealed class FinanceDbContext : DbContext
     public DbSet<ChargePayment> ChargePayments => Set<ChargePayment>();
     public DbSet<Allocation> Allocations => Set<Allocation>();
 
-    // Double-entry ledger
     public DbSet<Ledger> Ledgers => Set<Ledger>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
@@ -25,7 +24,6 @@ public sealed class FinanceDbContext : DbContext
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
-    // Financial connection cluster (Plaid-backed).
     public DbSet<FinancialConnection> FinancialConnections => Set<FinancialConnection>();
     public DbSet<FinancialAccount> FinancialAccounts => Set<FinancialAccount>();
     public DbSet<FinancialTransaction> FinancialTransactions => Set<FinancialTransaction>();
@@ -34,11 +32,8 @@ public sealed class FinanceDbContext : DbContext
 
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options) { }
 
-    /// <summary>
-    /// Drains domain events from every tracked aggregate root into the outbox
-    /// before flushing to the database — outbox row and aggregate row are written
-    /// in the same transaction so there is no window for event loss.
-    /// </summary>
+    // Drains domain events from every tracked aggregate root into the outbox BEFORE flushing, so the
+    // outbox row and the aggregate row are written in one transaction and no event can be lost.
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         DrainDomainEventsToOutbox();

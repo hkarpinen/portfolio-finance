@@ -1,8 +1,5 @@
 namespace Finance.Domain.ValueObjects;
 
-/// <summary>
-/// Recurrence schedule value object for recurring bills and income sources.
-/// </summary>
 public record RecurrenceSchedule
 {
     public RecurrenceFrequency Frequency { get; }
@@ -27,9 +24,6 @@ public record RecurrenceSchedule
             DateTime.SpecifyKind(startDate, DateTimeKind.Utc),
             endDate.HasValue ? DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc) : null);
 
-    /// <summary>
-    /// Gets the occurrences of the recurrence within the specified date range.
-    /// </summary>
     public List<DateTime> GetOccurrencesInRange(DateTime rangeStart, DateTime rangeEnd)
     {
         if (rangeStart >= rangeEnd)
@@ -59,20 +53,14 @@ public record RecurrenceSchedule
         return occurrences;
     }
 
-    /// <summary>
-    /// Gets the total amount for a given period based on the recurrence frequency.
-    /// </summary>
     public decimal GetAmountForPeriod(Money amount, DateTime periodStart, DateTime periodEnd)
     {
         var occurrences = GetOccurrencesInRange(periodStart, periodEnd);
         return occurrences.Count * amount.Amount;
     }
 
-    /// <summary>
-    /// Returns the most recent occurrence on or before today, or the first upcoming
-    /// occurrence if the schedule hasn't started yet. Falls back to
-    /// <paramref name="fallback"/> when no occurrences can be found.
-    /// </summary>
+    // The most recent occurrence on or before today — or the FIRST upcoming one if the schedule
+    // has not started yet. Falls back to the given date when the schedule yields no occurrences.
     public DateTime CurrentOccurrence(DateTime fallback)
     {
         var today = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);

@@ -2,10 +2,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
 
-/// <summary>
-/// Computes household income-to-bills coverage status.
-/// Change driver: coverage threshold product decisions.
-/// </summary>
 public interface IGroupCoverageEngine
 {
     CoverageStatus BuildCoverageStatus(
@@ -19,10 +15,8 @@ public interface IGroupCoverageEngine
 
 internal sealed class GroupCoverageEngine : IGroupCoverageEngine
 {
-    /// <summary>
-    /// Income-to-bills ratio below which a household is considered "AtRisk" rather than "Covered".
-    /// Below half this threshold the household is "Overcommitted".
-    /// </summary>
+    // Income-to-bills ratio below which a household is "AtRisk" rather than "Covered". Below HALF
+    // this threshold it is "Overcommitted".
     private const decimal AtRiskThreshold = 0.8m;
 
     public CoverageStatus BuildCoverageStatus(

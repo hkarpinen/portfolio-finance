@@ -5,8 +5,6 @@ namespace Tests;
 
 public class UserBudgetCalculatorTests
 {
-    // ── MonthlyEquivalent ────────────────────────────────────────────────────
-
     [Theory]
     [InlineData(1200, RecurrenceFrequency.Monthly, 1200)]
     [InlineData(600, RecurrenceFrequency.BiWeekly, 1300)]      // 600 × 26/12
@@ -18,8 +16,6 @@ public class UserBudgetCalculatorTests
         var result = UserBudgetCalculator.MonthlyEquivalent(amount, freq);
         Assert.Equal(expected, Math.Round(result, 0));
     }
-
-    // ── PerPaycheckAmount ────────────────────────────────────────────────────
 
     [Fact]
     public void PerPaycheckAmount_AnnualSalaryBiWeekly_Returns26thOfAnnual()
@@ -42,8 +38,6 @@ public class UserBudgetCalculatorTests
         var result = UserBudgetCalculator.PerPaycheckAmount(60_000m, RecurrenceFrequency.Annually, RecurrenceFrequency.Monthly);
         Assert.Equal(5000m, result);
     }
-
-    // ── AnnualAmount ─────────────────────────────────────────────────────────
 
     [Fact]
     public void AnnualAmount_Monthly_MultipliesBy12()

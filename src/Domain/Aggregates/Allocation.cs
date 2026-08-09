@@ -3,9 +3,6 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-/// <summary>
-/// Allocation aggregate root representing a member's share of a household expense.
-/// </summary>
 public class Allocation : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
@@ -66,14 +63,9 @@ public class Allocation : IAggregateRoot
         _domainEvents.Add(new AllocationRemoved(Id, ChargeId, GroupId));
     }
 
-    /// <summary>
-    /// The member (this allocation's <see cref="UserId"/>) settles their share into the funding
-    /// account that fronted the bill (<paramref name="toUserId"/>). The accounting lives in the
-    /// ledger (the single source of truth); this aggregate only raises the cross-service fact for
-    /// the occurrence. It is a <em>pure event</em> — no state change — so the allocation stays a
-    /// source document and is not a second settled-state store (that would re-introduce the
-    /// dual-write the ledger collapse removed).
-    /// </summary>
+    // The accounting lives in the ledger; this raises the fact for the occurrence and changes no
+    // state. Deliberately a PURE event: the allocation stays a source document rather than becoming a
+    // second store of settled-state, which would be a dual write.
     public void Settle(UserId toUserId, DateTime occurrence, DateTime valueDate)
     {
         _domainEvents.Add(new SettlementRecorded(
@@ -82,8 +74,7 @@ public class Allocation : IAggregateRoot
             DateTime.SpecifyKind(valueDate.Date, DateTimeKind.Utc)));
     }
 
-    /// <summary>The member un-settles their share for the occurrence (the ledger is reversed
-    /// separately). Raises the cross-service fact; no state change.</summary>
+    // Raises the fact; the ledger is reversed separately. No state change.
     public void ReverseSettlement(DateTime occurrence)
     {
         _domainEvents.Add(new SettlementReversed(
