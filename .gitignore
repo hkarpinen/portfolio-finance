@@ -24,3 +24,9 @@ appsettings.Staging.json
 Thumbs.db
 
 **.lscache
+
+# Agent working notes — local only
+HANDOFF*.md
+*-handoff.md
+*-handoff-*.md
+docs/payer-reimbursement-*.md
