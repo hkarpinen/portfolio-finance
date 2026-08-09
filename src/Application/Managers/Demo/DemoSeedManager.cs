@@ -81,16 +81,18 @@ internal sealed class DemoSeedManager : IDemoSeedManager
             (title: "Netflix", amount: 18m, category: ChargeCategory.Subscriptions),
         };
 
-        // The commit publishes each charge's ChargeCreated and each share's AllocationCreated
-        // through the outbox; the LedgerPostingConsumer journals them, so demo households get a
-        // real double-entry ledger through the exact same path live charges take — seeded data
-        // is never ledger-less.
+        // Seeding goes through the outbox like any live write, so demo households get a real double-entry
+        // ledger by the same path — seeded data is never ledger-less.
         foreach (var (title, amount, category) in sharedCharges)
         {
+            // A PayerMember charge has to name the member who fronted it — the default left
+            // payerUserId null, so the bill detail rendered "Someone, out of their own pocket" and
+            // there was nobody for the house to pay back.
             var charge = Charge.CreateGroup(
                 gid, uid, title, Money.Create(amount, "USD"),
                 category, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth));
+                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth),
+                payerUserId: userId);
             await _chargeRepo.AddAsync(charge, cancellationToken);
 
             var allocation = Allocation.Create(charge.Id, gid, uid, Money.Create(amount, "USD"));
