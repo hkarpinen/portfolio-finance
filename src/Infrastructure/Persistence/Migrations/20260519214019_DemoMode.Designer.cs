@@ -16,7 +16,6 @@ namespace Infrastructure.Persistence.Migrations
     [Migration("20260519214019_DemoMode")]
     partial class DemoMode
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -16,7 +16,6 @@ namespace Infrastructure.Persistence.Migrations
     [Migration("20260512184348_GroupIdRename")]
     partial class GroupIdRename
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

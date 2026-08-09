@@ -16,7 +16,6 @@ namespace Infrastructure.Persistence.Migrations
     [Migration("20260511065952_AddHouseholdColumnsToExpenses")]
     partial class AddHouseholdColumnsToExpenses
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

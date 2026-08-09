@@ -4,10 +4,8 @@
 
 namespace Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddMissingIndexes : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateIndex(
@@ -71,7 +69,6 @@ namespace Infrastructure.Persistence.Migrations
                 column: "user_id");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(

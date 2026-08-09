@@ -16,7 +16,6 @@ namespace Infrastructure.Persistence.Migrations
     [Migration("20260609215914_LedgerRemodelAndChargeRename")]
     partial class LedgerRemodelAndChargeRename
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
