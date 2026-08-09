@@ -14,8 +14,6 @@ internal sealed class ChargeQuery : IChargeQuery
 
     public ChargeQuery(FinanceDbContext db) => _db = db;
 
-    // ── Personal charge queries ──────────────────────────────────────────────
-
     public async Task<ChargeListDto> ListByUserAsync(ListChargesParams request, CancellationToken cancellationToken = default)
     {
         var userId = UserId.Create(request.UserId);
@@ -59,7 +57,13 @@ internal sealed class ChargeQuery : IChargeQuery
     public async Task<ChargeResponseDto?> GetDetailAsync(ChargeDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ChargeId.Create(request.ChargeId);
-        var expense = await _db.Charges.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.GroupId == null, cancellationToken);
+        var callerId = UserId.Create(request.CallerId);
+        // `GroupId == null` says "personal", not "yours" — the owner predicate is what
+        // makes it yours. Null (→ 404), never 403, so an id can't be confirmed.
+        var expense = await _db.Charges.AsNoTracking()
+            .FirstOrDefaultAsync(
+                b => b.Id == id && b.GroupId == null && b.UserId == callerId,
+                cancellationToken);
         if (expense is null) return null;
 
         var occurrenceDate = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
@@ -69,8 +73,6 @@ internal sealed class ChargeQuery : IChargeQuery
 
         return ChargeMapper.ToResponse(expense, payment is not null);
     }
-
-    // ── Group charge queries ─────────────────────────────────────────────
 
     public async Task<GroupChargeListDto> ListByGroupAsync(ListGroupChargesParams request, CancellationToken cancellationToken = default)
     {
@@ -88,15 +90,15 @@ internal sealed class ChargeQuery : IChargeQuery
         if (items.Count == 0)
             return new GroupChargeListDto([], total);
 
-        // Vendor-paid per charge — derived from the Vendor Payable balance (ledger is source of truth).
+        // Derived from the Vendor Payable balance — there is no stored paid-flag.
         var owedToVendor = await VendorPaymentReads.GetOwedToVendorByChargeAsync(
             _db, items.Select(b => b.Id.Value).ToList(), cancellationToken);
         bool VendorPaidFor(Guid chargeId) =>
             !owedToVendor.TryGetValue(chargeId, out var owed) || owed <= 0.005m;
 
         HashSet<Guid> paidChargeIds = [];
-        // The caller's own share amount per charge (their allocation) — drives "your share" on the
-        // client, which must reflect the real (possibly uneven) split, not an even-split estimate.
+        // The caller's REAL allocation — the split may be uneven, so this is never derived
+        // by dividing the total.
         Dictionary<Guid, decimal> callerShareByCharge = [];
         if (request.CallerId.HasValue)
         {
@@ -123,13 +125,9 @@ internal sealed class ChargeQuery : IChargeQuery
                     var split = callerAllocations.FirstOrDefault(s => s.ChargeId == expense.Id);
                     if (split is null) continue;
 
-                    // Caller is the payer ⇒ their share is covered by paying the bill.
-                    // Otherwise it's paid when settlements cover the share (signed sum from
-                    // the ledger: reversals net their originals to zero).
-                    // The payer's own share is covered by paying the bill (PayerUserId is
-                    // always set for group charges).
-                    // Payer's share is covered only once the vendor is actually paid; a settled
-                    // share implies the vendor was paid (settlement is gated on it).
+                    // The payer's own share counts as covered only once the VENDOR is paid.
+                    // Everyone else's is covered when settlements reach the share — summed
+                    // signed, so a reversal nets its original to zero.
                     var callerIsPayer = expense.PayerUserId == callerUserId.Value;
                     var settled = settledMap.TryGetValue((split.Id.Value, occurrence.Date), out var sv) ? sv.Settled : 0m;
                     if ((callerIsPayer && VendorPaidFor(expense.Id.Value)) || settled >= split.Amount.Amount)
@@ -181,7 +179,6 @@ internal sealed class ChargeQuery : IChargeQuery
 
         var occurrenceDate = expense.CurrentOccurrenceDate ?? expense.DueDate;
         var paidAllocationIds = await GetPaidAllocationIdsForChargeAsync(expenseId, occurrenceDate, cancellationToken);
-        // The payer's own share is covered by paying the bill.
         var payerGuid = expense.PayerUserId;
 
         var splitUserIdSet = splits.Select(s => s.UserId).ToHashSet();
@@ -190,8 +187,7 @@ internal sealed class ChargeQuery : IChargeQuery
             .Where(p => splitUserIdSet.Contains(p.UserId.Value))
             .ToDictionary(p => p.UserId.Value);
 
-        // Real roles from the membership projection (synced from household's member events);
-        // "Member" is the fallback for rows that predate the projection.
+        // "Member" is the fallback for rows predating the membership projection.
         var roles = expense.GroupId is { } gid
             ? await _db.GroupMemberProjections.AsNoTracking()
                 .Where(m => m.GroupId == gid)
@@ -259,8 +255,6 @@ internal sealed class ChargeQuery : IChargeQuery
                 e => e.UserId == userId && e.IsActive && e.Title == title && e.Amount.Amount == amount,
                 cancellationToken);
 
-    // ── Charge-split queries ─────────────────────────────────────────────────
-
     public async Task<IReadOnlyCollection<GroupMonthlyContributionsDto>> ListAllocationsByGroupAsync(
         GroupId groupId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default)
     {
@@ -304,8 +298,7 @@ internal sealed class ChargeQuery : IChargeQuery
         var settledByAllocationOccurrence = await SettlementReads.GetSettledByAllocationOccurrenceAsync(
             _db, splitIds, cancellationToken);
 
-        // Vendor-paid per charge — the payer's own share counts as covered only once the bill itself
-        // is paid (derived from the Vendor Payable balance — the ledger is the source of truth).
+        // The payer's own share counts as covered only once the bill itself is paid.
         var owedToVendor = await VendorPaymentReads.GetOwedToVendorByChargeAsync(
             _db, expenseIds.Select(e => e.Value).ToList(), cancellationToken);
         bool vendorPaidFor(Guid chargeId) =>
@@ -323,8 +316,7 @@ internal sealed class ChargeQuery : IChargeQuery
                 ? expense.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
                 : [expense.DueDate];
 
-            // The payer's own share is covered only once the vendor is actually paid (derived from
-            // the Vendor Payable balance). Before that the bill is upcoming and no share is settled.
+            // Before the vendor is paid the bill is upcoming and no share is settled.
             var isPayerOwnShare = expense.PayerUserId == split.UserId.Value && vendorPaidFor(expense.Id.Value);
 
             foreach (var date in occurrenceDates)

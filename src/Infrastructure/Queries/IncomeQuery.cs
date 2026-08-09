@@ -64,7 +64,10 @@ internal sealed class IncomeQuery : IIncomeQuery
 
     public async Task<IncomeDto?> GetDetailAsync(IncomeDetailParams request, CancellationToken cancellationToken = default)
     {
-        var income = await _db.IncomeSources.FirstOrDefaultAsync(i => i.Id == IncomeId.Create(request.IncomeId), cancellationToken);
+        // Owner-scoped: null (→ 404) for anyone else, so an id cannot be probed.
+        var callerId = UserId.Create(request.CallerId);
+        var income = await _db.IncomeSources.FirstOrDefaultAsync(
+            i => i.Id == IncomeId.Create(request.IncomeId) && i.UserId == callerId, cancellationToken);
         return income is null ? null : IncomeMapper.ToResponse(income);
     }
 
@@ -110,10 +113,8 @@ internal sealed class IncomeQuery : IIncomeQuery
         }
 
         decimal monthlyGross = 0m, monthlyNet = 0m, totalDeductions = 0m, totalTax = 0m;
-        // Track gross-by-currency so the summary can advertise the dominant
-        // currency. Mixed-currency portfolios are rare in this app; cross-
-        // currency conversion is out of scope here and would belong in a
-        // dedicated FX engine, not a list aggregation.
+        // Gross is tracked per currency so the summary can advertise the dominant one. Amounts in other
+        // currencies are still summed raw — there is no FX conversion anywhere in this path.
         var grossByCurrency = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var income in sources)
@@ -155,11 +156,8 @@ internal sealed class IncomeQuery : IIncomeQuery
             SourceCount: sources.Count);
     }
 
-    /// <summary>
-    /// Returns true for deduction types the engine emits to represent
-    /// statutory tax withholdings (vs employee-elected benefits). Kept in
-    /// sync with the labels produced by <see cref="IPayrollDeductionEngine.ComputeBreakdown"/>.
-    /// </summary>
+    // These strings must match the labels the payroll-deduction engine emits verbatim — the two sides
+    // are coupled by string value only, so a renamed label silently reclassifies a tax as a benefit.
     private static bool IsTaxDeduction(string type) => type switch
     {
         "FederalIncomeTax" or "StateIncomeTax" or "SocialSecurity" or "Medicare" => true,
@@ -171,8 +169,6 @@ internal sealed class IncomeQuery : IIncomeQuery
             .AnyAsync(
                 i => i.UserId == userId && i.IsActive && i.Source == source && i.Amount.Amount == amount,
                 cancellationToken);
-
-    // ── Contribution / budget timeline ────────────────────────────────────────
 
     public async Task<IReadOnlyCollection<ContributionPeriodSummaryDto>> GetContributionSummariesAsync(
         Guid userId,
@@ -206,8 +202,6 @@ internal sealed class IncomeQuery : IIncomeQuery
             incomeEntities, personalCharges,
             splits, paidAllocations, paidPersonal);
     }
-
-    // ── Private DB fetch helpers ──────────────────────────────────────────────
 
     private async Task<IReadOnlyList<(Allocation Allocation, Charge Charge)>> FetchAllocationsWithBillDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
@@ -254,9 +248,9 @@ internal sealed class IncomeQuery : IIncomeQuery
         var splitIds = splits.Select(s => s.Id.Value).ToList();
         var shareByAllocation = splits.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
 
-        // A (allocation, occurrence) counts as paid when ledger settlements cover the share
-        // (signed sum, partial-aware). The representative timestamp is the latest value date —
-        // when the money actually moved.
+        // An (allocation, occurrence) counts as paid when ledger settlements cover the share — a signed,
+        // partial-aware sum. The representative timestamp is the latest value date, i.e. when the money
+        // actually moved.
         var settledMap = await SettlementReads.GetSettledByAllocationOccurrenceAsync(
             _db, splitIds, cancellationToken);
 

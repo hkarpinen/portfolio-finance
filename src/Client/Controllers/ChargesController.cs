@@ -3,6 +3,7 @@ using Finance.Application.Queries;
 using Finance.Application.Managers;
 using Finance.Domain.ValueObjects;
 using Client.Extensions;
+using Client.Filters;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,21 +11,20 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Client.Controllers;
 
 /// <summary>
-/// Charges — covers both personal (api/finance/expenses) and group-scoped
-/// (api/finance/groups/{groupId}/expenses) routes. Both are driven by the same Charge aggregate.
-/// Ledger postings are NOT coordinated here: every mutation commits its aggregate change and the
-/// domain events it raised in one transaction (outbox), and the LedgerPostingConsumer brings the
-/// books in step from those events — so a charge row can never be durably saved without its
-/// ledger posting eventually following.
-/// <para>
-/// ROUTE NAMING: the URL segments <c>/expenses</c> and <c>/splits</c> are intentionally FROZEN for
-/// API compatibility even though the domain renamed Expense→Charge and ExpenseSplit→Allocation. The
-/// frontend (<c>frontend/lib/api/*</c>) calls these exact paths; renaming them is a breaking change
-/// that must be a coordinated frontend+backend change, not a unilateral edit here.
-/// </para>
+/// Personal and group-scoped charge routes, both over the same aggregate.
+///
+/// No ledger posting is coordinated here. Each mutation commits its aggregate change
+/// and the events it raised in one transaction, and the books follow from those events
+/// — so the response returns BEFORE the ledger moves.
+///
+/// The <c>/expenses</c> and <c>/splits</c> URL segments are frozen for API compatibility
+/// despite the domain rename to Charge and Allocation. Changing them is a breaking change.
 /// </summary>
 [ApiController]
 [Authorize]
+// Group routes on this controller are members-only. A no-op on the personal
+// routes above, which carry no {groupId}.
+[RequireGroupMembership]
 [EnableRateLimiting("api")]
 [Route("api/finance/expenses")]
 public sealed class ChargesController : ControllerBase
@@ -40,8 +40,6 @@ public sealed class ChargesController : ControllerBase
         _bookkeeping = bookkeeping;
     }
 
-    // ── Personal expenses ─────────────────────────────────────────────────────
-
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
@@ -53,7 +51,8 @@ public sealed class ChargesController : ControllerBase
     [HttpGet("{expenseId:guid}")]
     public async Task<IActionResult> GetDetail(Guid expenseId, CancellationToken ct = default)
     {
-        var result = await _query.GetDetailAsync(new ChargeDetailParams(expenseId), ct);
+        var userId = User.GetUserId().Value;
+        var result = await _query.GetDetailAsync(new ChargeDetailParams(expenseId, userId), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -68,14 +67,18 @@ public sealed class ChargesController : ControllerBase
     [HttpPut("{expenseId:guid}")]
     public async Task<IActionResult> Update(Guid expenseId, [FromBody] UpdateChargeCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.UpdateAsync(request with { ChargeId = expenseId }, ct);
+        // From the token, OVERWRITING the body — it is bindable, so a client could
+        // otherwise nominate whichever owner makes the check pass.
+        var userId = User.GetUserId().Value;
+        var result = await _manager.UpdateAsync(request with { ChargeId = expenseId, CallerId = userId }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{expenseId:guid}")]
     public async Task<IActionResult> Delete(Guid expenseId, CancellationToken ct = default)
     {
-        var result = await _manager.DeleteAsync(new DeleteChargeCommand(expenseId), ct);
+        var userId = User.GetUserId().Value;
+        var result = await _manager.DeleteAsync(new DeleteChargeCommand(expenseId, userId), ct);
         return result is null ? NotFound() : NoContent();
     }
 
@@ -94,8 +97,6 @@ public sealed class ChargesController : ControllerBase
         await _manager.MarkUnpaidAsync(new MarkChargeUnpaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
     }
-
-    // ── Group expenses ────────────────────────────────────────────────────
 
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses")]
     public async Task<IActionResult> ListByGroup(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
@@ -125,9 +126,6 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> CreateGroup(Guid groupId, [FromBody] CreateGroupChargeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // The manager commits the charge + initial allocations and their ChargeCreated /
-        // AllocationCreated events atomically (outbox); the LedgerPostingConsumer journals the
-        // accrual and each share from those events.
         var result = await _manager.CreateGroupChargeAsync(
             request with { GroupId = groupId, CreatedBy = userId.Value }, ct);
 
@@ -138,8 +136,6 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> UpdateGroup(Guid groupId, Guid expenseId, [FromBody] UpdateGroupChargeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // ChargeUpdated drives the ledger re-sync — an amount/category/title edit reverses and
-        // re-posts the accrual (and re-syncs the share postings) via the LedgerPostingConsumer.
         var result = await _manager.UpdateGroupChargeAsync(
             request with { ChargeId = expenseId, CallerId = userId.Value }, ct);
         return result is null ? NotFound() : Ok(result);
@@ -149,8 +145,6 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> DeactivateGroup(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // ChargeDeactivated (committed with the soft-delete) drives the full unwind — accrual,
-        // vendor payment and any settlements are reversed by the LedgerPostingConsumer.
         var result = await _manager.DeactivateGroupChargeAsync(
             new DeactivateChargeCommand(expenseId, userId.Value), ct);
         if (result is null) return NotFound();
@@ -161,8 +155,6 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> PayAllocation(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // The committed SettlementRecorded fact drives the ledger posting (Dr Cash / Cr Member)
-        // via the LedgerPostingConsumer.
         await _manager.MarkPaidAsync(new MarkChargePaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
     }
@@ -171,12 +163,9 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> UnpayAllocation(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // SettlementReversed drives the contra entry via the LedgerPostingConsumer.
         await _manager.MarkUnpaidAsync(new MarkChargeUnpaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
     }
-
-    // ── Vendor payment (the bill itself) ─────────────────────────────────────────────
 
     /// <summary>Mark the vendor paid for an occurrence of a group charge, choosing who paid now:
     /// a member fronted it (FundingSource=PayerMember) or it came from the shared pot (GroupCash).
@@ -185,8 +174,8 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> PayVendor(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // The committed VendorPaid fact drives the ledger transfer (Dr Vendor Payable / Cr funding)
-        // via the LedgerPostingConsumer.
+        // The committed VendorPaid fact drives the ledger transfer (Dr Vendor Payable / Cr funding); it
+        // is not posted here.
         await _manager.MarkVendorPaidAsync(
             new MarkVendorPaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
@@ -200,8 +189,6 @@ public sealed class ChargesController : ControllerBase
         await _manager.MarkVendorUnpaidAsync(new MarkVendorUnpaidCommand(expenseId, userId.Value, body.OccurrenceDate), ct);
         return NoContent();
     }
-
-    // ── Settle-up (member-to-member) ─────────────────────────────────────────────────
 
     /// <summary>The caller records a direct settle-up payment to another member (squaring what they
     /// owe). Self-service — the caller is always the payer (from). Posts Dr Member:to / Cr Member:from.</summary>
@@ -219,8 +206,6 @@ public sealed class ChargesController : ControllerBase
         return NoContent();
     }
 
-    // ── Allocations ────────────────────────────────────────────────────────────────
-
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits")]
     public async Task<IActionResult> ListAllocations(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
@@ -234,17 +219,16 @@ public sealed class ChargesController : ControllerBase
         var userId = User.GetUserId();
 
         // Self-service only: this endpoint always attributes the share to the authenticated caller.
-        // Assigning ANOTHER member's share is role-gated and goes through the household service
-        // (POST /api/households/{groupId}/charges/{expenseId}/allocations), which checks Owner/Admin
-        // then emits GroupAllocationAssigned for finance to apply. Reject an explicit foreign userId
-        // rather than silently re-attributing it to the caller.
+        // Assigning ANOTHER member's share is role-gated and arrives asynchronously as
+        // GroupAllocationAssigned. An explicit foreign userId is rejected rather than silently
+        // re-attributed to the caller.
         if (request.UserId != Guid.Empty && request.UserId != userId.Value)
             return Forbid();
 
         try
         {
-            // AllocationCreated/AllocationUpdated (committed with the upsert) drive the share's
-            // ledger posting — reverse-then-repost on re-amounting — via the LedgerPostingConsumer.
+            // AllocationCreated/AllocationUpdated, committed with the upsert, drive the share's ledger
+            // posting — reverse-then-repost on re-amounting.
             var written = await _manager.UpsertAllocationAsync(
                 request with { ChargeId = expenseId, GroupId = groupId, UserId = userId.Value }, ct);
 
@@ -275,8 +259,6 @@ public sealed class ChargesController : ControllerBase
         if (result is null) return NotFound();
         return NoContent();
     }
-
-    // ── Contributions ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns per-month, per-member contribution breakdowns for a household.

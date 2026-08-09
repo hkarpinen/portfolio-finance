@@ -14,8 +14,10 @@ public sealed record CreateChargeCommand(
     DateTime? RecurrenceEndDate = null,
     string? Description = null);
 
+// CallerId is the owner check: the charge id alone must never authorise an update or a delete.
 public sealed record UpdateChargeCommand(
     Guid ChargeId,
+    Guid CallerId,
     string Title,
     decimal Amount,
     string Currency,
@@ -26,7 +28,8 @@ public sealed record UpdateChargeCommand(
     DateTime? RecurrenceEndDate = null,
     string? Description = null);
 
-public sealed record DeleteChargeCommand(Guid ChargeId);
+// CallerId is the owner check.
+public sealed record DeleteChargeCommand(Guid ChargeId, Guid CallerId);
 
 public sealed record CreateAllocationDto(Guid UserId, decimal Amount, string Currency);
 
@@ -83,7 +86,7 @@ public sealed record MarkChargeUnpaidCommand(
     Guid UserId,
     DateTime OccurrenceDate);
 
-/// <summary>The bill's owner pays the vendor from the shared pot (collect-first). Owner-only.</summary>
+// Owner-only: the bill's owner pays the vendor from the shared pot (collect-first).
 public sealed record MarkVendorPaidCommand(
     Guid ChargeId,
     Guid CallerId,

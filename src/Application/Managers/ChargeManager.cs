@@ -35,8 +35,6 @@ internal sealed class ChargeManager : IChargeManager
         _logger = logger;
     }
 
-    // ── Personal charge operations ───────────────────────────────────────────
-
     public async Task<ChargeResponseDto> CreateAsync(CreateChargeCommand request, CancellationToken cancellationToken = default)
     {
         if (!Enum.TryParse<ChargeCategory>(request.Category, ignoreCase: true, out var category))
@@ -61,6 +59,9 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null) return null;
 
+        // Owner check. Null (→ 404), never 403, so ids stay unprobeable.
+        if (!IsOwnPersonalCharge(expense, request.CallerId)) return null;
+
         if (!Enum.TryParse<ChargeCategory>(request.Category, ignoreCase: true, out var category))
             category = ChargeCategory.Other;
 
@@ -82,6 +83,9 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null) return null;
 
+        // Owner check — deletion must not be reachable by id alone.
+        if (!IsOwnPersonalCharge(expense, request.CallerId)) return null;
+
         if (expense.TryDeactivate())
             await _repository.UpdateAsync(expense, cancellationToken);
 
@@ -96,13 +100,10 @@ internal sealed class ChargeManager : IChargeManager
         return ChargeMapper.ToResponse(expense);
     }
 
-    // ── Group charge operations ──────────────────────────────────────────
-
     public async Task<ChargeResponseDto> CreateGroupChargeAsync(CreateGroupChargeCommand request, CancellationToken cancellationToken = default)
     {
-        // A group charge ALWAYS has a payer (someone fronted the bill). When the caller doesn't
-        // name one, the creator is the payer. Persisting it here makes PayerUserId a real
-        // invariant — so the rest of the codebase reads it directly, with no `?? CreatedBy` fallback.
+        // A group charge ALWAYS has a payer; defaulting it here makes PayerUserId a real
+        // invariant, so readers never need a `?? CreatedBy` fallback.
         var payerUserId = request.PayerUserId ?? request.CreatedBy;
 
         var expense = Charge.CreateGroup(
@@ -119,9 +120,8 @@ internal sealed class ChargeManager : IChargeManager
 
         await _repository.AddAsync(expense, cancellationToken);
 
-        // Atomically create any initial splits in the same transaction. The allocation's actor is
-        // the identity userId (the person), not the household membership — finance keys every actor
-        // on the person so a member's stake is one financial identity across all their households.
+        // The allocation's actor is the identity userId (the PERSON), not the household
+        // membership — one financial identity across all of that person's households.
         if (request.Allocations is { Count: > 0 })
         {
             foreach (var split in request.Allocations)
@@ -168,8 +168,6 @@ internal sealed class ChargeManager : IChargeManager
         await _repository.CommitAsync(cancellationToken);
         return ChargeMapper.ToResponse(expense);
     }
-
-    // ── Allocation management ──────────────────────────────────────────────────────
 
     public async Task<AllocationDto> UpsertAllocationAsync(UpsertAllocationCommand request, CancellationToken cancellationToken = default)
     {
@@ -304,12 +302,9 @@ internal sealed class ChargeManager : IChargeManager
             await _splitRepository.AddAsync(result, cancellationToken);
         }
         await _splitRepository.CommitAsync(cancellationToken);
-        // The commit published AllocationCreated/AllocationUpdated with the row — the
-        // LedgerPostingConsumer journals the share (Dr Member / Cr Expense) from the event.
+        // The committed event drives the share posting (Dr Member / Cr Expense).
         return ChargeMapper.ToAllocationResponse(result);
     }
-
-    // ── Unified payment ───────────────────────────────────────────────────────
 
     public async Task<SettlementOutcome?> MarkPaidAsync(MarkChargePaidCommand request, CancellationToken cancellationToken = default)
     {
@@ -320,12 +315,9 @@ internal sealed class ChargeManager : IChargeManager
 
         if (expense.GroupId.HasValue)
         {
-            // "Mark my share paid" = the member settles their share into the account that funded the
-            // bill, per the charge's FundingSource: a member fronted it (PayerMember → settle to the
-            // payer, Dr Member:payer / Cr Member:debtor — "pay them back") or it came from the shared
-            // pot (GroupCash → Dr Cash / Cr Member:debtor — "pay into pot"). The ledger is the single
-            // source of truth: the SettlementRecorded fact commits with this transaction and the
-            // LedgerPostingConsumer posts the matching entry (idempotent on the settlement source).
+            // The share settles into whichever account funded the bill: PayerMember pays the
+            // payer back (Dr Member:payer / Cr Member:debtor), GroupCash pays into the pot
+            // (Dr Cash / Cr Member:debtor). The committed fact drives the posting.
             var userId = UserId.Create(request.UserId);
             var split = await _splitRepository.GetByChargeAndUserAsync(expense.Id, userId, cancellationToken)
                 ?? throw new InvalidOperationException("No allocation found for this user on this charge.");
@@ -334,9 +326,8 @@ internal sealed class ChargeManager : IChargeManager
             if (await _ledgerQuery.IsAllocationSettledAsync(split.Id.Value, occurrenceDate, cancellationToken))
                 return null;
 
-            // The counterpart is the payer (PayerMember) or the pot (GroupCash). The fact carries the
-            // payer as the nominal payee; the LedgerPostingConsumer resolves the funding account from
-            // the charge's FundingSource.
+            // The fact names the payer as nominal payee; the funding account is resolved
+            // downstream from the charge's FundingSource.
             var nominalTo = UserId.Create(expense.PayerUserId ?? expense.CreatedBy?.Value ?? request.UserId);
             var valueDate = DateTime.UtcNow.Date;
             split.Settle(nominalTo, occurrenceDate, valueDate);
@@ -372,9 +363,7 @@ internal sealed class ChargeManager : IChargeManager
 
         if (expense.GroupId.HasValue)
         {
-            // The caller takes their share back out of the pot — SettlementReversed drives the
-            // contra entry by its source via the LedgerPostingConsumer (the single place a
-            // settlement is undone).
+            // The reversal fact drives the contra entry, keyed by the same source.
             var userId = UserId.Create(request.UserId);
             var split = await _splitRepository.GetByChargeAndUserAsync(expense.Id, userId, cancellationToken);
             if (split is null) return null;
@@ -404,14 +393,11 @@ internal sealed class ChargeManager : IChargeManager
         return null;
     }
 
-    // ── Vendor payment (the bill itself) ──────────────────────────────────────
-
     public async Task<VendorPaymentOutcome?> MarkVendorPaidAsync(MarkVendorPaidCommand request, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null || expense.GroupId is null) return null;
 
-        // Only the bill's owner records that the vendor was paid.
         if (expense.CreatedBy?.Value != request.CallerId)
             throw new InvalidOperationException("Only the bill's owner can mark it paid to the vendor.");
 
@@ -421,10 +407,8 @@ internal sealed class ChargeManager : IChargeManager
         if (await _ledgerQuery.IsVendorPaidAsync(request.ChargeId, cancellationToken))
             return null;
 
-        // The funding of record drives the ledger transfer (Dr Vendor Payable / Cr funding): a member
-        // fronted it from their own pocket (PayerMember → Cr Member:payer) or it came from the shared
-        // pot (GroupCash → Cr Cash). The VendorPaid fact commits with this transaction and carries the
-        // funding source; the LedgerPostingConsumer posts the matching transfer from it.
+        // Dr Vendor Payable / Cr funding — Cr Member:payer when a member fronted it,
+        // Cr Cash from the pot. The committed fact carries the funding source.
         var paidByUserId = expense.FundingSource == FundingSource.PayerMember ? expense.PayerUserId : null;
         expense.RecordVendorPayment(occurrenceDate, expense.FundingSource, paidByUserId);
         await _repository.CommitAsync(cancellationToken);
@@ -460,8 +444,6 @@ internal sealed class ChargeManager : IChargeManager
             LedgerSources.VendorPayment(request.ChargeId, occurrenceDate));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     /// <summary>
     /// Sum of the charge's OTHER active allocations — every allocation on the charge except the one
     /// optionally being replaced (<paramref name="excluding"/>). Feeds the Σ allocations ≤ charge
@@ -496,4 +478,16 @@ internal sealed class ChargeManager : IChargeManager
         if (!frequency.HasValue) return null;
         return RecurrenceSchedule.Create(frequency.Value, startDate ?? DateTime.UtcNow.Date, endDate);
     }
+
+    /// <summary>
+    /// True when <paramref name="callerId"/> owns this PERSONAL charge.
+    ///
+    /// Group charges are excluded deliberately: they are not owned by one
+    /// person, and their authorization is the group-membership filter plus the
+    /// role checks on the group routes. A group charge must never be mutable
+    /// through the personal endpoints, which is what a bare owner comparison
+    /// (`UserId == caller`, true for whoever created it) would have allowed.
+    /// </summary>
+    private static bool IsOwnPersonalCharge(Charge charge, Guid callerId) =>
+        charge.GroupId is null && charge.UserId.Value == callerId;
 }

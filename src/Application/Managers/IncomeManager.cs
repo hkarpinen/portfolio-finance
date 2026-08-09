@@ -58,6 +58,12 @@ internal sealed class IncomeManager : IIncomeManager
             return null;
         }
 
+        // Owner check. Null (→ 404), never 403 — a 403 would confirm the id exists.
+        if (income.UserId.Value != request.CallerId)
+        {
+            return null;
+        }
+
         var lastPaycheckDate = request.LastPaycheckDate ?? request.StartDate;
         income.Update(
             Money.Create(request.Amount, request.Currency),
@@ -80,8 +86,7 @@ internal sealed class IncomeManager : IIncomeManager
             return null;
         }
 
-        // Domain currently supports soft-delete semantics via deactivation.
-        // TryDeactivate() is idempotent: returns false without throwing if already inactive.
+        // Deletion is a soft delete. TryDeactivate() is idempotent: false, not a throw, if already inactive.
         if (income.TryDeactivate())
         {
             await _incomeRepository.UpdateAsync(income, cancellationToken);
@@ -99,15 +104,18 @@ internal sealed class IncomeManager : IIncomeManager
             return null;
         }
 
+        // Owner check. Null (→ 404), never 403.
+        if (income.UserId.Value != request.CallerId)
+        {
+            return null;
+        }
+
         income.Deactivate();
         await _incomeRepository.UpdateAsync(income, cancellationToken);
         await _incomeRepository.CommitAsync(cancellationToken);
         return IncomeMapper.ToResponse(income);
     }
 
-    // ── Payroll deduction operations ─────────────────────────────────────────(IncomeSource income) => IncomeMapper.ToResponse(income);
-
-    // ── Payroll deduction operations ─────────────────────────────────────────
 
     public async Task<IncomeDto?> SetTaxProfileAsync(SetTaxProfileCommand request, CancellationToken cancellationToken = default)
     {

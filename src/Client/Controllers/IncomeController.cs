@@ -2,19 +2,19 @@ using Finance.Application.Commands;
 using Finance.Application.Queries;
 using Finance.Application.Managers;
 using Client.Extensions;
+using Client.Filters;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Client.Controllers;
 
-/// <summary>
-/// Income sources — covers both group-scoped (api/finance/groups/{groupId}/income)
-/// and user-scoped (api/finance/income) routes. Both are driven by the same IncomeSource aggregate.
-/// </summary>
 [ApiController]
 [Authorize]
 [EnableRateLimiting("api")]
+// The {groupId} prefix is members-only. A no-op on the user-scoped routes below, which declare
+// absolute paths with no {groupId}.
+[RequireGroupMembership]
 [Route("api/finance/groups/{groupId:guid}/income")]
 public sealed class IncomeController : ControllerBase
 {
@@ -27,8 +27,6 @@ public sealed class IncomeController : ControllerBase
         _incomeQuery = incomeQuery;
     }
 
-    // ── Group-scoped income ──────────────────────────────────────────────────
-
     [HttpGet]
     public async Task<IActionResult> List(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
@@ -39,7 +37,7 @@ public sealed class IncomeController : ControllerBase
     [HttpGet("{incomeId:guid}")]
     public async Task<IActionResult> GetDetail(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
-        var result = await _incomeQuery.GetDetailAsync(new IncomeDetailParams(incomeId), ct);
+        var result = await _incomeQuery.GetDetailAsync(new IncomeDetailParams(incomeId, User.GetUserId().Value), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -54,18 +52,16 @@ public sealed class IncomeController : ControllerBase
     [HttpPut("{incomeId:guid}")]
     public async Task<IActionResult> Update(Guid groupId, Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId }, ct);
+        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{incomeId:guid}")]
     public async Task<IActionResult> Deactivate(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
-        var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId), ct);
+        var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId, User.GetUserId().Value), ct);
         return result is null ? NotFound() : NoContent();
     }
-
-    // ── User-scoped income ────────────────────────────────────────────────────
 
     [HttpGet("/api/finance/income")]
     public async Task<IActionResult> ListByUser([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
@@ -86,14 +82,14 @@ public sealed class IncomeController : ControllerBase
     [HttpPut("/api/finance/income/{incomeId:guid}")]
     public async Task<IActionResult> UpdateForUser(Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId }, ct);
+        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("/api/finance/income/{incomeId:guid}")]
     public async Task<IActionResult> DeactivateForUser(Guid incomeId, CancellationToken ct = default)
     {
-        var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId), ct);
+        var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId, User.GetUserId().Value), ct);
         return result is null ? NotFound() : NoContent();
     }
 
@@ -127,12 +123,6 @@ public sealed class IncomeController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
-    /// <summary>
-    /// Aggregate net-pay summary across every active income source for the
-    /// authenticated user — used by the income page's stats strip so it can
-    /// render Gross/Net/Tax/Annual in one round-trip instead of one
-    /// per-source call.
-    /// </summary>
     [HttpGet("/api/finance/income/net-pay/summary")]
     public async Task<IActionResult> GetNetPaySummary([FromQuery] int? year, [FromQuery] int? month, CancellationToken ct = default)
     {
@@ -143,11 +133,6 @@ public sealed class IncomeController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Returns the full per-month contribution/budget summary for the authenticated user.
-    /// Covers projected income, household split obligations, personal bill obligations and
-    /// (where available) real-balance disposable income.
-    /// </summary>
     [HttpGet("/api/finance/contribution-summary")]
     public async Task<IActionResult> GetContributionSummary(
         [FromQuery] int months = 13,

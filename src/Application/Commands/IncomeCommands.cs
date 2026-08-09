@@ -8,35 +8,35 @@ public sealed record CreateIncomeCommand(
     decimal Amount,
     string Currency,
     string Source,
-    /// <summary>The period the Amount is quoted in (e.g. Annually for a $80k salary).</summary>
     RecurrenceFrequency QuotedAs,
-    /// <summary>How often a paycheck actually arrives (e.g. BiWeekly). Defaults to QuotedAs.</summary>
+    // Defaults to QuotedAs.
     RecurrenceFrequency? PaidEvery,
     DateTime StartDate,
-    /// <summary>Date of the most recent paycheck — used as the recurrence anchor for exact pay-date calculation.</summary>
+    // Anchors the recurrence, so exact pay dates fall on the real cadence rather than the start date.
     DateTime? LastPaycheckDate = null,
     DateTime? EndDate = null,
     IReadOnlyList<PayrollDeductionDto>? InitialDeductions = null,
     string? Notes = null);
 
+// CallerId is the owner check and is always overwritten server-side from the token.
 public sealed record UpdateIncomeCommand(
+    Guid CallerId,
     Guid IncomeId,
     decimal Amount,
     string Currency,
     string Source,
-    /// <summary>The period the Amount is quoted in.</summary>
     RecurrenceFrequency QuotedAs,
-    /// <summary>How often a paycheck actually arrives. Defaults to QuotedAs.</summary>
+    // Defaults to QuotedAs.
     RecurrenceFrequency? PaidEvery,
     DateTime StartDate,
-    /// <summary>Date of the most recent paycheck — recurrence anchor.</summary>
+    // Anchors the recurrence.
     DateTime? LastPaycheckDate = null,
     DateTime? EndDate = null,
     string? Notes = null);
 
 public sealed record SetTaxProfileCommand(
     Guid IncomeId,
-    /// <summary>Null to clear the tax profile.</summary>
+    // Null CLEARS the tax profile.
     TaxProfileDto? TaxProfile);
 
 public sealed record AddDeductionCommand(
@@ -50,4 +50,5 @@ public sealed record RemoveDeductionCommand(
 
 public sealed record DeleteIncomeCommand(Guid IncomeId);
 
-public sealed record DeactivateIncomeCommand(Guid IncomeId);
+// CallerId is the owner check, always overwritten server-side from the token.
+public sealed record DeactivateIncomeCommand(Guid IncomeId, Guid CallerId);

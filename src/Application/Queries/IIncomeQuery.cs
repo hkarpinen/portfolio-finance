@@ -15,19 +15,15 @@ public sealed record ListUserIncomeParams(
     int PageSize = 20,
     bool ActiveOnly = true);
 
-public sealed record IncomeDetailParams(Guid IncomeId);
+// CallerId: income is readable ONLY by its owner — the app promises it is never shown to anyone
+// in the household — so the id alone must not resolve one.
+public sealed record IncomeDetailParams(Guid IncomeId, Guid CallerId);
 
 public sealed record GetNetPayBreakdownParams(
     Guid IncomeId,
     int Year,
     int Month);
 
-/// <summary>
-/// Aggregate net-pay figures for the caller across every active income
-/// source in the given month. Replaces the N+1 client-side aggregation
-/// that the income page used to do (one GetNetPayBreakdown call per
-/// source) with one server-side roll-up.
-/// </summary>
 public sealed record GetNetPaySummaryParams(
     Guid UserId,
     int Year,
@@ -42,12 +38,6 @@ public interface IIncomeQuery
     Task<NetPaySummaryDto> GetNetPaySummaryAsync(GetNetPaySummaryParams request, CancellationToken cancellationToken = default);
     Task<bool> ExistsForUserAsync(UserId userId, string source, decimal amount, CancellationToken cancellationToken = default);
 
-    // ── Contribution / budget timeline ────────────────────────────────────────
-    /// <summary>
-    /// Builds the full per-month contribution summary window for a user.
-    /// Each entry contains projected gross and net income, household split
-    /// obligations, personal bill obligations, and per-item detail.
-    /// </summary>
     Task<IReadOnlyCollection<ContributionPeriodSummaryDto>> GetContributionSummariesAsync(
         Guid userId,
         DateTime now,
