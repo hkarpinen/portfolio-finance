@@ -92,6 +92,46 @@ public class BookkeepingManagerTests
             poolRepo.CodeOf(poolEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
+    [Fact]
+    public async Task SyncChargeAccrual_CorrectionReversesInThePeriodItCorrects()
+    {
+        var manager = NewManager(out var repo);
+        var july = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            Group, Charge, "Rent", "Housing", 1000m, "USD", july));
+        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            Group, Charge, "Rent", "Housing", 1100m, "USD", july));
+
+        // Reversal dated August with a re-post dated July left July carrying 1,000 + 1,100 and a
+        // balance sheet at 31 July reporting 2,100.
+        var asAtJulyEnd = repo.JournalEntries
+            .Where(e => e.Date <= new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc))
+            .SelectMany(e => e.Postings)
+            .Sum(p => p.SignedAmount);
+
+        Assert.Equal(0m, asAtJulyEnd);
+        Assert.All(repo.JournalEntries, e => Assert.Equal(july, e.Date));
+    }
+
+    [Fact]
+    public async Task SyncChargeAccrual_CorrectionLeavesTheRightAmountOnTheBooks()
+    {
+        var manager = NewManager(out var repo);
+        var july = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            Group, Charge, "Rent", "Housing", 1000m, "USD", july));
+        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            Group, Charge, "Rent", "Housing", 1100m, "USD", july));
+
+        // Original + reversal + re-post: the payable nets to the corrected figure.
+        var postings = repo.JournalEntries.SelectMany(e => e.Postings)
+            .Where(p => repo.CodeOf(p.AccountId) == GroupChart.VendorPayableCode);
+
+        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, postings));
+    }
+
     internal sealed class FakeLedgerRepository : ILedgerRepository
     {
         private readonly List<Ledger> _ledgers = new();

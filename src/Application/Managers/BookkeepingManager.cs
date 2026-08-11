@@ -212,8 +212,14 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             return false;
 
         // Stale (amount/category/title/date changed) — reverse what's on the books, then re-post.
+        //
+        // Reversed at the ORIGINAL entry's date, not today's. A correction and its re-post have to
+        // land in the same period or that period is misstated: reversing a July accrual in August
+        // and re-posting it to July leaves July carrying both the old amount and the new one, and a
+        // balance sheet drawn at 31 July reports the sum of them. The cumulative position is right
+        // either way, which is what makes the split version so quiet.
         foreach (var stale in active)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(DateTime.UtcNow.Date), ct);
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
 
         // Accrual basis: the charge is incurred and OWED to the vendor — Dr Expense / Cr Vendor
         // Payable. Member shares are journaled per-allocation (SyncAllocationAsync) so a split added
@@ -251,7 +257,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             return;
 
         foreach (var stale in active)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(DateTime.UtcNow.Date), ct);
+            // Same rule as the accrual: a correction is reversed in the period it corrects.
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
 
         // The member bears their share — Dr Member / Cr Expense (moves the cost off the nominal
         // expense onto the member's stake).
