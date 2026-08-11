@@ -301,4 +301,44 @@ public class JournalizingEngineTests
         Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == Bob)));
         Assert.True(LedgerMath.IsBalanced(all));
     }
+
+    [Fact]
+    public void JournalizeCharge_Refuses_WhenSharesExceedTheTotal()
+    {
+        // Reachable by editing a charge DOWN after it has been split: the allocations are
+        // untouched, so the next journalization sees shares above the total.
+        var context = new ChargeAllocationContext(
+            Expense, Cash,
+            new[] { new MemberShare(Hank, Usd(50)), new MemberShare(Bob, Usd(50)) },
+            Usd(60), DateTime.UtcNow, "Groceries", "charge:1");
+
+        var error = Assert.Throws<InvalidOperationException>(() => _engine.JournalizeCharge(context));
+
+        // Names the real problem. Left to fall through it reported "entry does not balance",
+        // which is true and useless.
+        Assert.Contains("exceed", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JournalizeCharge_Allows_SharesEqualToTheTotal()
+    {
+        var context = new ChargeAllocationContext(
+            Expense, Cash,
+            new[] { new MemberShare(Hank, Usd(30)), new MemberShare(Bob, Usd(30)) },
+            Usd(60), DateTime.UtcNow, "Groceries", "charge:1");
+
+        var postings = Post(L, _engine.JournalizeCharge(context));
+
+        Assert.Equal(0m, postings.Sum(p => p.SignedAmount));
+    }
+
+    [Fact]
+    public void JournalizeTransfer_Refuses_BothLegsOnOneAccount()
+    {
+        // Balanced and two-legged, so every check the journal makes would pass — and it
+        // records a movement that never happened.
+        var context = new TransferContext(Cash, Cash, Usd(25), DateTime.UtcNow, "Nowhere", "x");
+
+        Assert.Throws<InvalidOperationException>(() => _engine.JournalizeTransfer(context));
+    }
 }

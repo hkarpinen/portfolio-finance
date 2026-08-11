@@ -56,6 +56,15 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
         var sharesTotal = c.Shares.Aggregate(0m, (sum, s) => sum + s.Amount.Amount);
         var remainder = c.Total.Amount - sharesTotal;
 
+        // Shares above the total cannot be journalized: there is no account that legitimately
+        // absorbs a NEGATIVE remainder. Left to fall through, the entry would simply not balance
+        // and JournalEntry.Post would report that instead — a true statement about the wrong
+        // thing, raised deep in a consumer where nobody can act on it.
+        if (remainder < 0m)
+            throw new InvalidOperationException(
+                $"Allocations of {sharesTotal:0.##} exceed the charge total of {c.Total.Amount:0.##}; " +
+                "the charge cannot be journalized until they agree.");
+
         var lines = new List<PostingLine>(c.Shares.Count + 2);
         foreach (var s in c.Shares)
             lines.Add(PostingLine.Debit(s.MemberAccount, s.Amount));
@@ -104,6 +113,11 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
 
     public JournalEntryDraft JournalizeTransfer(TransferContext c)
     {
+        // Both legs on one account nets to nothing while still satisfying double-entry, so it
+        // passes every check the journal makes and records an event that did not happen.
+        if (c.DebitAccount == c.CreditAccount)
+            throw new InvalidOperationException("A transfer needs two different accounts.");
+
         // A balanced 1↔1 move: debit one account, credit the other. Caller chose the direction.
         return new JournalEntryDraft(
             c.ValueDate, c.Description, c.Source,
