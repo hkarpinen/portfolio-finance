@@ -12,6 +12,7 @@ public sealed class FinanceDbContext : DbContext
 {
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
     public DbSet<Charge> Charges => Set<Charge>();
+    public DbSet<ChargeSchedule> ChargeSchedules => Set<ChargeSchedule>();
     public DbSet<ChargePayment> ChargePayments => Set<ChargePayment>();
     public DbSet<Allocation> Allocations => Set<Allocation>();
 

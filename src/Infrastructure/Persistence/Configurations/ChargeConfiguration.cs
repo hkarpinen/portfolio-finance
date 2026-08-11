@@ -23,6 +23,20 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
             .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new GroupId(v.Value) : (GroupId?)null)
             .IsRequired(false);
 
+        builder.Property(b => b.ScheduleId)
+            .HasConversion(
+                id => id.HasValue ? id.Value.Value : (Guid?)null,
+                v => v.HasValue ? new ChargeScheduleId(v.Value) : (ChargeScheduleId?)null)
+            .IsRequired(false);
+
+        builder.Property(b => b.OccurrenceDate).IsRequired();
+
+        // One occurrence cannot be generated twice. Filtered, because a directly-entered charge
+        // has no schedule and any number of those may share a date.
+        builder.HasIndex(b => new { b.ScheduleId, b.OccurrenceDate })
+            .IsUnique()
+            .HasFilter("schedule_id IS NOT NULL");
+
         builder.Property(b => b.CreatedBy)
             .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new UserId(v.Value) : (UserId?)null)
             .IsRequired(false);
