@@ -7,6 +7,22 @@ namespace Finance.Application.Managers;
 
 /// <summary>Dr Expense / Cr Vendor Payable. Payer and funding source belong to the
 /// vendor-payment and settlement commands, not the accrual.</summary>
+/// <summary>
+/// Opening a card or loan. `OpeningBalance` is what is owed TODAY — positive, because it is a
+/// debt; it posts against opening-balance equity so the book balances from the first entry.
+/// </summary>
+public sealed record OpenDebtAccountCommand(
+    Guid UserId,
+    string Name,
+    string Currency,
+    decimal AnnualPercentageRate,
+    decimal OpeningBalance,
+    DateTime AsOf,
+    decimal? CreditLimit = null,
+    int? StatementDayOfMonth = null,
+    int? PaymentDueDayOfMonth = null,
+    decimal? MinimumPayment = null);
+
 public sealed record PostChargeToLedgerCommand(
     Guid GroupId,
     Guid ChargeId,
@@ -106,6 +122,16 @@ public interface IBookkeepingManager
 
     /// <summary>Idempotent on the command's source.</summary>
     Task RecordSettlementAsync(RecordSettlementCommand command, CancellationToken ct = default);
+
+    /// <summary>
+    /// Opens a card or loan in the caller's own book, with its terms, and posts any balance
+    /// already owed as <c>Dr Opening balance / Cr {debt}</c>.
+    ///
+    /// The balance is POSTED rather than stored, so from the first moment it is the ledger's
+    /// answer and cannot drift from the entries beneath it. The user's ledger is opened here if
+    /// they have never had one — the same lazy ensure the group side uses.
+    /// </summary>
+    Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand command, CancellationToken ct = default);
 
     /// <summary>Reverses with mirror entries rather than deleting. The only place a
     /// settlement is undone.</summary>
@@ -460,6 +486,66 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         => entries
             .Where(e => e.ReversalOfEntryId is null && e.ReversedByEntryId is null)
             .ToList();
+
+    public async Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand cmd, CancellationToken ct = default)
+    {
+        var ledger = await EnsureUserLedgerAsync(cmd.UserId, cmd.Currency, ct);
+
+        var accountKey = Guid.NewGuid();
+        var account = PersonalChart.OpenDebtAccount(ledger.Id, accountKey, cmd.Name);
+        await _ledgers.AddAccountAsync(account, ct);
+
+        var terms = DebtTerms.For(
+            account.Id,
+            UserId.Create(cmd.UserId),
+            cmd.AnnualPercentageRate,
+            cmd.CreditLimit,
+            cmd.StatementDayOfMonth,
+            cmd.PaymentDueDayOfMonth,
+            cmd.MinimumPayment);
+        await _ledgers.AddDebtTermsAsync(terms, ct);
+
+        // Nothing owed yet needs no entry — a zero posting would not validate, and an account
+        // with no postings already reads as a zero balance.
+        if (cmd.OpeningBalance > 0m)
+        {
+            var opening = await EnsureAccountAsync(
+                ledger.Id, PersonalChart.OpeningBalanceCode,
+                () => Account.Open(ledger.Id, PersonalChart.OpeningBalanceCode, "Opening balance", AccountType.Equity), ct);
+
+            var draft = _journalizing.JournalizeTransfer(new TransferContext(
+                DebitAccount: opening.Id,
+                CreditAccount: account.Id,
+                Amount: Money.Create(cmd.OpeningBalance, cmd.Currency),
+                ValueDate: cmd.AsOf,
+                Description: $"{cmd.Name} — balance carried in",
+                Source: $"debt-opening:{account.Id.Value:N}"));
+
+            await _ledgers.AddJournalEntryAsync(
+                JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source), ct);
+        }
+
+        await _ledgers.CommitAsync(ct);
+        return account.Id.Value;
+    }
+
+    /// <summary>
+    /// Lazy, like the group side. Opening one at registration would mean guessing a currency
+    /// before the person has said anything about money — and a ledger's currency is not something
+    /// you want to correct once it has postings under it.
+    /// </summary>
+    private async Task<Ledger> EnsureUserLedgerAsync(Guid userId, string currency, CancellationToken ct)
+    {
+        var existing = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.User, userId, ct);
+        if (existing is not null) return existing;
+
+        var ledger = Ledger.Open(LedgerOwnerType.User, userId, currency);
+        await _ledgers.AddLedgerAsync(ledger, ct);
+        foreach (var account in PersonalChart.StandardAccounts(ledger.Id))
+            await _ledgers.AddAccountAsync(account, ct);
+        await _ledgers.CommitAsync(ct);
+        return ledger;
+    }
 
     private async Task<Ledger> EnsureGroupLedgerAsync(Guid groupId, string currency, CancellationToken ct)
     {

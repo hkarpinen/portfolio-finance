@@ -17,6 +17,7 @@ public sealed class FinanceDbContext : DbContext
 
     public DbSet<Ledger> Ledgers => Set<Ledger>();
     public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<DebtTerms> DebtTerms => Set<DebtTerms>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<Posting> Postings => Set<Posting>();
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();

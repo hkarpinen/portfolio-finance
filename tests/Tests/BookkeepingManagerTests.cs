@@ -92,7 +92,7 @@ public class BookkeepingManagerTests
             poolRepo.CodeOf(poolEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
-    private sealed class FakeLedgerRepository : ILedgerRepository
+    internal sealed class FakeLedgerRepository : ILedgerRepository
     {
         private readonly List<Ledger> _ledgers = new();
         private readonly List<Account> _accounts = new();
@@ -112,6 +112,11 @@ public class BookkeepingManagerTests
             => Task.FromResult(_accounts.FirstOrDefault(a => a.LedgerId == ledgerId && a.Code == code));
 
         public Task AddAccountAsync(Account account, CancellationToken ct = default) { _accounts.Add(account); return Task.CompletedTask; }
+
+        public List<DebtTerms> DebtTerms { get; } = new();
+        public Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default) { DebtTerms.Add(terms); return Task.CompletedTask; }
+        public Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<DebtTerms>>(DebtTerms.Where(t => t.UserId.Value == userId).ToList());
 
         public Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default) { JournalEntries.Add(entry); return Task.CompletedTask; }
 

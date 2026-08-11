@@ -12,6 +12,9 @@ public interface ILedgerRepository
     Task<Account?> GetAccountByCodeAsync(LedgerId ledgerId, string code, CancellationToken ct = default);
     Task AddAccountAsync(Account account, CancellationToken ct = default);
 
+    Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default);
+    Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default);
+
     Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default);
     // Returns BOTH originals and any reversals, which is what makes a posting idempotent to redo and
     // possible to unwind.
