@@ -53,7 +53,9 @@ internal sealed class LedgerPostingConsumer :
         HandleAsync(context.Message, nameof(ChargeDeactivated), ct =>
         {
             var m = context.Message;
-            if (m.GroupId is null) return Task.CompletedTask; // personal charges never touch the group ledger
+            // A personal charge unwinds inside the person's own book; ConvergePersonalCharge
+            // reverses it once the charge reads inactive.
+            if (m.GroupId is null) return _bookkeeping.ConvergePersonalChargeAsync(m.ChargeId.Value, ct);
             return _bookkeeping.ReverseChargeAsync(m.GroupId.Value.Value, m.ChargeId.Value, ct);
         }, context.CancellationToken);
 

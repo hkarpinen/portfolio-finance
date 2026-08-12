@@ -25,6 +25,15 @@ public class Charge : IAggregateRoot
     public ChargeScheduleId? ScheduleId { get; private set; }
 
     /// <summary>
+    /// Which of the caller's own accounts paid for it — a card, or checking. Personal only; a
+    /// group charge names its funder through FundingSource instead.
+    ///
+    /// Null means their cash account, which is the honest default: somebody who has told us about
+    /// no accounts still spent real money, and the alternative is refusing to record it.
+    /// </summary>
+    public Guid? FundingAccountId { get; private set; }
+
+    /// <summary>
     /// The date this charge BELONGS to, which is not the date it was written down. For a
     /// generated charge it is the occurrence the schedule named; for a one-off it is the due
     /// date. Unique with ScheduleId, so one occurrence cannot be generated twice.
@@ -67,7 +76,8 @@ public class Charge : IAggregateRoot
         ChargeCategory category,
         DateTime dueDate,
         RecurrenceSchedule? recurrenceSchedule = null,
-        string? description = null)
+        string? description = null,
+        Guid? fundingAccountId = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Title cannot be empty.", nameof(title));
@@ -80,6 +90,7 @@ public class Charge : IAggregateRoot
             UserId = userId,
             GroupId = null,
             CreatedBy = null,
+            FundingAccountId = fundingAccountId,
             Title = title,
             Description = description,
             Amount = amount,

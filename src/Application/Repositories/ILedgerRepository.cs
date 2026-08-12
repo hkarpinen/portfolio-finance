@@ -10,6 +10,7 @@ public interface ILedgerRepository
 
     Task<IReadOnlyList<Account>> GetAccountsAsync(LedgerId ledgerId, CancellationToken ct = default);
     Task<Account?> GetAccountByCodeAsync(LedgerId ledgerId, string code, CancellationToken ct = default);
+    Task<Account?> GetAccountAsync(AccountId accountId, CancellationToken ct = default);
     Task AddAccountAsync(Account account, CancellationToken ct = default);
 
     Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default);

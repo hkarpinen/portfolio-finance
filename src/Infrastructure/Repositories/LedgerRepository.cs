@@ -27,6 +27,9 @@ internal sealed class LedgerRepository : ILedgerRepository
     public async Task AddAccountAsync(Account account, CancellationToken ct = default)
         => await _db.Accounts.AddAsync(account, ct);
 
+    public Task<Account?> GetAccountAsync(AccountId accountId, CancellationToken ct = default)
+        => _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, ct);
+
     public async Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default)
         => await _db.DebtTerms.AddAsync(terms, ct);
 

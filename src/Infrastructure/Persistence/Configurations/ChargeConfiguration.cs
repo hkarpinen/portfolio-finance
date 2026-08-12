@@ -30,6 +30,7 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
             .IsRequired(false);
 
         builder.Property(b => b.OccurrenceDate).IsRequired();
+        builder.Property(b => b.FundingAccountId);
 
         // One occurrence cannot be generated twice. Filtered, because a directly-entered charge
         // has no schedule and any number of those may share a date.

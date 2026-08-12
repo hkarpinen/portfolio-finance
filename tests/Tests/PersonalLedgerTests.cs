@@ -154,4 +154,93 @@ public class PersonalLedgerTests
 
         Assert.Null(loan.HeadroomAgainst(10_000m));
     }
+
+    private static Charge Groceries(decimal amount = 45m, Guid? fundedBy = null) =>
+        Charge.Create(
+            UserId.Create(User), "Groceries", Money.Create(amount, "USD"),
+            ChargeCategory.Groceries, new DateTime(2026, 8, 3, 0, 0, 0, DateTimeKind.Utc),
+            fundingAccountId: fundedBy);
+
+    private sealed class ChargeStore : Finance.Application.Repositories.IChargeRepository
+    {
+        public List<Charge> Items { get; } = new();
+        public Task AddAsync(Charge c, CancellationToken ct = default) { Items.Add(c); return Task.CompletedTask; }
+        public Task UpdateAsync(Charge c, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RemoveAsync(Charge c, CancellationToken ct = default) { Items.Remove(c); return Task.CompletedTask; }
+        public Task<Charge?> GetByIdAsync(ChargeId id, CancellationToken ct = default)
+            => Task.FromResult(Items.FirstOrDefault(c => c.Id == id));
+        public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeleteAllForUserAsync(UserId u, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task PersonalCharge_PostsDrExpenseCrCash_InTheirOwnBook()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+
+        var entry = Assert.Single(repo.JournalEntries);
+        Assert.Equal(0m, entry.Postings.Sum(p => p.SignedAmount));
+        Assert.Equal(PersonalChart.ExpenseCode("groceries"),
+            repo.CodeOf(entry.Postings.Single(p => p.Direction == EntryDirection.Debit).AccountId));
+        Assert.Equal(PersonalChart.CashCode,
+            repo.CodeOf(entry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
+    }
+
+    [Fact]
+    public async Task PersonalCharge_OnACard_CreditsTheCardSoTheDebtGrows()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+
+        var cardId = await manager.OpenDebtAccountAsync(Card(0m));
+        var charge = Groceries(fundedBy: cardId);
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+
+        var onCard = repo.JournalEntries
+            .SelectMany(e => e.Postings)
+            .Where(p => p.AccountId.Value == cardId);
+
+        // Liability credited, so owing 45 more. No special case anywhere — the account type
+        // already carries the difference between a card and a bank account.
+        Assert.Equal(45m, LedgerMath.AccountBalance(NormalBalance.Credit, onCard));
+    }
+
+    [Fact]
+    public async Task PersonalCharge_IsConvergent_SoARedeliveryWritesNothing()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+
+        Assert.Single(repo.JournalEntries);
+    }
+
+    [Fact]
+    public async Task PersonalCharge_NeverTouchesAGroupLedger()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+
+        Assert.Null(await repo.GetLedgerByOwnerAsync(LedgerOwnerType.Group, User));
+        Assert.NotNull(await repo.GetLedgerByOwnerAsync(LedgerOwnerType.User, User));
+    }
 }

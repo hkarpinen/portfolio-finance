@@ -124,6 +124,15 @@ public interface IBookkeepingManager
     Task RecordSettlementAsync(RecordSettlementCommand command, CancellationToken ct = default);
 
     /// <summary>
+    /// Posts a personal charge into the caller's OWN book: Dr Expense / Cr whatever paid for it.
+    ///
+    /// This never touches a group ledger — a cost only one person bore is not the household's —
+    /// and it is the same convergent shape the group accrual uses, so a redelivery or a no-op edit
+    /// falls out without writing anything.
+    /// </summary>
+    Task ConvergePersonalChargeAsync(Guid chargeId, CancellationToken ct = default);
+
+    /// <summary>
     /// Opens a card or loan in the caller's own book, with its terms, and posts any balance
     /// already owed as <c>Dr Opening balance / Cr {debt}</c>.
     ///
@@ -388,7 +397,17 @@ internal sealed class BookkeepingManager : IBookkeepingManager
     public async Task ConvergeChargeAsync(Guid chargeId, CancellationToken ct = default)
     {
         var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
-        if (charge?.GroupId is null || !charge.IsActive) return; // personal, deleted, or deactivated
+        if (charge is null) return;
+
+        // A personal cost belongs in the person's own book, never the household's. Routed here
+        // rather than in the consumer so there is one answer to "where does this post".
+        if (charge.GroupId is null)
+        {
+            await ConvergePersonalChargeAsync(chargeId, ct);
+            return;
+        }
+
+        if (!charge.IsActive) return;
 
         var groupId = charge.GroupId.Value.Value;
         var date = charge.RecurrenceSchedule?.CurrentOccurrence(charge.DueDate) ?? charge.DueDate;
@@ -493,6 +512,58 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         => entries
             .Where(e => e.ReversalOfEntryId is null && e.ReversedByEntryId is null)
             .ToList();
+
+    public async Task ConvergePersonalChargeAsync(Guid chargeId, CancellationToken ct = default)
+    {
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge is null || charge.GroupId is not null) return;
+
+        var ledger = await EnsureUserLedgerAsync(charge.UserId.Value, charge.Amount.Currency, ct);
+        var source = LedgerSources.Charge(chargeId);
+        var date = DateTime.SpecifyKind(charge.OccurrenceDate.Date, DateTimeKind.Utc);
+
+        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+
+        // Deactivated or deleted: take it off the books and stop.
+        if (!charge.IsActive)
+        {
+            foreach (var stale in active)
+                await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
+            if (active.Count > 0) await _ledgers.CommitAsync(ct);
+            return;
+        }
+
+        var expenseAccount = await EnsureAccountAsync(
+            ledger.Id, PersonalChart.ExpenseCode(charge.Category.ToString()),
+            () => PersonalChart.OpenExpenseAccount(ledger.Id, charge.Category.ToString()), ct);
+
+        // Whatever paid for it: a card they told us about, else their cash account.
+        var fundingAccount = charge.FundingAccountId is { } declared
+            ? await _ledgers.GetAccountAsync(AccountId.Create(declared), ct)
+              ?? throw new InvalidOperationException("That funding account is not in this book.")
+            : await EnsureAccountAsync(
+                ledger.Id, PersonalChart.CashCode,
+                () => Account.Open(ledger.Id, PersonalChart.CashCode, "Cash", AccountType.Asset), ct);
+
+        var description = $"{charge.Title} — paid";
+        if (active.Count == 1 && AccrualMatches(active[0], expenseAccount.Id, charge.Amount.Amount, charge.Amount.Currency, description, date))
+            return;
+
+        foreach (var stale in active)
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
+
+        // Cr the card and the debt grows; Cr cash and it shrinks. One posting, both meanings,
+        // because the account type already carries the difference.
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: expenseAccount.Id, CreditAccount: fundingAccount.Id,
+            charge.Amount, date, description, source));
+
+        await _ledgers.AddJournalEntryAsync(
+            JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+                sourceChargeId: chargeId),
+            ct);
+        await _ledgers.CommitAsync(ct);
+    }
 
     public async Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand cmd, CancellationToken ct = default)
     {

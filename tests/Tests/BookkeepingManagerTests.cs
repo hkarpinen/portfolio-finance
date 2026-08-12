@@ -145,6 +145,9 @@ public class BookkeepingManagerTests
 
         public Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default) { _ledgers.Add(ledger); return Task.CompletedTask; }
 
+        public Task<Account?> GetAccountAsync(AccountId accountId, CancellationToken ct = default)
+            => Task.FromResult(_accounts.FirstOrDefault(a => a.Id == accountId));
+
         public Task<IReadOnlyList<Account>> GetAccountsAsync(LedgerId ledgerId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<Account>>(_accounts.Where(a => a.LedgerId == ledgerId).ToList());
 
