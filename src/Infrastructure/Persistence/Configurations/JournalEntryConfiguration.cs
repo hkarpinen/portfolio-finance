@@ -23,6 +23,7 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
         builder.Property(e => e.Description).HasMaxLength(500).IsRequired();
         builder.Property(e => e.Source).HasMaxLength(200);
         builder.Property(e => e.RecordedAt).IsRequired();
+        builder.Property(e => e.PostedByUserId);
 
         builder.Property(e => e.ReversalOfEntryId)
             .HasConversion(

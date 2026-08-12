@@ -204,4 +204,42 @@ public class LedgerTests
         // unique index can never see two active postings under one source.
         Assert.Throws<InvalidOperationException>(() => original.Reverse(DateTime.UtcNow));
     }
+
+    [Fact]
+    public void Post_RecordsWhoseActionCausedTheEntry()
+    {
+        var actor = Guid.NewGuid();
+        var ledger = LedgerId.New();
+        var lines = new[]
+        {
+            PostingLine.Debit(AccountId.New(), Money.Create(10m, "USD")),
+            PostingLine.Credit(AccountId.New(), Money.Create(10m, "USD")),
+        };
+
+        var entry = JournalEntry.Post(
+            ledger, DateTime.UtcNow, "Something", lines, postedByUserId: actor);
+
+        Assert.Equal(actor, entry.PostedByUserId);
+    }
+
+    [Fact]
+    public void Reverse_AttributesTheReversalToWhoeverCausedIt_NotTheOriginalAuthor()
+    {
+        var author = Guid.NewGuid();
+        var corrector = Guid.NewGuid();
+        var ledger = LedgerId.New();
+        var lines = new[]
+        {
+            PostingLine.Debit(AccountId.New(), Money.Create(10m, "USD")),
+            PostingLine.Credit(AccountId.New(), Money.Create(10m, "USD")),
+        };
+        var original = JournalEntry.Post(ledger, DateTime.UtcNow, "Something", lines, postedByUserId: author);
+
+        var reversal = original.Reverse(original.Date, reversedByUserId: corrector);
+
+        // Undoing an entry is a new act. Copying the author would credit the correction to
+        // somebody who was not there.
+        Assert.Equal(corrector, reversal.PostedByUserId);
+        Assert.Equal(author, original.PostedByUserId);
+    }
 }

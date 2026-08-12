@@ -14,19 +14,19 @@ namespace Finance.Domain.Aggregates;
 /// </summary>
 public static class PersonalChart
 {
-    public const string CashCode = "1000";
+    public const string CashCode = ChartCodes.Cash;
 
     /// <summary>Offsets a balance that was carried in rather than posted. Without it the first
     /// card balance has nothing to credit against and the book will not balance.</summary>
-    public const string OpeningBalanceCode = "3900";
+    public const string OpeningBalanceCode = ChartCodes.OpeningBalance;
 
-    public static string AssetCode(Guid accountId) => $"1000:{accountId:N}";
-    public static string LiabilityCode(Guid accountId) => $"2000:{accountId:N}";
-    public static string ExpenseCode(string category) => $"5000:{category.ToLowerInvariant()}";
-    public static string IncomeCode(string source) => $"6000:{source.ToLowerInvariant()}";
+    public static string AssetCode(Guid accountId) => ChartCodes.Asset(accountId);
+    public static string LiabilityCode(Guid accountId) => ChartCodes.Liability(accountId);
+    public static string ExpenseCode(string category) => ChartCodes.Expense(category);
+    public static string IncomeCode(string source) => ChartCodes.Income(source);
 
     /// <summary>The group's side of this pair is Member:{userId}; the two must agree (P8).</summary>
-    public static string DueFromGroupCode(Guid groupId) => $"4000:{groupId:N}";
+    public static string DueFromGroupCode(Guid groupId) => ChartCodes.Reciprocal(groupId);
 
     public static IReadOnlyList<Account> StandardAccounts(LedgerId ledgerId) =>
     [

@@ -169,16 +169,23 @@ A personal book with expenses and no income cannot answer the only question peop
 the group's books — but now that a personal ledger exists there is somewhere for them to go, and
 until they go there the personal book contains only opening balances.
 
-### F7 — The charts are the same data written twice
+### F7 — The charts are the same data written twice *(fixed)*
 
-`GroupChart.ExpenseCode` and `PersonalChart.ExpenseCode` are character-for-character identical; both
-declare `CashCode = "1000"`. A chart of accounts is *data* — role → (code, name, type), plus a seed
-list per ledger kind. Two static classes is that data expressed twice.
+`GroupChart.ExpenseCode` and `PersonalChart.ExpenseCode` were character-for-character identical and
+both declared `CashCode = "1000"`.
 
-### F8 — No actor on an entry
+`ChartCodes` now owns the numbering, and the two charts differ only in what they SEED — which is
+the real difference: a group's accounts are derivable (one pot, one payable, one equity per
+member), a person's are declared.
 
-`JournalEntry` records `RecordedAt` but no user. Entries are machine-generated from events so origin
-is traceable via `SourceChargeId` — partial mitigation, not an audit trail.
+### F8 — No actor on an entry *(fixed)*
+
+`JournalEntry` now carries `PostedByUserId`: null for an entry a consumer raised with nobody behind
+it, otherwise whose action caused it. A reversal is attributed to whoever corrected it rather than
+to the original author — undoing an entry is a new act, and copying the author would credit the
+correction to somebody who was not there.
+
+Callers still have to pass it; the column and the rule are in place.
 
 ### F9 — Unallocated remainder is treated two ways
 

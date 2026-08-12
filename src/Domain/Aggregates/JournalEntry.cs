@@ -42,6 +42,13 @@ public sealed class JournalEntry : IAggregateRoot
     public string Description { get; private set; } = string.Empty;
     public string? Source { get; private set; }         // originating document (expenseId, reimbursement, bank txn) — P9
     public DateTime RecordedAt { get; private set; }    // booking date — when entered into the system
+
+    /// <summary>
+    /// Whose action produced this entry. Null for one raised by a consumer with no person behind
+    /// it — a household deletion cascading, say. Provenance columns say WHAT caused an entry;
+    /// this says who, which is the half an audit asks for and reversal alone cannot answer.
+    /// </summary>
+    public Guid? PostedByUserId { get; private set; }
     public JournalEntryId? ReversalOfEntryId { get; private set; }
 
     // Makes "active" a DECLARED state — in effect iff neither a reversal nor itself
@@ -75,7 +82,8 @@ public sealed class JournalEntry : IAggregateRoot
         Guid? sourceChargeId = null,
         Guid? sourceAllocationId = null,
         DateTime? sourceOccurrence = null,
-        Guid? sourceMemberId = null)
+        Guid? sourceMemberId = null,
+        Guid? postedByUserId = null)
     {
         Validate(lines);
 
@@ -92,6 +100,7 @@ public sealed class JournalEntry : IAggregateRoot
             SourceOccurrence = sourceOccurrence is null
                 ? null : DateTime.SpecifyKind(sourceOccurrence.Value.Date, DateTimeKind.Utc),
             SourceMemberId = sourceMemberId,
+            PostedByUserId = postedByUserId,
         };
         foreach (var l in lines)
             entry._postings.Add(new Posting(PostingId.New(), entry.Id, l.AccountId, l.Direction, l.Amount));
@@ -105,7 +114,7 @@ public sealed class JournalEntry : IAggregateRoot
     /// becomes a credit and vice versa — referencing the original. The original is left
     /// untouched; the pair nets to zero across every affected account.
     /// </summary>
-    public JournalEntry Reverse(DateTime date, string? description = null)
+    public JournalEntry Reverse(DateTime date, string? description = null, Guid? reversedByUserId = null)
     {
         if (ReversalOfEntryId is not null)
             throw new InvalidOperationException("Cannot reverse a reversing entry.");
@@ -131,6 +140,8 @@ public sealed class JournalEntry : IAggregateRoot
             SourceAllocationId = SourceAllocationId,
             SourceOccurrence = SourceOccurrence,
             SourceMemberId = SourceMemberId,
+            // The reversal is a NEW act by whoever caused it, not a copy of the original's author.
+            PostedByUserId = reversedByUserId,
         };
         foreach (var l in mirrored)
             reversal._postings.Add(new Posting(PostingId.New(), reversal.Id, l.AccountId, l.Direction, l.Amount));
