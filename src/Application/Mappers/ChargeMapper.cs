@@ -28,7 +28,8 @@ public static class ChargeMapper
                 CreatedAt: expense.CreatedAt,
                 UpdatedAt: expense.UpdatedAt,
                 IsPaid: isPaid,
-                CurrentOccurrenceDate: expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate,
+                CurrentOccurrenceDate: expense.OccurrenceDate,
+                ScheduleId: expense.ScheduleId?.Value,
                 PayerUserId: expense.PayerUserId,
                 FundingSource: expense.FundingSource,
                 VendorPaid: vendorPaid);
@@ -53,7 +54,8 @@ public static class ChargeMapper
             CreatedAt: expense.CreatedAt,
             UpdatedAt: expense.UpdatedAt,
             IsPaid: isPaid,
-            CurrentOccurrenceDate: expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate);
+            CurrentOccurrenceDate: expense.OccurrenceDate,
+            ScheduleId: expense.ScheduleId?.Value);
     }
 
     public static AllocationDto ToAllocationResponse(Allocation split) => new(
