@@ -15,5 +15,9 @@ public interface IChargeScheduleRepository
     /// unique index is, so "has this month been recorded" is one lookup.</summary>
     Task<Charge?> GetGeneratedAsync(ChargeScheduleId scheduleId, DateTime occurrenceDate, CancellationToken ct = default);
 
+    /// <summary>Everything generated for a window, keyed by occurrence — one query, not one a date.</summary>
+    Task<IReadOnlyDictionary<DateTime, Charge>> ListGeneratedAsync(
+        ChargeScheduleId scheduleId, DateTime from, DateTime to, CancellationToken ct = default);
+
     Task CommitAsync(CancellationToken ct = default);
 }

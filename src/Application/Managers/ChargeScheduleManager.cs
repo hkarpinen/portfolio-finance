@@ -1,4 +1,5 @@
 using Finance.Application.Dtos;
+using Finance.Application.Mappers;
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
@@ -48,7 +49,7 @@ internal sealed class ChargeScheduleManager(
 
         await schedules.AddAsync(schedule, ct);
         await schedules.CommitAsync(ct);
-        return Map(schedule);
+        return ChargeScheduleMapper.ToResponse(schedule);
     }
 
     public async Task<ChargeScheduleDto?> AmendAsync(AmendChargeScheduleCommand cmd, CancellationToken ct = default)
@@ -62,7 +63,7 @@ internal sealed class ChargeScheduleManager(
             cmd.Title, Money.Create(cmd.Amount, cmd.Currency), cmd.Category, cmd.Description,
             cmd.EffectiveFrom);
         await schedules.CommitAsync(ct);
-        return Map(schedule);
+        return ChargeScheduleMapper.ToResponse(schedule);
     }
 
     public async Task<bool> DeactivateAsync(Guid scheduleId, Guid callerId, CancellationToken ct = default)
@@ -77,10 +78,10 @@ internal sealed class ChargeScheduleManager(
     }
 
     public async Task<IReadOnlyList<ChargeScheduleDto>> ListForGroupAsync(Guid groupId, CancellationToken ct = default)
-        => (await schedules.ListForGroupAsync(GroupId.Create(groupId), ct)).Select(Map).ToList();
+        => (await schedules.ListForGroupAsync(GroupId.Create(groupId), ct)).Select(ChargeScheduleMapper.ToResponse).ToList();
 
     public async Task<IReadOnlyList<ChargeScheduleDto>> ListForUserAsync(Guid userId, CancellationToken ct = default)
-        => (await schedules.ListForUserAsync(UserId.Create(userId), ct)).Select(Map).ToList();
+        => (await schedules.ListForUserAsync(UserId.Create(userId), ct)).Select(ChargeScheduleMapper.ToResponse).ToList();
 
     public async Task<IReadOnlyList<ScheduledOccurrenceDto>> ForecastAsync(
         Guid scheduleId, DateTime from, DateTime toExclusive, CancellationToken ct = default)
@@ -88,19 +89,17 @@ internal sealed class ChargeScheduleManager(
         var schedule = await schedules.GetByIdAsync(ChargeScheduleId.Create(scheduleId), ct);
         if (schedule is null) return [];
 
-        var results = new List<ScheduledOccurrenceDto>();
-        foreach (var date in schedule.OccurrencesIn(from, toExclusive))
-        {
-            var existing = await schedules.GetGeneratedAsync(schedule.Id, date, ct);
-            results.Add(new ScheduledOccurrenceDto(
-                date,
-                // A recorded occurrence reports what it was billed at, not what the schedule says
-                // today — that difference is the whole point of freezing it.
-                existing?.Amount.Amount ?? schedule.AmountOn(date).Amount,
-                existing?.Amount.Currency ?? schedule.AmountOn(date).Currency,
-                existing?.Id.Value));
-        }
-        return results;
+        var dates = schedule.OccurrencesIn(from, toExclusive);
+        if (dates.Count == 0) return [];
+
+        // One query for the window rather than one per date — a daily schedule over a year is 365
+        // occurrences, and a lookup each would be 365 round trips.
+        var recorded = await schedules.ListGeneratedAsync(schedule.Id, dates[0], dates[^1], ct);
+
+        return dates
+            .Select(d => ChargeScheduleMapper.ToOccurrence(
+                schedule, d, recorded.GetValueOrDefault(d)))
+            .ToList();
     }
 
     public async Task<Charge?> MaterialiseAsync(Guid scheduleId, DateTime occurrenceDate, CancellationToken ct = default)
@@ -121,9 +120,4 @@ internal sealed class ChargeScheduleManager(
         return charge;
     }
 
-    private static ChargeScheduleDto Map(ChargeSchedule s) => new(
-        s.Id.Value, s.GroupId?.Value, s.Title, s.Description,
-        s.Amount.Amount, s.Amount.Currency, s.Category.ToString(),
-        s.Recurrence.Frequency.ToString(), s.Recurrence.StartDate, s.Recurrence.EndDate,
-        s.PayerUserId, s.FundingSource.ToString(), s.IsActive);
 }

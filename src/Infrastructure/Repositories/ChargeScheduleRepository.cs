@@ -33,5 +33,18 @@ internal sealed class ChargeScheduleRepository(FinanceDbContext db) : IChargeSch
             c => c.ScheduleId == scheduleId && c.OccurrenceDate == day, ct);
     }
 
+    public async Task<IReadOnlyDictionary<DateTime, Charge>> ListGeneratedAsync(
+        ChargeScheduleId scheduleId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        var first = DateTime.SpecifyKind(from.Date, DateTimeKind.Utc);
+        var last = DateTime.SpecifyKind(to.Date, DateTimeKind.Utc);
+
+        var rows = await db.Charges.AsNoTracking()
+            .Where(c => c.ScheduleId == scheduleId && c.OccurrenceDate >= first && c.OccurrenceDate <= last)
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(c => c.OccurrenceDate);
+    }
+
     public Task CommitAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }

@@ -128,6 +128,11 @@ public class ChargeScheduleManagerTests
             => Task.FromResult<IReadOnlyList<ChargeSchedule>>(Schedules.Where(s => s.UserId == u).ToList());
         public Task<Charge?> GetGeneratedAsync(ChargeScheduleId id, DateTime date, CancellationToken ct = default)
             => Task.FromResult(Charges.FirstOrDefault(c => c.ScheduleId == id && c.OccurrenceDate == date.Date));
+        public Task<IReadOnlyDictionary<DateTime, Charge>> ListGeneratedAsync(
+            ChargeScheduleId id, DateTime from, DateTime to, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyDictionary<DateTime, Charge>>(
+                Charges.Where(c => c.ScheduleId == id && c.OccurrenceDate >= from.Date && c.OccurrenceDate <= to.Date)
+                       .ToDictionary(c => c.OccurrenceDate));
         public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
