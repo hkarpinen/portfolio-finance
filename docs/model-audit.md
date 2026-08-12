@@ -169,14 +169,20 @@ A personal book with expenses and no income cannot answer the only question peop
 the group's books — but now that a personal ledger exists there is somewhere for them to go, and
 until they go there the personal book contains only opening balances.
 
-### F7 — The charts are the same data written twice *(fixed)*
+### F7 — `ChargePayment` is not a duplicate *(corrected)*
 
-`GroupChart.ExpenseCode` and `PersonalChart.ExpenseCode` were character-for-character identical and
-both declared `CashCode = "1000"`.
+This finding claimed `ChargePayment` duplicated what settlement postings already record, and should
+become a projection or be deleted. **That was wrong.**
 
-`ChartCodes` now owns the numbering, and the two charts differ only in what they SEED — which is
-the real difference: a group's accounts are derivable (one pot, one payable, one equity per
-member), a person's are declared.
+`MarkPaidAsync` returns before reaching it whenever `GroupId` is set: a group charge is settled
+through the ledger and writes no payment row. `ChargePayment` is written for PERSONAL charges only,
+and it is the sole record that one was paid. Deleting it would delete the fact.
+
+What is real, and smaller: now that a personal charge posts `Dr Expense / Cr funding` when it is
+created (F6), the posting already asserts the money moved — so "mark this paid" afterwards is
+asking a question the books have answered. That is a product decision about what *paid* means for
+something bought on a card, not a duplicate-books defect, and it needs a design call rather than a
+refactor.
 
 ### F8 — No actor on an entry *(fixed)*
 
