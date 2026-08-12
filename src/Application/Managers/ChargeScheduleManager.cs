@@ -58,7 +58,9 @@ internal sealed class ChargeScheduleManager(
 
         // Takes effect on occurrences not yet generated. Charges already written keep their own
         // amount, which is the entire reason the two are separate.
-        schedule.Amend(cmd.Title, Money.Create(cmd.Amount, cmd.Currency), cmd.Category, cmd.Description);
+        schedule.Amend(
+            cmd.Title, Money.Create(cmd.Amount, cmd.Currency), cmd.Category, cmd.Description,
+            cmd.EffectiveFrom);
         await schedules.CommitAsync(ct);
         return Map(schedule);
     }
@@ -94,8 +96,8 @@ internal sealed class ChargeScheduleManager(
                 date,
                 // A recorded occurrence reports what it was billed at, not what the schedule says
                 // today — that difference is the whole point of freezing it.
-                existing?.Amount.Amount ?? schedule.Amount.Amount,
-                existing?.Amount.Currency ?? schedule.Amount.Currency,
+                existing?.Amount.Amount ?? schedule.AmountOn(date).Amount,
+                existing?.Amount.Currency ?? schedule.AmountOn(date).Currency,
                 existing?.Id.Value));
         }
         return results;

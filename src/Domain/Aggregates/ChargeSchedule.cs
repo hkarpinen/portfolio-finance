@@ -31,8 +31,20 @@ public sealed class ChargeSchedule : IAggregateRoot
     public string Title { get; private set; } = string.Empty;
     public string? Description { get; private set; }
 
-    /// <summary>What the NEXT generated charge will cost. Charges already generated keep their own.</summary>
-    public Money Amount { get; private set; }
+    private readonly List<ScheduledAmount> _amounts = new();
+
+    /// <summary>
+    /// Every amount this schedule has charged, each from the date it took effect. A rise is a new
+    /// version rather than an edit, so generating a charge for a month in the past uses what was
+    /// true then — not today's figure.
+    /// </summary>
+    public IReadOnlyList<ScheduledAmount> Amounts => _amounts.AsReadOnly();
+
+    /// <summary>Fixed at creation — an agreement does not change currency halfway through.</summary>
+    public string Currency { get; private set; } = "USD";
+
+    /// <summary>What it charges today. Shorthand for <see cref="AmountOn"/> with today's date.</summary>
+    public Money Amount => AmountOn(DateTime.UtcNow);
 
     public ChargeCategory Category { get; private set; }
     public RecurrenceSchedule Recurrence { get; private set; } = null!;
@@ -74,29 +86,48 @@ public sealed class ChargeSchedule : IAggregateRoot
             FundingSource = fundingSource,
             Title = title,
             Description = description,
-            Amount = amount,
             Category = category,
+            Currency = amount.Currency,
             Recurrence = recurrence,
             CreatedAt = now,
             UpdatedAt = now,
             IsActive = true,
         };
+        // The first version runs from the anchor, so an occurrence on day one has an amount.
+        schedule._amounts.Add(ScheduledAmount.From(recurrence.StartDate, amount.Amount));
         schedule._domainEvents.Add(new ChargeScheduleCreated(
             schedule.Id.Value, userId.Value, groupId?.Value, title, amount.Amount, amount.Currency,
             category.ToString(), recurrence.Frequency.ToString(), recurrence.StartDate, now));
         return schedule;
     }
 
-    /// <summary>Takes effect on occurrences not yet generated. Nothing already recorded moves.</summary>
-    public void Amend(string title, Money amount, ChargeCategory category, string? description)
+    /// <summary>
+    /// A new amount from <paramref name="effectiveFrom"/> onward — the old one stays on record and
+    /// still governs occurrences before that date. Charges already generated are untouched either
+    /// way; they froze their amount when they were written.
+    ///
+    /// Re-amending the same effective date replaces that version rather than stacking a second one,
+    /// so correcting a typo does not leave two answers for one day.
+    /// </summary>
+    public void Amend(
+        string title, Money amount, ChargeCategory category, string? description,
+        DateTime? effectiveFrom = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Title cannot be empty.", nameof(title));
         if (amount.Amount < 0)
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
 
+        if (amount.Currency != Currency)
+            throw new InvalidOperationException(
+                $"{Title} is agreed in {Currency}; an amendment cannot change that.");
+
+        var from = ScheduledAmount.From(effectiveFrom ?? DateTime.UtcNow, amount.Amount);
+        _amounts.RemoveAll(a => a.EffectiveFrom == from.EffectiveFrom);
+        _amounts.Add(from);
+        _amounts.Sort((a, b) => a.EffectiveFrom.CompareTo(b.EffectiveFrom));
+
         Title = title;
-        Amount = amount;
         Category = category;
         Description = description;
         UpdatedAt = DateTime.UtcNow;
@@ -110,6 +141,21 @@ public sealed class ChargeSchedule : IAggregateRoot
         IsActive = false;
         UpdatedAt = DateTime.UtcNow;
         _domainEvents.Add(new ChargeScheduleDeactivated(Id.Value, UpdatedAt));
+    }
+
+    /// <summary>
+    /// What this schedule charged on a given date — the latest version in force by then. Before
+    /// the first version (a back-dated occurrence) the earliest one applies, because that is the
+    /// only figure anybody ever agreed.
+    /// </summary>
+    public Money AmountOn(DateTime date)
+    {
+        var day = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+        var inForce = _amounts.LastOrDefault(a => a.EffectiveFrom <= day) ?? _amounts.FirstOrDefault();
+        if (inForce is null)
+            throw new InvalidOperationException($"{Title} has no amount on record.");
+
+        return Money.Create(inForce.Amount, Currency);
     }
 
     /// <summary>

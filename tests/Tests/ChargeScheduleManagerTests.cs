@@ -72,7 +72,8 @@ public class ChargeScheduleManagerTests
         var january = await manager.MaterialiseAsync(schedule.ScheduleId, Jan3);
 
         await manager.AmendAsync(new AmendChargeScheduleCommand(
-            schedule.ScheduleId, User, "Rent", 1100m, "USD", ChargeCategory.Rent));
+            schedule.ScheduleId, User, "Rent", 1100m, "USD", ChargeCategory.Rent,
+            EffectiveFrom: Jan3.AddMonths(1)));
 
         var feb = await manager.MaterialiseAsync(schedule.ScheduleId, Jan3.AddMonths(1));
 
@@ -87,7 +88,8 @@ public class ChargeScheduleManagerTests
         var schedule = await manager.CreateAsync(Rent());
         await manager.MaterialiseAsync(schedule.ScheduleId, Jan3);
         await manager.AmendAsync(new AmendChargeScheduleCommand(
-            schedule.ScheduleId, User, "Rent", 1100m, "USD", ChargeCategory.Rent));
+            schedule.ScheduleId, User, "Rent", 1100m, "USD", ChargeCategory.Rent,
+            EffectiveFrom: Jan3.AddMonths(1)));
 
         var forecast = await manager.ForecastAsync(schedule.ScheduleId, Jan3, Jan3.AddMonths(3));
 

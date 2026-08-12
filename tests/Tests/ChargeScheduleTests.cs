@@ -84,7 +84,8 @@ public class ChargeScheduleTests
         var schedule = Rent();
         var january = Charge.GenerateFrom(schedule, Jan3);
 
-        schedule.Amend("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent, null);
+        schedule.Amend("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent, null,
+            effectiveFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
         var march = Charge.GenerateFrom(schedule, new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc));
 
         Assert.Equal(1000m, january.Amount.Amount);
@@ -111,5 +112,52 @@ public class ChargeScheduleTests
 
         Assert.Null(charge.ScheduleId);
         Assert.Equal(Jan3, charge.OccurrenceDate);
+    }
+
+    [Fact]
+    public void AmountOn_UsesTheVersionInForceThen_NotTodaysFigure()
+    {
+        var schedule = Rent();
+        schedule.Amend("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent, null,
+            effectiveFrom: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(1000m, schedule.AmountOn(new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc)).Amount);
+        Assert.Equal(1100m, schedule.AmountOn(new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc)).Amount);
+    }
+
+    [Fact]
+    public void GenerateFrom_BillsAMonthRecordedLateAtWhatWasAgreedThen()
+    {
+        // Nobody got round to recording May until August. It still bills May's rent.
+        var schedule = Rent();
+        schedule.Amend("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent, null,
+            effectiveFrom: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var may = Charge.GenerateFrom(schedule, new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(1000m, may.Amount.Amount);
+    }
+
+    [Fact]
+    public void Amend_ReplacesAVersionOnTheSameDay_RatherThanStackingTwo()
+    {
+        var schedule = Rent();
+        var june = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        schedule.Amend("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent, null, june);
+        schedule.Amend("Rent", Money.Create(1150m, "USD"), ChargeCategory.Rent, null, june);
+
+        // A typo corrected must not leave two answers for one day.
+        Assert.Equal(2, schedule.Amounts.Count);
+        Assert.Equal(1150m, schedule.AmountOn(june).Amount);
+    }
+
+    [Fact]
+    public void Amend_RefusesToChangeTheCurrencyMidAgreement()
+    {
+        var schedule = Rent();
+
+        Assert.Throws<InvalidOperationException>(
+            () => schedule.Amend("Rent", Money.Create(900m, "EUR"), ChargeCategory.Rent, null));
     }
 }

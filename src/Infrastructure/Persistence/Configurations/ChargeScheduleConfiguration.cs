@@ -28,16 +28,25 @@ internal sealed class ChargeScheduleConfiguration : IEntityTypeConfiguration<Cha
                 v => v.HasValue ? new UserId(v.Value) : (UserId?)null)
             .IsRequired(false);
 
+        builder.Property(s => s.Currency).IsRequired().HasMaxLength(3);
         builder.Property(s => s.Title).IsRequired().HasMaxLength(200);
         builder.Property(s => s.Description).HasMaxLength(2000);
         builder.Property(s => s.Category).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(s => s.FundingSource).HasConversion<string>().HasMaxLength(30).IsRequired();
 
-        builder.ComplexProperty(s => s.Amount, money =>
+        // Amount is derived from the versions, never stored — the same rule the ledger follows
+        // for balances, for the same reason: a stored copy can disagree with what produced it.
+        builder.Ignore(s => s.Amount);
+
+        builder.OwnsMany(s => s.Amounts, a =>
         {
-            money.Property(m => m.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
-            money.Property(m => m.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
+            a.ToTable("charge_schedule_amounts");
+            a.WithOwner().HasForeignKey("schedule_id");
+            a.Property(x => x.EffectiveFrom).HasColumnName("effective_from").IsRequired();
+            a.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+            a.HasKey("schedule_id", nameof(ScheduledAmount.EffectiveFrom));
         });
+        builder.Navigation(s => s.Amounts).AutoInclude();
 
         // The anchor and interval. Nothing here is a date a charge exists on — those are computed.
         builder.OwnsOne(s => s.Recurrence, r =>

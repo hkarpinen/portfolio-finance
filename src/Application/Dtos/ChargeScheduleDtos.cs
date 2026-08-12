@@ -43,6 +43,11 @@ public sealed record CreateChargeScheduleCommand(
     Guid? PayerUserId = null,
     FundingSource FundingSource = FundingSource.PayerMember);
 
+/// <summary>
+/// `EffectiveFrom` null means from today. Set it to back-date a rise that already happened —
+/// occurrences before it keep the older amount, which is what makes this a versioned agreement
+/// rather than an edit.
+/// </summary>
 public sealed record AmendChargeScheduleCommand(
     Guid ScheduleId,
     Guid CallerId,
@@ -50,4 +55,5 @@ public sealed record AmendChargeScheduleCommand(
     decimal Amount,
     string Currency,
     ChargeCategory Category,
-    string? Description = null);
+    string? Description = null,
+    DateTime? EffectiveFrom = null);

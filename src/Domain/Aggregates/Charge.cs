@@ -111,6 +111,9 @@ public class Charge : IAggregateRoot
     /// schedule now and never read from it again. That copy is what makes the month final: amend
     /// the schedule afterwards and this charge does not move.
     ///
+    /// The amount is the one in force ON THAT DATE, not today's, so a month recorded late still
+    /// bills what was agreed at the time.
+    ///
     /// Refuses a date the schedule does not actually place a charge on, so a caller cannot invent
     /// an occurrence the agreement never described.
     /// </summary>
@@ -136,7 +139,7 @@ public class Charge : IAggregateRoot
             FundingSource = schedule.FundingSource,
             Title = schedule.Title,
             Description = schedule.Description,
-            Amount = schedule.Amount,
+            Amount = schedule.AmountOn(day),
             Category = schedule.Category,
             DueDate = day,
             // The repetition lives on the schedule. Copying it here would give the charge a second
@@ -148,7 +151,7 @@ public class Charge : IAggregateRoot
         };
 
         charge._domainEvents.Add(new ChargeCreated(
-            charge.Id, schedule.UserId, schedule.Title, schedule.Amount, schedule.Category, day, null));
+            charge.Id, schedule.UserId, schedule.Title, schedule.AmountOn(day), schedule.Category, day, null));
 
         return charge;
     }
