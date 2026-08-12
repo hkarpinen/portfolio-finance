@@ -17,6 +17,7 @@ internal sealed class ChargeManager : IChargeManager
     private readonly IAllocationRepository _splitRepository;
     private readonly IFinancialConnectionRepository _connectionRepository;
     private readonly ILedgerQuery _ledgerQuery;
+    private readonly IChargeScheduleManager _schedules;
     private readonly ILogger<ChargeManager> _logger;
 
     public ChargeManager(
@@ -25,6 +26,7 @@ internal sealed class ChargeManager : IChargeManager
         IAllocationRepository splitRepository,
         IFinancialConnectionRepository connectionRepository,
         ILedgerQuery ledgerQuery,
+        IChargeScheduleManager schedules,
         ILogger<ChargeManager> logger)
     {
         _repository = repository;
@@ -32,6 +34,7 @@ internal sealed class ChargeManager : IChargeManager
         _splitRepository = splitRepository;
         _connectionRepository = connectionRepository;
         _ledgerQuery = ledgerQuery;
+        _schedules = schedules;
         _logger = logger;
     }
 
@@ -105,20 +108,21 @@ internal sealed class ChargeManager : IChargeManager
         // A group charge ALWAYS has a payer; defaulting it here makes PayerUserId a real
         // invariant, so readers never need a `?? CreatedBy` fallback.
         var payerUserId = request.PayerUserId ?? request.CreatedBy;
+        var recurrence = RecurrenceSchedule.CreateOrNone(
+            request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
-        var expense = Charge.CreateGroup(
-            GroupId.Create(request.GroupId),
-            UserId.Create(request.CreatedBy),
-            request.Title,
-            Money.Create(request.Amount, request.Currency),
-            request.Category,
-            request.DueDate,
-            RecurrenceSchedule.CreateOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
-            request.Description,
-            payerUserId,
-            request.FundingSource);
+        // A cost that comes round again is an agreement, and the bill for one month is generated
+        // from it. Creating a repeating Charge instead would put the cadence back on the document
+        // and every month would be derived from it again.
+        var expense = recurrence is null
+            ? Charge.CreateGroup(
+                GroupId.Create(request.GroupId), UserId.Create(request.CreatedBy), request.Title,
+                Money.Create(request.Amount, request.Currency), request.Category, request.DueDate,
+                null, request.Description, payerUserId, request.FundingSource)
+            : await OpenScheduleAndBillFirstOccurrenceAsync(request, recurrence, payerUserId, cancellationToken);
 
-        await _repository.AddAsync(expense, cancellationToken);
+        if (expense.ScheduleId is null)
+            await _repository.AddAsync(expense, cancellationToken);
 
         // The allocation's actor is the identity userId (the PERSON), not the household
         // membership — one financial identity across all of that person's households.
@@ -137,6 +141,31 @@ internal sealed class ChargeManager : IChargeManager
 
         await _repository.CommitAsync(cancellationToken);
         return ChargeMapper.ToResponse(expense);
+    }
+
+    /// <summary>
+    /// Opens the agreement and bills the occurrence the caller was entering, so they get a charge
+    /// back exactly as before — the schedule sits behind it, and every later month comes from it.
+    /// </summary>
+    private async Task<Charge> OpenScheduleAndBillFirstOccurrenceAsync(
+        CreateGroupChargeCommand request, RecurrenceSchedule recurrence, Guid payerUserId, CancellationToken ct)
+    {
+        var schedule = await _schedules.CreateAsync(new CreateChargeScheduleCommand(
+            GroupId: request.GroupId,
+            UserId: request.CreatedBy,
+            Title: request.Title,
+            Amount: request.Amount,
+            Currency: request.Currency,
+            Category: request.Category,
+            Frequency: recurrence.Frequency,
+            AnchorDate: recurrence.StartDate,
+            EndDate: recurrence.EndDate,
+            Description: request.Description,
+            PayerUserId: payerUserId,
+            FundingSource: request.FundingSource), ct);
+
+        return await _schedules.MaterialiseAsync(schedule.ScheduleId, recurrence.StartDate, ct)
+            ?? throw new InvalidOperationException("The schedule was created but its first bill was not.");
     }
 
     public async Task<ChargeResponseDto?> UpdateGroupChargeAsync(UpdateGroupChargeCommand request, CancellationToken cancellationToken = default)

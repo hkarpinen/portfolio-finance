@@ -62,6 +62,21 @@ public sealed class ChargeSchedulesController(IChargeScheduleManager schedules) 
         return Ok(await schedules.ForecastAsync(scheduleId, from, to, ct));
     }
 
+    /// <summary>
+    /// Writes every occurrence that has come due and is not recorded yet. What turns a period
+    /// passing into a charge: the money screens call it before they read, so by the time anyone
+    /// looks, the bills that came due are on the books.
+    /// </summary>
+    [HttpPost("catch-up")]
+    [EnableRateLimiting("write")]
+    public async Task<IActionResult> CatchUpMine(CancellationToken ct = default)
+        => Ok(new { generated = await schedules.CatchUpAsync(null, User.GetUserId().Value, DateTime.UtcNow, ct) });
+
+    [HttpPost("/api/finance/groups/{groupId:guid}/schedules/catch-up")]
+    [EnableRateLimiting("write")]
+    public async Task<IActionResult> CatchUpForGroup(Guid groupId, CancellationToken ct = default)
+        => Ok(new { generated = await schedules.CatchUpAsync(groupId, User.GetUserId().Value, DateTime.UtcNow, ct) });
+
     /// <summary>Writes the charge for one occurrence. Idempotent — the second call returns the first.</summary>
     [HttpPost("{scheduleId:guid}/occurrences/{occurrenceDate:datetime}")]
     [EnableRateLimiting("write")]

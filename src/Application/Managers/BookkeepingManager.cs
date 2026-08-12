@@ -411,7 +411,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         if (!charge.IsActive) return;
 
         var groupId = charge.GroupId.Value.Value;
-        var date = charge.RecurrenceSchedule?.CurrentOccurrence(charge.DueDate) ?? charge.DueDate;
+        // The occurrence this charge IS, not whichever one the calendar has reached. Deriving it
+        // from a recurrence made one entry's value date move every month, which is the drift the
+        // schedule split exists to stop.
+        var date = charge.OccurrenceDate;
         await SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
             groupId, chargeId, charge.Title, charge.Category.ToString(),
             charge.Amount.Amount, charge.Amount.Currency, date,

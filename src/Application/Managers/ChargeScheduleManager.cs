@@ -27,6 +27,16 @@ public interface IChargeScheduleManager
     /// happened.
     /// </summary>
     Task<Charge?> MaterialiseAsync(Guid scheduleId, DateTime occurrenceDate, CancellationToken ct = default);
+
+    /// <summary>
+    /// Writes every occurrence that has come due and is not on the books yet, for one house or one
+    /// person, and returns how many that was.
+    ///
+    /// This is how a period passing turns into a charge without a clock: nobody needs the bill to
+    /// exist until somebody looks at the money, and by the time they do, it does. Never writes
+    /// past <paramref name="asOf"/> — a cost that has not happened does not belong in the books.
+    /// </summary>
+    Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default);
 }
 
 internal sealed class ChargeScheduleManager(
@@ -100,6 +110,34 @@ internal sealed class ChargeScheduleManager(
             .Select(d => ChargeScheduleMapper.ToOccurrence(
                 schedule, d, recorded.GetValueOrDefault(d)))
             .ToList();
+    }
+
+    public async Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default)
+    {
+        var due = DateTime.SpecifyKind(asOf.Date, DateTimeKind.Utc);
+        var active = groupId is { } g
+            ? await schedules.ListForGroupAsync(GroupId.Create(g), ct)
+            : await schedules.ListForUserAsync(UserId.Create(userId), ct);
+
+        var written = 0;
+        foreach (var schedule in active)
+        {
+            // Inclusive of today: a bill due this morning has come due.
+            var dates = schedule.OccurrencesIn(schedule.Recurrence.StartDate, due.AddDays(1));
+            if (dates.Count == 0) continue;
+
+            var already = await schedules.ListGeneratedAsync(schedule.Id, dates[0], dates[^1], ct);
+
+            foreach (var date in dates)
+            {
+                if (already.ContainsKey(date)) continue;
+                await charges.AddAsync(Charge.GenerateFrom(schedule, date), ct);
+                written++;
+            }
+        }
+
+        if (written > 0) await charges.CommitAsync(ct);
+        return written;
     }
 
     public async Task<Charge?> MaterialiseAsync(Guid scheduleId, DateTime occurrenceDate, CancellationToken ct = default)

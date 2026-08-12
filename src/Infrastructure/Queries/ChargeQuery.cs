@@ -34,7 +34,7 @@ internal sealed class ChargeQuery : IChargeQuery
         var expenseIds = items.Select(b => b.Id).ToList();
         var occurrencesByChargeId = items.ToDictionary(
             b => b.Id,
-            b => b.RecurrenceSchedule?.CurrentOccurrence(b.DueDate) ?? b.DueDate);
+            b => b.OccurrenceDate);
 
         var payments = await _db.ChargePayments
             .AsNoTracking()
@@ -66,7 +66,7 @@ internal sealed class ChargeQuery : IChargeQuery
                 cancellationToken);
         if (expense is null) return null;
 
-        var occurrenceDate = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
+        var occurrenceDate = expense.OccurrenceDate;
         var payment = await _db.ChargePayments
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ChargeId == id && p.OccurrenceDate == occurrenceDate, cancellationToken);
@@ -121,7 +121,7 @@ internal sealed class ChargeQuery : IChargeQuery
 
                 foreach (var expense in items)
                 {
-                    var occurrence = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
+                    var occurrence = expense.OccurrenceDate;
                     var split = callerAllocations.FirstOrDefault(s => s.ChargeId == expense.Id);
                     if (split is null) continue;
 
@@ -138,7 +138,7 @@ internal sealed class ChargeQuery : IChargeQuery
 
         var responses = items.Select(b =>
         {
-            var occurrence = b.RecurrenceSchedule?.CurrentOccurrence(b.DueDate) ?? b.DueDate;
+            var occurrence = b.OccurrenceDate;
             var isPaid = paidChargeIds.Contains(b.Id.Value);
             var callerShare = callerShareByCharge.TryGetValue(b.Id.Value, out var cs) ? (decimal?)cs : null;
             return ChargeMapper.ToResponse(b, isPaid, VendorPaidFor(b.Id.Value))
@@ -224,7 +224,7 @@ internal sealed class ChargeQuery : IChargeQuery
             .FirstOrDefaultAsync(e => e.Id == split.ChargeId, cancellationToken);
         if (expense is null) return null;
 
-        var occurrenceDate = expense.RecurrenceSchedule?.CurrentOccurrence(expense.DueDate) ?? expense.DueDate;
+        var occurrenceDate = expense.OccurrenceDate;
         var paidAllocationIds = await GetPaidAllocationIdsForChargeAsync(split.ChargeId.Value, occurrenceDate, cancellationToken);
 
         var projection = await _db.UserProjections

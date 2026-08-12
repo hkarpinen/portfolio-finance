@@ -114,6 +114,76 @@ public class ChargeScheduleManagerTests
         Assert.Single(charges.Saved);
     }
 
+    [Fact]
+    public async Task CatchUp_WritesEveryPeriodThatHasPassed()
+    {
+        var manager = NewManager(out _, out var charges);
+        var schedule = await manager.CreateAsync(Rent());
+
+        // Three months on: January, February and March have all come due.
+        var written = await manager.CatchUpAsync(Group, User, Jan3.AddMonths(2));
+
+        Assert.Equal(3, written);
+        Assert.Equal(
+            [Jan3, Jan3.AddMonths(1), Jan3.AddMonths(2)],
+            charges.Saved.Select(c => c.OccurrenceDate).OrderBy(d => d));
+    }
+
+    [Fact]
+    public async Task CatchUp_StopsAtToday_SoNothingUnhappenedIsOnTheBooks()
+    {
+        var manager = NewManager(out _, out var charges);
+        var schedule = await manager.CreateAsync(Rent());
+
+        await manager.CatchUpAsync(Group, User, Jan3.AddDays(20));
+
+        // February's rent has not happened. Writing it would put a cost in the books that nobody
+        // has incurred.
+        Assert.Single(charges.Saved);
+        Assert.Equal(Jan3, charges.Saved[0].OccurrenceDate);
+    }
+
+    [Fact]
+    public async Task CatchUp_IsIdempotent_SoTwoLoadsDoNotDoubleBill()
+    {
+        var manager = NewManager(out _, out var charges);
+        await manager.CreateAsync(Rent());
+
+        await manager.CatchUpAsync(Group, User, Jan3.AddMonths(2));
+        var second = await manager.CatchUpAsync(Group, User, Jan3.AddMonths(2));
+
+        Assert.Equal(0, second);
+        Assert.Equal(3, charges.Saved.Count);
+    }
+
+    [Fact]
+    public async Task CatchUp_BillsEachPeriodAtWhatWasAgreedThen()
+    {
+        var manager = NewManager(out _, out var charges);
+        var schedule = await manager.CreateAsync(Rent());
+        await manager.AmendAsync(new AmendChargeScheduleCommand(
+            schedule.ScheduleId, User, "Rent", 1100m, "USD", ChargeCategory.Rent,
+            EffectiveFrom: Jan3.AddMonths(2)));
+
+        await manager.CatchUpAsync(Group, User, Jan3.AddMonths(2));
+
+        var byDate = charges.Saved.ToDictionary(c => c.OccurrenceDate, c => c.Amount.Amount);
+        Assert.Equal(1000m, byDate[Jan3]);
+        Assert.Equal(1000m, byDate[Jan3.AddMonths(1)]);
+        Assert.Equal(1100m, byDate[Jan3.AddMonths(2)]);
+    }
+
+    [Fact]
+    public async Task CatchUp_SkipsADeactivatedSchedule()
+    {
+        var manager = NewManager(out _, out var charges);
+        var schedule = await manager.CreateAsync(Rent());
+        await manager.DeactivateAsync(schedule.ScheduleId, User);
+
+        Assert.Equal(0, await manager.CatchUpAsync(Group, User, Jan3.AddMonths(3)));
+        Assert.Empty(charges.Saved);
+    }
+
     internal sealed class FakeScheduleRepo : IChargeScheduleRepository
     {
         public List<ChargeSchedule> Schedules { get; } = new();
