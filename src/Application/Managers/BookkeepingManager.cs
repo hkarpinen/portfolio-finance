@@ -30,7 +30,9 @@ public sealed record PostChargeToLedgerCommand(
     string Category,
     decimal Total,
     string Currency,
-    DateTime Date);
+    DateTime Date,
+    /// <summary>Whose action produced the entry. Null when nobody is behind it.</summary>
+    Guid? PostedByUserId = null);
 
 public sealed record RecordSettlementCommand(
     Guid GroupId,
@@ -241,7 +243,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             DebitAccount: expenseAccount.Id, CreditAccount: vendorPayable.Id,
             Money.Create(cmd.Total, cmd.Currency), date, description, source));
         var entry = JournalEntry.Post(
-            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source, sourceChargeId: cmd.ChargeId);
+            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+            sourceChargeId: cmd.ChargeId, postedByUserId: cmd.PostedByUserId);
         await _ledgers.AddJournalEntryAsync(entry, ct);
         await _ledgers.CommitAsync(ct);
         return true;
@@ -276,7 +279,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             Money.Create(amount, currency), DateTime.UtcNow.Date, "Allocation", source));
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-            sourceChargeId: chargeId, sourceMemberId: userId);
+            sourceChargeId: chargeId, sourceMemberId: userId, postedByUserId: userId);
         await _ledgers.AddJournalEntryAsync(entry, ct);
         await _ledgers.CommitAsync(ct);
     }
@@ -302,7 +305,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-            sourceChargeId: cmd.ChargeId, sourceOccurrence: cmd.Occurrence);
+            sourceChargeId: cmd.ChargeId, sourceOccurrence: cmd.Occurrence,
+            postedByUserId: cmd.PaidByUserId);
         await _ledgers.AddJournalEntryAsync(entry, ct);
         await _ledgers.CommitAsync(ct);
     }
@@ -334,7 +338,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
             sourceChargeId: cmd.ChargeId, sourceAllocationId: cmd.AllocationId,
-            sourceOccurrence: cmd.Occurrence, sourceMemberId: cmd.FromUserId);
+            sourceOccurrence: cmd.Occurrence, sourceMemberId: cmd.FromUserId,
+            postedByUserId: cmd.FromUserId);
         await _ledgers.AddJournalEntryAsync(entry, ct);
 
         await _ledgers.CommitAsync(ct);
@@ -374,7 +379,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-            sourceMemberId: fromUserId);
+            sourceMemberId: fromUserId, postedByUserId: fromUserId);
         await _ledgers.AddJournalEntryAsync(entry, ct);
         await _ledgers.CommitAsync(ct);
     }
@@ -413,7 +418,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var date = charge.RecurrenceSchedule?.CurrentOccurrence(charge.DueDate) ?? charge.DueDate;
         await SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
             groupId, chargeId, charge.Title, charge.Category.ToString(),
-            charge.Amount.Amount, charge.Amount.Currency, date), ct);
+            charge.Amount.Amount, charge.Amount.Currency, date,
+            // Whoever entered the bill. Not stored on the event, so it is read from the charge
+            // the converge already loaded — no wire contract has to change to get an audit trail.
+            charge.CreatedBy?.Value), ct);
 
         // Re-sync every share — allocations credit the category's expense account, so a category
         // change moves them too. Each sync is a cheap no-op when the books already match.
@@ -560,7 +568,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         await _ledgers.AddJournalEntryAsync(
             JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-                sourceChargeId: chargeId),
+                sourceChargeId: chargeId, postedByUserId: charge.UserId.Value),
             ct);
         await _ledgers.CommitAsync(ct);
     }
@@ -600,7 +608,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
                 Source: $"debt-opening:{account.Id.Value:N}"));
 
             await _ledgers.AddJournalEntryAsync(
-                JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source), ct);
+                JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+                    postedByUserId: cmd.UserId),
+                ct);
         }
 
         await _ledgers.CommitAsync(ct);

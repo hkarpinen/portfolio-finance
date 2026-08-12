@@ -132,6 +132,31 @@ public class BookkeepingManagerTests
         Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, postings));
     }
 
+    [Fact]
+    public async Task RecordSettlement_AttributesTheEntryToWhoeverPaid()
+    {
+        var manager = NewManager(out var repo);
+
+        await manager.RecordSettlementAsync(Settlement(FundingSource.PayerMember));
+
+        var entry = Assert.Single(repo.JournalEntries);
+        // The provenance columns say WHICH allocation; this says who acted on it.
+        Assert.Equal(Debtor, entry.PostedByUserId);
+    }
+
+    [Fact]
+    public async Task SyncChargeAccrual_AttributesTheEntryToWhoeverEnteredTheBill()
+    {
+        var manager = NewManager(out var repo);
+        var owner = Guid.NewGuid();
+
+        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
+            Group, Charge, "Rent", "Rent", 1000m, "USD",
+            new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc), PostedByUserId: owner));
+
+        Assert.Equal(owner, Assert.Single(repo.JournalEntries).PostedByUserId);
+    }
+
     internal sealed class FakeLedgerRepository : ILedgerRepository
     {
         private readonly List<Ledger> _ledgers = new();

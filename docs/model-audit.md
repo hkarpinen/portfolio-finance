@@ -185,7 +185,10 @@ it, otherwise whose action caused it. A reversal is attributed to whoever correc
 to the original author — undoing an entry is a new act, and copying the author would credit the
 correction to somebody who was not there.
 
-Callers still have to pass it; the column and the rule are in place.
+Every posting path now passes it, read from data the manager already holds — the charge's owner
+for an accrual, the member whose share it is for an allocation, whoever paid for a settlement or a
+vendor payment. **No event contract changed to get this**: the actor was derivable from the
+aggregate at posting time, so nothing on the wire had to move.
 
 ### F9 — Unallocated remainder is treated two ways
 
