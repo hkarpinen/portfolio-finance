@@ -11,6 +11,7 @@ public static class ApplicationServiceExtensions
     {
         services.AddScoped<IIncomeManager, IncomeManager>();
         services.AddScoped<IChargeManager, ChargeManager>();
+        services.AddScoped<IChargeScheduleManager, ChargeScheduleManager>();
         services.AddScoped<IFinancialConnectionManager, FinancialConnectionManager>();
         services.AddScoped<IBankSyncManager, BankSyncManager>();
         services.AddScoped<IContributionCalculator, ContributionCalculator>();

@@ -84,6 +84,7 @@ public static class InfrastructureServiceExtensions
         // Backs the global group-membership filter — without it every group-scoped route is
         // authenticated but not authorised.
         services.AddScoped<IGroupQuery, GroupQuery>();
+        services.AddScoped<IChargeScheduleRepository, ChargeScheduleRepository>();
         services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
 
         services.AddHostedService<OutboxPublisher>();
