@@ -12,13 +12,15 @@ single declared basis of accounting.
 
 ## 1. The three families
 
-The sixteen types divide cleanly by who owns the truth. Confusing the families is the source of
+The types divide by who owns the truth — the standard ERP split of master data, source
+document and general ledger. Confusing the families is the source of
 most findings below.
 
 | Family | Types | Truth lives |
 | --- | --- | --- |
 | **The books** | `Ledger`, `Account`, `JournalEntry`, `Posting`, `LedgerMath`, `GroupChart`, `PersonalChart` | Here. Immutable, derived, self-proving. |
-| **The intent** | `Charge`, `Allocation`, `ChargePayment`, `IncomeSource`, `DebtTerms` | Here — then projected into the books. |
+| **Master data** | `IncomeSource`, `DebtTerms`, `ChargeSchedule` | Standing agreements. Edited over time, never derivable from the books. |
+| **Source documents** | `Charge`, `Allocation`, `ChargePayment` | One dated fact each. Frozen, then projected into the books. |
 | **The outside world** | `FinancialConnection`, `FinancialAccount`, `FinancialTransaction`, `BankSyncSuggestion`, `RecurringSuggestion` | At the provider. Never authoritative. |
 
 ### The books
@@ -34,15 +36,27 @@ most findings below.
   `SourceOccurrence`, `SourceMemberId`) rather than parsed from free text.
 - **`LedgerMath`** — `AccountBalance`, `TrialBalance`, `IsBalanced`. The proof obligations exist.
 
-### The intent
+### Master data
 
-- **`Charge`** — a cost, personal (`GroupId == null`) or shared. Carries `FundingSource`
-  (`PayerMember` / `GroupCash`) and one `Amount`.
-- **`Allocation`** — one member's share of a charge.
-- **`ChargePayment`** — that a member paid *a given occurrence*. Occurrence-aware.
-- **`IncomeSource`** — recurring income with a `TaxWithholdingProfile`.
-- **`DebtTerms`** — rate, limit, statement day for a liability account. Deliberately beside
-  `Account`, not on it: a rate changes by agreement, a balance by transaction.
+Standing agreements. They have identity and a lifecycle, they change by negotiation rather than by
+transaction, and none of them is derivable from the ledger. Every ERP has this layer — vendor
+master, loan master, recurring-entry template — and it is why these are not DTOs.
+
+- **`ChargeSchedule`** — a repeating cost: anchor date, interval, amount, split rule. Posts nothing;
+  says which `Charge`s should exist.
+- **`IncomeSource`** — a pay agreement, with a `TaxWithholdingProfile`. `Amount` is GROSS and quoted
+  in whatever period the person thinks in, which is why `PerPaycheckGross()` exists.
+- **`DebtTerms`** — rate, limit, statement day for a liability account. Beside `Account`, not on it:
+  a rate changes by agreement, a balance by transaction.
+
+### Source documents
+
+One dated fact each, with its amount frozen. This is the layer that was missing.
+
+- **`Charge`** — one bill on one date. `ScheduleId` null means somebody entered it directly.
+  `OccurrenceDate` is the period it reports in and never moves.
+- **`Allocation`** — one member's share of one charge.
+- **`ChargePayment`** — that a member paid a given occurrence. See F7.
 
 ### The outside world
 
@@ -85,7 +99,7 @@ entry can be posted to any date at any time.
 
 Everything below is a symptom. Fixing F1 makes F2–F4 tractable; fixing them individually does not.
 
-### F2 — Recurring charges have no occurrence *(material)*
+### F2 — Recurring charges have no occurrence *(fixed — 5bbf58d, 729a699)*
 
 A recurring bill is one `Charge` with one `Amount` and a `RecurrenceSchedule`. Every month's
 instance is *computed*. Consequences:
@@ -99,19 +113,36 @@ instance is *computed*. Consequences:
 `ChargePayment` already carries `OccurrenceDate`, and `JournalEntry` already has `SourceOccurrence`.
 The occurrence exists everywhere as a *date key* and nowhere as an *entity with an amount*.
 
-**The fix is the one accounting already names: an invoice.** Materialise the occurrence, freeze its
-amount when accrued, key the accrual `charge:{chargeId}:{yyyyMMdd}`. Editing the charge then changes
-future occurrences; past ones keep what they were billed at. Anchor-date derivation stays correct
-for periods not yet accrued.
+**Resolved by splitting the two jobs `Charge` was doing.** `ChargeSchedule` holds the agreement —
+anchor, interval, amount, split rule — and posts nothing. `Charge` is now strictly one dated bill
+carrying `ScheduleId` and `OccurrenceDate`, unique together, with its amount and split COPIED at
+generation and never read from the schedule again. Amending a schedule therefore cannot reach back
+into a month already recorded.
 
-### F3 — The basis of accounting is not a policy *(material)*
+Generation is driven by somebody acting — paying a share, marking a vendor paid — not by a clock.
+Nothing needs a charge to exist until then, and writing one ahead of time would put a cost in the
+books that has not happened. Everything past that is forecast, expanded from the schedule and never
+posted.
 
-Two engines exist. `JournalizeAccrual` (Dr Expense / Cr Vendor Payable) is what runs.
-`JournalizeCharge` (cash basis, two entries) **is never called outside tests**, and
-`ledger-design.md` §6.1 recommends cash-basis v1.
+The accrual key needed no change: `charge:{chargeId}` is already unique per occurrence once a
+charge IS one.
 
-The intended policy, the documented policy and the implemented policy are three different things.
-An entity has one basis. Delete the dead engine or promote it, and write down which.
+### F3 — Two engines, and they are NOT a basis conflict *(corrected)*
+
+This finding originally said the two journalizing engines were a basis-of-accounting conflict and
+that the unused one should be deleted. **That was wrong.**
+
+They are two *document types*, both valid under one basis:
+
+- **A bill** — an obligation to an outside party. `Dr Expense / Cr Vendor Payable`, cleared later
+  by a payment. That is `JournalizeAccrual`, and it is what runs.
+- **A purchase** — paid at the point of sale, no payable ever exists. `Dr Expense / Cr Cash-or-Card`.
+  That is `JournalizeCharge`, and it is unused only because personal purchases have nowhere to post
+  yet (F6), not because it is redundant.
+
+Do not delete it. What is still true is that `ledger-design.md` §6.1 recommends cash-basis v1 while
+accrual is what runs — so the *document* the doc describes and the one the code posts differ. Fix
+the doc, keep both engines.
 
 ### F4 — The group has no income statement *(design, not defect)*
 
@@ -174,9 +205,11 @@ Worth stating, because the findings are all about the layer above:
 
 ## 5. Recommended order
 
-1. **Occurrences (F2)** — unblocks period correctness and gives the document to attribute expense to.
-2. **Period close (F1)** — once occurrences exist, a period has edges worth locking.
-3. **Declare the basis, delete the dead engine (F3, F9).**
-4. **Personal charge posting + income accounts (F5, F6)** — makes the personal book answer something.
-5. **Clearing-account typing (F4)** and **one chart model (F7)** — cosmetic next to the rest.
-6. **Actor on entries (F8)** — cheap, do it with any of the above.
+1. ~~**Occurrences (F2)**~~ — done. `ChargeSchedule` + `Charge` as the document.
+2. **Personal charge posting + income documents (F5, F6)** — makes the personal book answer
+   something. A paycheck is to `IncomeSource` what a `Charge` is to `ChargeSchedule`.
+3. **`ChargePayment` (F7)** — projection of the postings, or delete it.
+4. **Clearing-account typing (F4)** and **one chart model** — cosmetic next to the rest.
+5. **Actor on entries (F8)** — cheap, do it with any of the above.
+6. **Period close (F1)** — last, deliberately. A frozen document already stops history moving; a
+   lock only stops somebody *deliberately* backdating, and building it drags a clock back in.

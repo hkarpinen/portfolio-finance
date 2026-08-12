@@ -56,4 +56,12 @@ public class AllocationMathTests
     [Fact]
     public void Fits_OvershootByCent_IsRejected()
         => Assert.False(AllocationMath.Fits(alreadyAllocated: 99.99m, newAmount: 0.02m, chargeTotal: 100m));
+
+    [Theory]
+    [InlineData(100, 100, true)]   // split to the penny
+    [InlineData(100, 60, true)]    // partly split
+    [InlineData(60, 100, false)]   // shrunk below what is already split
+    public void CoversAllocations_RefusesOnlyWhenTheChargeIsTooSmall(
+        decimal chargeTotal, decimal allocated, bool expected) =>
+        Assert.Equal(expected, AllocationMath.CoversAllocations(chargeTotal, allocated));
 }

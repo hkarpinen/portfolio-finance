@@ -25,4 +25,10 @@ public static class AllocationMath
     // allocations may sum exactly to the charge total.
     public static bool Fits(decimal alreadyAllocated, decimal newAmount, decimal chargeTotal)
         => alreadyAllocated + newAmount <= chargeTotal;
+
+    // The same rule read from the other end: shrinking a charge must not strand allocations above
+    // it. Journalizing such a charge has no account that can absorb the negative remainder, and
+    // that failure surfaces inside the posting consumer where nobody can act on it.
+    public static bool CoversAllocations(decimal chargeTotal, decimal allocatedTotal)
+        => allocatedTotal <= chargeTotal;
 }

@@ -144,6 +144,14 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null) return null;
 
+        // Shrinking below what is already split would strand the allocations above the total. The
+        // engine refuses to journalize that, and the refusal lands in a consumer — so it is caught
+        // here, where the person who typed the number is still listening.
+        var allocated = await SumAllocationsExcludingAsync(expense.Id, null, cancellationToken);
+        if (!AllocationMath.CoversAllocations(request.Amount, allocated))
+            throw new InvalidOperationException(
+                $"Allocations already total {allocated:0.##}; the charge cannot be less than that.");
+
         expense.Update(
             request.Title,
             Money.Create(request.Amount, request.Currency),
