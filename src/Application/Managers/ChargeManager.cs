@@ -46,7 +46,7 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             category,
             request.DueDate,
-            ParseSchedule(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
+            RecurrenceSchedule.ParseOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description);
 
         await _repository.AddAsync(expense, cancellationToken);
@@ -60,7 +60,7 @@ internal sealed class ChargeManager : IChargeManager
         if (expense is null) return null;
 
         // Owner check. Null (→ 404), never 403, so ids stay unprobeable.
-        if (!IsOwnPersonalCharge(expense, request.CallerId)) return null;
+        if (!expense.IsOwnedBy(request.CallerId)) return null;
 
         if (!Enum.TryParse<ChargeCategory>(request.Category, ignoreCase: true, out var category))
             category = ChargeCategory.Other;
@@ -70,7 +70,7 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             category,
             request.DueDate,
-            ParseSchedule(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
+            RecurrenceSchedule.ParseOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description);
 
         await _repository.UpdateAsync(expense, cancellationToken);
@@ -84,7 +84,7 @@ internal sealed class ChargeManager : IChargeManager
         if (expense is null) return null;
 
         // Owner check — deletion must not be reachable by id alone.
-        if (!IsOwnPersonalCharge(expense, request.CallerId)) return null;
+        if (!expense.IsOwnedBy(request.CallerId)) return null;
 
         if (expense.TryDeactivate())
             await _repository.UpdateAsync(expense, cancellationToken);
@@ -113,7 +113,7 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             request.Category,
             request.DueDate,
-            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
+            RecurrenceSchedule.CreateOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description,
             payerUserId,
             request.FundingSource);
@@ -147,7 +147,7 @@ internal sealed class ChargeManager : IChargeManager
         // Shrinking below what is already split would strand the allocations above the total. The
         // engine refuses to journalize that, and the refusal lands in a consumer — so it is caught
         // here, where the person who typed the number is still listening.
-        var allocated = await SumAllocationsExcludingAsync(expense.Id, null, cancellationToken);
+        var allocated = await _splitRepository.SumForChargeAsync(expense.Id, null, cancellationToken);
         if (!AllocationMath.CoversAllocations(request.Amount, allocated))
             throw new InvalidOperationException(
                 $"Allocations already total {allocated:0.##}; the charge cannot be less than that.");
@@ -157,7 +157,7 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             request.Category,
             request.DueDate,
-            BuildRecurrence(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
+            RecurrenceSchedule.CreateOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description,
             request.PayerUserId);
 
@@ -191,7 +191,7 @@ internal sealed class ChargeManager : IChargeManager
             var existing = await _splitRepository.GetByIdAsync(AllocationId.Create(request.AllocationId.Value), cancellationToken);
             if (existing is not null)
             {
-                var others = await SumAllocationsExcludingAsync(expenseId, existing.Id, cancellationToken);
+                var others = await _splitRepository.SumForChargeAsync(expenseId, existing.Id, cancellationToken);
                 if (!AllocationMath.Fits(others, money.Amount, chargeTotal))
                     throw new InvalidOperationException(
                         $"Allocations would exceed the charge total of {chargeTotal:0.##}.");
@@ -211,7 +211,7 @@ internal sealed class ChargeManager : IChargeManager
         if (duplicate is not null)
             throw new InvalidOperationException("A split for this member already exists on this expense.");
 
-        var existingTotal = await SumAllocationsExcludingAsync(expenseId, null, cancellationToken);
+        var existingTotal = await _splitRepository.SumForChargeAsync(expenseId, null, cancellationToken);
         if (!AllocationMath.Fits(existingTotal, money.Amount, chargeTotal))
             throw new InvalidOperationException(
                 $"Allocations would exceed the charge total of {chargeTotal:0.##}.");
@@ -289,7 +289,7 @@ internal sealed class ChargeManager : IChargeManager
         // Enforce the Σ allocations ≤ charge total invariant. This arrives via an authoritative,
         // redeliverable household event, so a violation must NOT throw (that would dead-letter and
         // redeliver forever) — log and skip instead.
-        var others = await SumAllocationsExcludingAsync(expenseId, existing?.Id, cancellationToken);
+        var others = await _splitRepository.SumForChargeAsync(expenseId, existing?.Id, cancellationToken);
         if (!AllocationMath.Fits(others, money.Amount, charge.Amount.Amount))
         {
             _logger.LogWarning(
@@ -451,51 +451,4 @@ internal sealed class ChargeManager : IChargeManager
             expense.FundingSource, expense.PayerUserId, occurrenceDate, DateTime.UtcNow.Date,
             LedgerSources.VendorPayment(request.ChargeId, occurrenceDate));
     }
-
-    /// <summary>
-    /// Sum of the charge's OTHER active allocations — every allocation on the charge except the one
-    /// optionally being replaced (<paramref name="excluding"/>). Feeds the Σ allocations ≤ charge
-    /// total invariant so an upsert can't push the total past the bill.
-    /// <para>
-    /// This invariant spans the WHOLE set of a charge's allocations, but <see cref="Allocation"/> is
-    /// its own aggregate root (it has no reference to its siblings — that boundary is deliberate, so a
-    /// single share can be journaled and reversed independently in the ledger). A cross-aggregate
-    /// invariant cannot live on one aggregate, so it is enforced HERE, in the application layer, by
-    /// loading the siblings — not an anemic-domain leak but the correct home for a set-level rule.
-    /// </para>
-    /// </summary>
-    private async Task<decimal> SumAllocationsExcludingAsync(ChargeId chargeId, AllocationId? excluding, CancellationToken cancellationToken)
-    {
-        var siblings = await _splitRepository.ListByChargeAsync(chargeId, cancellationToken);
-        return siblings
-            .Where(a => excluding is null || a.Id != excluding.Value)
-            .Sum(a => a.Amount.Amount);
-    }
-
-    private static RecurrenceSchedule? ParseSchedule(string? frequency, DateTime? startDate, DateTime? endDate)
-    {
-        if (string.IsNullOrWhiteSpace(frequency)
-            || !Enum.TryParse<RecurrenceFrequency>(frequency, ignoreCase: true, out var freq))
-            return null;
-
-        return RecurrenceSchedule.Create(freq, startDate ?? DateTime.UtcNow, endDate);
-    }
-
-    private static RecurrenceSchedule? BuildRecurrence(RecurrenceFrequency? frequency, DateTime? startDate, DateTime? endDate)
-    {
-        if (!frequency.HasValue) return null;
-        return RecurrenceSchedule.Create(frequency.Value, startDate ?? DateTime.UtcNow.Date, endDate);
-    }
-
-    /// <summary>
-    /// True when <paramref name="callerId"/> owns this PERSONAL charge.
-    ///
-    /// Group charges are excluded deliberately: they are not owned by one
-    /// person, and their authorization is the group-membership filter plus the
-    /// role checks on the group routes. A group charge must never be mutable
-    /// through the personal endpoints, which is what a bare owner comparison
-    /// (`UserId == caller`, true for whoever created it) would have allowed.
-    /// </summary>
-    private static bool IsOwnPersonalCharge(Charge charge, Guid callerId) =>
-        charge.GroupId is null && charge.UserId.Value == callerId;
 }

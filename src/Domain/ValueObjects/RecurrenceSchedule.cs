@@ -18,6 +18,19 @@ public record RecurrenceSchedule
         EndDate = endDate;
     }
 
+    /// <summary>
+    /// From an optional frequency — null, blank or unrecognised means "does not repeat", which is
+    /// a real answer rather than an error: a one-off charge is the common case.
+    /// </summary>
+    public static RecurrenceSchedule? CreateOrNone(RecurrenceFrequency? frequency, DateTime? startDate, DateTime? endDate = null)
+        => frequency is null ? null : Create(frequency.Value, startDate ?? DateTime.UtcNow, endDate);
+
+    /// <summary>The same, from the wire, where a frequency arrives as text.</summary>
+    public static RecurrenceSchedule? ParseOrNone(string? frequency, DateTime? startDate, DateTime? endDate = null)
+        => Enum.TryParse<RecurrenceFrequency>(frequency, ignoreCase: true, out var parsed)
+            ? CreateOrNone(parsed, startDate, endDate)
+            : null;
+
     public static RecurrenceSchedule Create(RecurrenceFrequency frequency, DateTime startDate, DateTime? endDate = null)
         => new(
             frequency,

@@ -61,6 +61,12 @@ public class Charge : IAggregateRoot
     public DateTime UpdatedAt { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// A personal charge belonging to this person. Group charges are never "own" — they are
+    /// reached through membership, which is a different question with a different answer.
+    /// </summary>
+    public bool IsOwnedBy(Guid userId) => GroupId is null && UserId.Value == userId;
+
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 

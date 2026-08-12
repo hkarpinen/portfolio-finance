@@ -39,6 +39,12 @@ internal sealed class AllocationRepository : IAllocationRepository
     public async Task<IReadOnlyList<Allocation>> ListByChargeAsync(ChargeId chargeId, CancellationToken cancellationToken = default)
         => await _dbContext.Allocations.Where(s => s.ChargeId == chargeId).ToListAsync(cancellationToken);
 
+    public async Task<decimal> SumForChargeAsync(ChargeId chargeId, AllocationId? excluding = null, CancellationToken cancellationToken = default)
+        => await _dbContext.Allocations
+            .AsNoTracking()
+            .Where(a => a.ChargeId == chargeId && (excluding == null || a.Id != excluding))
+            .SumAsync(a => a.Amount.Amount, cancellationToken);
+
     public Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default)
         => _dbContext.Allocations.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
 }
