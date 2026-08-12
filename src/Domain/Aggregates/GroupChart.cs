@@ -22,6 +22,25 @@ public static class GroupChart
     public static Account OpenCashAccount(LedgerId ledgerId) =>
         Account.Open(ledgerId, CashCode, "Cash", AccountType.Asset);
 
+    public static AccountSpec Cash(LedgerId ledgerId) =>
+        new(CashCode, () => OpenCashAccount(ledgerId));
+
+    public static AccountSpec VendorPayable(LedgerId ledgerId) =>
+        new(VendorPayableCode, () => Account.Open(ledgerId, VendorPayableCode, "Vendor Payable", AccountType.Liability));
+
+    public static AccountSpec Member(LedgerId ledgerId, Guid userId) =>
+        new(MemberCode(userId), () => OpenMemberAccount(ledgerId, userId));
+
+    /// <summary>
+    /// Which account funds a charge. The ledger has no opinion about funding sources and the
+    /// engine takes account ids, so this switch is the one place the two meet.
+    /// </summary>
+    public static AccountSpec Funding(LedgerId ledgerId, FundingSource fundingSource, Guid payerUserId) =>
+        fundingSource == FundingSource.GroupCash ? Cash(ledgerId) : Member(ledgerId, payerUserId);
+
+    public static AccountSpec Expense(LedgerId ledgerId, string category) =>
+        new(ExpenseCode(category), () => OpenExpenseAccount(ledgerId, category));
+
     public static Account OpenMemberAccount(LedgerId ledgerId, Guid userId) =>
         Account.Open(ledgerId, MemberCode(userId), $"Member {userId:N}", AccountType.Equity);
 

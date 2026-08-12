@@ -34,6 +34,15 @@ public static class PersonalChart
         Account.Open(ledgerId, OpeningBalanceCode, "Opening balance", AccountType.Equity),
     ];
 
+    public static AccountSpec Cash(LedgerId ledgerId) =>
+        new(CashCode, () => Account.Open(ledgerId, CashCode, "Cash", AccountType.Asset));
+
+    public static AccountSpec OpeningBalance(LedgerId ledgerId) =>
+        new(OpeningBalanceCode, () => Account.Open(ledgerId, OpeningBalanceCode, "Opening balance", AccountType.Equity));
+
+    public static AccountSpec Expense(LedgerId ledgerId, string category) =>
+        new(ExpenseCode(category), () => OpenExpenseAccount(ledgerId, category));
+
     public static Account OpenCashAccount(LedgerId ledgerId, Guid accountId, string name) =>
         Account.Open(ledgerId, AssetCode(accountId), name, AccountType.Asset);
 

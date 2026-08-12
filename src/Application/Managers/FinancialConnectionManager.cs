@@ -1,5 +1,6 @@
 using Finance.Application.Commands;
 using Finance.Application.Dtos;
+using Finance.Application.Mappers;
 using Finance.Application.Ports;
 using Finance.Application.Queries;
 using Finance.Application.Repositories;
@@ -48,7 +49,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         Guid userId, CancellationToken cancellationToken = default)
     {
         var result = await _api.CreateLinkTokenAsync(userId, cancellationToken);
-        return new LinkTokenDto(result.LinkToken, result.Expiration);
+        return FinancialConnectionMapper.ToLinkToken(result.LinkToken, result.Expiration);
     }
 
     public async Task<ConnectionDto> ExchangePublicTokenAsync(
@@ -130,15 +131,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
                 connection.ExternalId);
         }
 
-        return new ConnectionDto(
-            connection.Id.Value,
-            connection.InstitutionName,
-            connection.Status.ToString(),
-            connection.LastSyncedAt,
-            connection.CreatedAt,
-            persistedAccounts.Select(a => new LinkedAccountDto(
-                a.Id, a.Name, a.OfficialName, a.Mask, a.Type, a.Subtype,
-                a.CurrencyCode, a.CurrentBalance, a.AvailableBalance)).ToList());
+        return FinancialConnectionMapper.ToResponse(connection, persistedAccounts);
     }
 
     public async Task DisconnectAsync(
@@ -195,7 +188,8 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             throw new UnauthorizedAccessException("Access denied.");
 
         var (added, modified, removed, hasMore) = await _syncService.SyncConnectionAsync(connection, cancellationToken);
-        return new SyncConnectionDto(connection.Id.Value, added, modified, removed, hasMore, DateTime.UtcNow);
+        return FinancialConnectionMapper.ToSyncResult(
+            connection.Id.Value, added, modified, removed, hasMore, DateTime.UtcNow);
     }
 
     public async Task SyncByExternalItemIdAsync(
@@ -223,8 +217,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         await _syncService.RefreshSuggestionsAsync(connection, ct);
 
         var suggestions = await _connectionQuery.ListSuggestionsForUserAsync(UserId.Create(userId), ct);
-        var dtos = suggestions.Select(MapSuggestion).ToList();
-        return new RecurringSuggestionListDto(dtos, dtos.Count);
+        return FinancialConnectionMapper.ToSuggestionList(suggestions);
     }
 
     public async Task<AcceptSuggestionDto> AcceptSuggestionAsync(
@@ -237,7 +230,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             throw new UnauthorizedAccessException("Access denied.");
 
         if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return new AcceptSuggestionDto(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
 
         var schedule = RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate);
         var sourceName = !string.IsNullOrWhiteSpace(suggestion.MerchantName) ? suggestion.MerchantName
@@ -255,7 +248,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
             await _repo.SaveSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
         }
         else
         {
@@ -270,7 +263,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
         }
     }
 
@@ -284,7 +277,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             throw new UnauthorizedAccessException("Access denied.");
 
         if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return new AcceptSuggestionDto(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
 
         var displayName = !string.IsNullOrWhiteSpace(suggestion.MerchantName)
             ? suggestion.MerchantName : suggestion.Name;
@@ -301,7 +294,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
         }
         else
         {
@@ -334,7 +327,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return new AcceptSuggestionDto(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
         }
     }
 
@@ -352,10 +345,5 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         await _repo.CommitAsync(ct);
     }
 
-    private static RecurringSuggestionDto MapSuggestion(RecurringSuggestion s) => new(
-        s.Id, s.FinancialConnectionId.Value, s.AccountId,
-        s.Direction.ToString(), s.Description, s.MerchantName,
-        s.Frequency, s.AverageAmount.Amount, s.LastAmount.Amount, s.AverageAmount.Currency,
-        s.FirstDate, s.LastDate, s.PredictedNextDate, s.IsActive, s.IsLinked);
 
 }

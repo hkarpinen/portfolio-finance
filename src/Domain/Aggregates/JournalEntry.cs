@@ -154,6 +154,40 @@ public sealed class JournalEntry : IAggregateRoot
         return reversal;
     }
 
+    /// <summary>
+    /// In effect: neither a reversal itself nor already reversed. Both are declared columns, so
+    /// deciding this never means scanning for reversal pairs.
+    /// </summary>
+    public bool IsInEffect => ReversalOfEntryId is null && ReversedByEntryId is null;
+
+    /// <summary>
+    /// Already says what a fresh accrual would say — same expense account, amount, currency,
+    /// description and value date. What makes posting convergent: an entry that matches is left
+    /// alone rather than reversed and rewritten identically.
+    /// </summary>
+    public bool SaysAccrual(AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
+    {
+        var debit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        return debit is not null
+            && debit.AccountId == expenseAccount
+            && debit.Amount.Amount == total
+            && debit.Amount.Currency == currency
+            && Description == description
+            && Date == date;
+    }
+
+    /// <summary>Already says the same 1↔1 move — same two accounts, same amount.</summary>
+    public bool SaysTransfer(AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
+    {
+        var debit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var credit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
+        return debit is not null && credit is not null
+            && debit.AccountId == debitAccount
+            && credit.AccountId == creditAccount
+            && debit.Amount.Amount == amount
+            && debit.Amount.Currency == currency;
+    }
+
     private static EntryDirection Flip(EntryDirection d) =>
         d == EntryDirection.Debit ? EntryDirection.Credit : EntryDirection.Debit;
 
@@ -173,4 +207,12 @@ public sealed class JournalEntry : IAggregateRoot
         if (debits != credits)
             throw new InvalidOperationException($"Entry does not balance: debits {debits} != credits {credits} (double-entry P2).");
     }
+}
+
+public static class JournalEntryExtensions
+{
+    /// <summary>The entries under a source that still stand — the set every convergence compares
+    /// against.</summary>
+    public static IReadOnlyList<JournalEntry> InEffect(this IEnumerable<JournalEntry> entries)
+        => entries.Where(e => e.IsInEffect).ToList();
 }

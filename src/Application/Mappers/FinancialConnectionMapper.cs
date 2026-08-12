@@ -1,0 +1,47 @@
+using Finance.Application.Dtos;
+using Finance.Domain.Aggregates;
+using Finance.Domain.ReadModels;
+
+namespace Finance.Application.Mappers;
+
+public static class FinancialConnectionMapper
+{
+    public static LinkTokenDto ToLinkToken(string linkToken, DateTime expiration) =>
+        new(linkToken, expiration);
+
+    /// <summary>What one sync moved. `syncedAt` is passed in rather than read here — a mapper
+    /// that reads the clock is a mapper whose output nobody can pin down in a test.</summary>
+    public static SyncConnectionDto ToSyncResult(
+        Guid connectionId, int added, int modified, int removed, bool hasMore, DateTime syncedAt) =>
+        new(connectionId, added, modified, removed, hasMore, syncedAt);
+
+    public static ConnectionDto ToResponse(
+        FinancialConnection connection, IEnumerable<FinancialAccount> accounts) => new(
+        connection.Id.Value,
+        connection.InstitutionName,
+        connection.Status.ToString(),
+        connection.LastSyncedAt,
+        connection.CreatedAt,
+        accounts.Select(ToLinkedAccount).ToList());
+
+    public static LinkedAccountDto ToLinkedAccount(FinancialAccount account) => new(
+        account.Id, account.Name, account.OfficialName, account.Mask, account.Type,
+        account.Subtype, account.CurrencyCode, account.CurrentBalance, account.AvailableBalance);
+
+    public static RecurringSuggestionDto ToSuggestion(RecurringSuggestion s) => new(
+        s.Id, s.FinancialConnectionId.Value, s.AccountId,
+        s.Direction.ToString(), s.Description, s.MerchantName,
+        s.Frequency, s.AverageAmount.Amount, s.LastAmount.Amount, s.AverageAmount.Currency,
+        s.FirstDate, s.LastDate, s.PredictedNextDate, s.IsActive, s.IsLinked);
+
+    public static RecurringSuggestionListDto ToSuggestionList(IEnumerable<RecurringSuggestion> suggestions)
+    {
+        var items = suggestions.Select(ToSuggestion).ToList();
+        return new RecurringSuggestionListDto(items, items.Count);
+    }
+
+    /// <summary>What a suggestion ended up linked to — a new income source, a new charge, or the
+    /// one it was already attached to.</summary>
+    public static AcceptSuggestionDto ToAccepted(Guid suggestionId, Guid entityId, string linkedEntityType) =>
+        new(suggestionId, entityId, linkedEntityType);
+}

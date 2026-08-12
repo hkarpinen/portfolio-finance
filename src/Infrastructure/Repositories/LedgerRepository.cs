@@ -27,6 +27,33 @@ internal sealed class LedgerRepository : ILedgerRepository
     public async Task AddAccountAsync(Account account, CancellationToken ct = default)
         => await _db.Accounts.AddAsync(account, ct);
 
+    public async Task<Ledger> GetOrOpenLedgerAsync(
+        LedgerOwnerType ownerType, Guid ownerId, string currency,
+        Func<LedgerId, IReadOnlyList<Account>> seed, CancellationToken ct = default)
+    {
+        var existing = await _db.Ledgers.FirstOrDefaultAsync(
+            l => l.OwnerType == ownerType && l.OwnerId == ownerId, ct);
+        if (existing is not null) return existing;
+
+        var ledger = Ledger.Open(ownerType, ownerId, currency);
+        await _db.Ledgers.AddAsync(ledger, ct);
+        await _db.Accounts.AddRangeAsync(seed(ledger.Id), ct);
+        await _db.SaveChangesAsync(ct);
+        return ledger;
+    }
+
+    public async Task<Account> GetOrOpenAccountAsync(
+        LedgerId ledgerId, AccountSpec spec, CancellationToken ct = default)
+    {
+        var existing = await _db.Accounts.FirstOrDefaultAsync(a => a.LedgerId == ledgerId && a.Code == spec.Code, ct);
+        if (existing is not null) return existing;
+
+        var account = spec.Open();
+        await _db.Accounts.AddAsync(account, ct);
+        await _db.SaveChangesAsync(ct);
+        return account;
+    }
+
     public Task<Account?> GetAccountAsync(AccountId accountId, CancellationToken ct = default)
         => _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, ct);
 

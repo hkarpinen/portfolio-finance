@@ -170,6 +170,28 @@ public class BookkeepingManagerTests
 
         public Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default) { _ledgers.Add(ledger); return Task.CompletedTask; }
 
+        public Task<Ledger> GetOrOpenLedgerAsync(
+            LedgerOwnerType ownerType, Guid ownerId, string currency,
+            Func<LedgerId, IReadOnlyList<Account>> seed, CancellationToken ct = default)
+        {
+            var existing = _ledgers.FirstOrDefault(l => l.OwnerType == ownerType && l.OwnerId == ownerId);
+            if (existing is not null) return Task.FromResult(existing);
+
+            var ledger = Ledger.Open(ownerType, ownerId, currency);
+            _ledgers.Add(ledger);
+            _accounts.AddRange(seed(ledger.Id));
+            return Task.FromResult(ledger);
+        }
+
+        public Task<Account> GetOrOpenAccountAsync(LedgerId ledgerId, AccountSpec spec, CancellationToken ct = default)
+        {
+            var existing = _accounts.FirstOrDefault(a => a.LedgerId == ledgerId && a.Code == spec.Code);
+            if (existing is not null) return Task.FromResult(existing);
+            var account = spec.Open();
+            _accounts.Add(account);
+            return Task.FromResult(account);
+        }
+
         public Task<Account?> GetAccountAsync(AccountId accountId, CancellationToken ct = default)
             => Task.FromResult(_accounts.FirstOrDefault(a => a.Id == accountId));
 

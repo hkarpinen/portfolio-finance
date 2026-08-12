@@ -205,11 +205,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task<bool> SyncChargeAccrualAsync(PostChargeToLedgerCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
 
-        var expenseAccount = await EnsureAccountAsync(
-            ledger.Id, GroupChart.ExpenseCode(cmd.Category),
-            () => GroupChart.OpenExpenseAccount(ledger.Id, cmd.Category), ct);
+        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Expense(ledger.Id, cmd.Category), ct);
 
         var source = LedgerSources.Charge(cmd.ChargeId);
         var date = DateTime.SpecifyKind(cmd.Date.Date, DateTimeKind.Utc);
@@ -218,8 +216,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // Already in sync? One active accrual entry debiting the right expense account for the
         // right amount with the same description and value date — nothing to do. This is what
         // makes the event-driven posting convergent: redeliveries and no-op edits fall out here.
-        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
-        if (active.Count == 1 && AccrualMatches(active[0], expenseAccount.Id, cmd.Total, cmd.Currency, description, date))
+        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
+        if (active.Count == 1 && active[0].SaysAccrual(expenseAccount.Id, cmd.Total, cmd.Currency, description, date))
             return false;
 
         // Stale (amount/category/title/date changed) — reverse what's on the books, then re-post.
@@ -237,7 +235,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // after creation is tracked exactly like a create-time one. Who pays the vendor (the pot) is
         // recorded later. "Is it paid" is derived from the Vendor Payable balance — the ledger is the
         // single source of truth.
-        var vendorPayable = await EnsureVendorPayableAccountAsync(ledger.Id, ct);
+        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.VendorPayable(ledger.Id), ct);
 
         var draft = _journalizing.JournalizeTransfer(new TransferContext(
             DebitAccount: expenseAccount.Id, CreditAccount: vendorPayable.Id,
@@ -254,18 +252,16 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         Guid groupId, Guid chargeId, string category, Guid userId, decimal amount, string currency,
         Guid allocationId, CancellationToken ct = default)
     {
-        var ledger = await EnsureGroupLedgerAsync(groupId, currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, groupId, currency, GroupChart.StandardAccounts, ct);
         var source = LedgerSources.Allocation(allocationId);
 
-        var expenseAccount = await EnsureAccountAsync(
-            ledger.Id, GroupChart.ExpenseCode(category),
-            () => GroupChart.OpenExpenseAccount(ledger.Id, category), ct);
-        var member = await EnsureMemberAccountAsync(ledger.Id, userId, ct);
+        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Expense(ledger.Id, category), ct);
+        var member = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, userId), ct);
 
         // Already in sync? One active entry moving the right amount from the right member onto the
         // right expense account — nothing to do (redeliveries and unchanged upserts land here).
-        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
-        if (active.Count == 1 && TransferMatches(active[0], member.Id, expenseAccount.Id, amount, currency))
+        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
+        if (active.Count == 1 && active[0].SaysTransfer(member.Id, expenseAccount.Id, amount, currency))
             return;
 
         foreach (var stale in active)
@@ -286,17 +282,17 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
 
         // Idempotent: if this occurrence's vendor payment is already on the books, do nothing.
-        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct));
+        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var vendorPayable = await EnsureVendorPayableAccountAsync(ledger.Id, ct);
+        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.VendorPayable(ledger.Id), ct);
         // The funding account is whoever actually paid the vendor — the payer's own Member account
         // (front-and-reimburse) or the shared Cash pool (pooled). One resolver, one volatility axis.
-        var funding = await EnsureFundingAccountAsync(
-            ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty, ct);
+        var funding = await _ledgers.GetOrOpenAccountAsync(
+            ledger.Id, GroupChart.Funding(ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty), ct);
 
         // Clear the liability against the funding account: Dr Vendor Payable / Cr funding.
         var draft = _journalizing.JournalizeTransfer(new TransferContext(
@@ -313,18 +309,18 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await EnsureGroupLedgerAsync(cmd.GroupId, cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
 
         // Idempotent: if this settlement is already on the books (active entry under its
         // source), do nothing. The ledger is the single source of truth — no dual write.
-        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct));
+        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var from = await EnsureMemberAccountAsync(ledger.Id, cmd.FromUserId, ct);
+        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, cmd.FromUserId), ct);
         // The debtor settles INTO the funding account that paid the vendor — the payer's Member
         // account (front-and-reimburse) or the shared Cash pool (pooled). Resolved the same way
         // the charge was posted, so a settlement always mirrors its charge's funding.
-        var funding = await EnsureFundingAccountAsync(ledger.Id, cmd.FundingSource, cmd.ToUserId, ct);
+        var funding = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Funding(ledger.Id, cmd.FundingSource, cmd.ToUserId), ct);
 
         // A settlement debits the funding account and credits the debtor — that direction is the
         // workflow's call; the engine just balances it.
@@ -350,7 +346,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var ledger = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
         if (ledger is null) return;
 
-        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (active.Count == 0) return;
 
         // The ledger only mirrors the reversing entries; the SettlementReversed fact is raised by
@@ -362,14 +358,14 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default)
     {
-        var ledger = await EnsureGroupLedgerAsync(groupId, currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, groupId, currency, GroupChart.StandardAccounts, ct);
 
         // Idempotent on source — re-posting the same settle-up payment is a no-op.
-        var existing = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var from = await EnsureMemberAccountAsync(ledger.Id, fromUserId, ct);
-        var to = await EnsureMemberAccountAsync(ledger.Id, toUserId, ct);
+        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, fromUserId), ct);
+        var to = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, toUserId), ct);
 
         // The payer (from, a debtor) squares up with a creditor (to): Dr Member:to / Cr Member:from,
         // moving both toward zero. The cash changed hands directly between the two — no pot involved.
@@ -391,7 +387,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         // Every in-effect entry for the charge — accrual, vendor payment, and settlements all carry
         // its SourceChargeId. Reversing them returns every touched account to where it was.
-        var active = ActiveEntries(await _ledgers.GetEntriesByChargeAsync(ledger.Id, chargeId, ct));
+        var active = (await _ledgers.GetEntriesByChargeAsync(ledger.Id, chargeId, ct)).InEffect();
         if (active.Count == 0) return;
 
         foreach (var entry in active)
@@ -488,49 +484,19 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     /// <summary>True when the active accrual entry already reflects the charge — same expense
     /// account, amount, description (which carries the title) and value date.</summary>
-    private static bool AccrualMatches(
-        JournalEntry entry, AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
-    {
-        var debit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        return debit is not null
-            && debit.AccountId == expenseAccount
-            && debit.Amount.Amount == total
-            && debit.Amount.Currency == currency
-            && entry.Description == description
-            && entry.Date == date;
-    }
 
-    /// <summary>True when the active entry is the same 1↔1 transfer — same debit/credit accounts
-    /// and amount.</summary>
-    private static bool TransferMatches(
-        JournalEntry entry, AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
-    {
-        var debit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        var credit = entry.Postings.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
-        return debit is not null && credit is not null
-            && debit.AccountId == debitAccount
-            && credit.AccountId == creditAccount
-            && debit.Amount.Amount == amount
-            && debit.Amount.Currency == currency;
-    }
 
-    /// <summary>Entries under a source that are still in effect — not themselves reversals, and not
-    /// yet reversed. Both are declared columns, so this never scans for reversal pairs.</summary>
-    private static IReadOnlyList<JournalEntry> ActiveEntries(IReadOnlyList<JournalEntry> entries)
-        => entries
-            .Where(e => e.ReversalOfEntryId is null && e.ReversedByEntryId is null)
-            .ToList();
 
     public async Task ConvergePersonalChargeAsync(Guid chargeId, CancellationToken ct = default)
     {
         var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
         if (charge is null || charge.GroupId is not null) return;
 
-        var ledger = await EnsureUserLedgerAsync(charge.UserId.Value, charge.Amount.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.User, charge.UserId.Value, charge.Amount.Currency, PersonalChart.StandardAccounts, ct);
         var source = LedgerSources.Charge(chargeId);
         var date = DateTime.SpecifyKind(charge.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        var active = ActiveEntries(await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct));
+        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
 
         // Deactivated or deleted: take it off the books and stop.
         if (!charge.IsActive)
@@ -541,20 +507,17 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             return;
         }
 
-        var expenseAccount = await EnsureAccountAsync(
-            ledger.Id, PersonalChart.ExpenseCode(charge.Category.ToString()),
-            () => PersonalChart.OpenExpenseAccount(ledger.Id, charge.Category.ToString()), ct);
+        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(
+            ledger.Id, PersonalChart.Expense(ledger.Id, charge.Category.ToString()), ct);
 
         // Whatever paid for it: a card they told us about, else their cash account.
         var fundingAccount = charge.FundingAccountId is { } declared
             ? await _ledgers.GetAccountAsync(AccountId.Create(declared), ct)
               ?? throw new InvalidOperationException("That funding account is not in this book.")
-            : await EnsureAccountAsync(
-                ledger.Id, PersonalChart.CashCode,
-                () => Account.Open(ledger.Id, PersonalChart.CashCode, "Cash", AccountType.Asset), ct);
+            : await _ledgers.GetOrOpenAccountAsync(ledger.Id, PersonalChart.Cash(ledger.Id), ct);
 
         var description = $"{charge.Title} — paid";
-        if (active.Count == 1 && AccrualMatches(active[0], expenseAccount.Id, charge.Amount.Amount, charge.Amount.Currency, description, date))
+        if (active.Count == 1 && active[0].SaysAccrual(expenseAccount.Id, charge.Amount.Amount, charge.Amount.Currency, description, date))
             return;
 
         foreach (var stale in active)
@@ -575,7 +538,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await EnsureUserLedgerAsync(cmd.UserId, cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.User, cmd.UserId, cmd.Currency, PersonalChart.StandardAccounts, ct);
 
         var accountKey = Guid.NewGuid();
         var account = PersonalChart.OpenDebtAccount(ledger.Id, accountKey, cmd.Name);
@@ -595,9 +558,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // with no postings already reads as a zero balance.
         if (cmd.OpeningBalance > 0m)
         {
-            var opening = await EnsureAccountAsync(
-                ledger.Id, PersonalChart.OpeningBalanceCode,
-                () => Account.Open(ledger.Id, PersonalChart.OpeningBalanceCode, "Opening balance", AccountType.Equity), ct);
+            var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, PersonalChart.OpeningBalance(ledger.Id), ct);
 
             var draft = _journalizing.JournalizeTransfer(new TransferContext(
                 DebitAccount: opening.Id,
@@ -617,68 +578,5 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         return account.Id.Value;
     }
 
-    /// <summary>
-    /// Lazy, like the group side. Opening one at registration would mean guessing a currency
-    /// before the person has said anything about money — and a ledger's currency is not something
-    /// you want to correct once it has postings under it.
-    /// </summary>
-    private async Task<Ledger> EnsureUserLedgerAsync(Guid userId, string currency, CancellationToken ct)
-    {
-        var existing = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.User, userId, ct);
-        if (existing is not null) return existing;
 
-        var ledger = Ledger.Open(LedgerOwnerType.User, userId, currency);
-        await _ledgers.AddLedgerAsync(ledger, ct);
-        foreach (var account in PersonalChart.StandardAccounts(ledger.Id))
-            await _ledgers.AddAccountAsync(account, ct);
-        await _ledgers.CommitAsync(ct);
-        return ledger;
-    }
-
-    private async Task<Ledger> EnsureGroupLedgerAsync(Guid groupId, string currency, CancellationToken ct)
-    {
-        var existing = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
-        if (existing is not null) return existing;
-
-        var ledger = Ledger.Open(LedgerOwnerType.Group, groupId, currency);
-        await _ledgers.AddLedgerAsync(ledger, ct);
-        foreach (var account in GroupChart.StandardAccounts(ledger.Id))
-            await _ledgers.AddAccountAsync(account, ct);
-        await _ledgers.CommitAsync(ct);
-        return ledger;
-    }
-
-    private Task<Account> EnsureMemberAccountAsync(LedgerId ledgerId, Guid userId, CancellationToken ct)
-        => EnsureAccountAsync(ledgerId, GroupChart.MemberCode(userId),
-            () => GroupChart.OpenMemberAccount(ledgerId, userId), ct);
-
-    private Task<Account> EnsureCashAccountAsync(LedgerId ledgerId, CancellationToken ct)
-        => EnsureAccountAsync(ledgerId, GroupChart.CashCode,
-            () => GroupChart.OpenCashAccount(ledgerId), ct);
-
-    private Task<Account> EnsureVendorPayableAccountAsync(LedgerId ledgerId, CancellationToken ct)
-        => EnsureAccountAsync(ledgerId, GroupChart.VendorPayableCode,
-            () => Account.Open(ledgerId, GroupChart.VendorPayableCode, "Vendor Payable", AccountType.Liability), ct);
-
-    /// <summary>The single place a charge's <see cref="FundingSource"/> resolves to a concrete
-    /// ledger account: the payer's Member account, or the shared Cash pool. The enum carries no
-    /// account knowledge of its own — this switch is the only mapping.</summary>
-    private Task<Account> EnsureFundingAccountAsync(
-        LedgerId ledgerId, FundingSource fundingSource, Guid payerUserId, CancellationToken ct)
-        => fundingSource switch
-        {
-            FundingSource.GroupCash => EnsureCashAccountAsync(ledgerId, ct),
-            _ => EnsureMemberAccountAsync(ledgerId, payerUserId, ct),
-        };
-
-    private async Task<Account> EnsureAccountAsync(LedgerId ledgerId, string code, Func<Account> factory, CancellationToken ct)
-    {
-        var existing = await _ledgers.GetAccountByCodeAsync(ledgerId, code, ct);
-        if (existing is not null) return existing;
-
-        var account = factory();
-        await _ledgers.AddAccountAsync(account, ct);
-        await _ledgers.CommitAsync(ct);
-        return account;
-    }
 }
