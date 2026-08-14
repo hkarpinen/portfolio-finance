@@ -39,6 +39,13 @@ public interface IRecurringExpenseManager
     Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default);
 
     /// <summary>
+    /// Opens the agreement and bills the occurrence the caller was entering, so somebody adding a
+    /// repeating cost gets an expense back exactly as if they had entered a one-off — the agreement
+    /// sits behind it, and every later period comes from it.
+    /// </summary>
+    Task<Expense> OpenAndBillFirstAsync(CreateRecurringExpenseCommand cmd, CancellationToken ct = default);
+
+    /// <summary>
     /// Both halves of one person's catch-up: write the bills whose period has come round, then post
     /// anything now due — including a one-off entered ahead of its date. Paired here so the
     /// controller does not have to know that the second half is bookkeeping.
@@ -125,6 +132,15 @@ internal sealed class RecurringExpenseManager(
         var generated = await CatchUpAsync(null, userId, asOf, ct);
         var posted = await bookkeeping.PostDuePersonalExpensesAsync(userId, asOf, ct);
         return (generated, posted);
+    }
+
+    public async Task<Expense> OpenAndBillFirstAsync(
+        CreateRecurringExpenseCommand cmd, CancellationToken ct = default)
+    {
+        var schedule = await CreateAsync(cmd, ct);
+
+        return await MaterialiseAsync(schedule.RecurringExpenseId, cmd.AnchorDate, ct)
+            ?? throw new InvalidOperationException("The agreement was opened but its first bill was not written.");
     }
 
     public async Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default)

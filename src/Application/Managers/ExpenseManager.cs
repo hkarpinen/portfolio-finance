@@ -140,7 +140,19 @@ internal sealed class ExpenseManager : IExpenseManager
                 AccountingEntity.Household(request.GroupId), UserId.Create(request.CallerUserId), request.Title,
                 Money.Create(request.Amount, request.Currency), request.Category, request.DueDate,
                 request.Description, payerUserId: payerUserId, fundingSource: request.FundingSource)
-            : await OpenScheduleAndBillFirstOccurrenceAsync(request, recurrence, payerUserId, cancellationToken);
+            : await _schedules.OpenAndBillFirstAsync(new CreateRecurringExpenseCommand(
+                GroupId: request.GroupId,
+                CallerUserId: request.CallerUserId,
+                Title: request.Title,
+                Amount: request.Amount,
+                Currency: request.Currency,
+                Category: request.Category,
+                Frequency: recurrence.Frequency,
+                AnchorDate: recurrence.StartDate,
+                EndDate: recurrence.EndDate,
+                Description: request.Description,
+                PayerUserId: payerUserId,
+                FundingSource: request.FundingSource), cancellationToken);
 
         if (expense.RecurringExpenseId is null)
             await _repository.AddAsync(expense, cancellationToken);
@@ -161,31 +173,6 @@ internal sealed class ExpenseManager : IExpenseManager
 
         await _repository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToResponse(expense);
-    }
-
-    /// <summary>
-    /// Opens the agreement and bills the occurrence the caller was entering, so they get an expense
-    /// back exactly as before — the schedule sits behind it, and every later month comes from it.
-    /// </summary>
-    private async Task<Expense> OpenScheduleAndBillFirstOccurrenceAsync(
-        CreateGroupExpenseCommand request, RecurrenceSchedule recurrence, Guid payerUserId, CancellationToken ct)
-    {
-        var schedule = await _schedules.CreateAsync(new CreateRecurringExpenseCommand(
-            GroupId: request.GroupId,
-            CallerUserId: request.CallerUserId,
-            Title: request.Title,
-            Amount: request.Amount,
-            Currency: request.Currency,
-            Category: request.Category,
-            Frequency: recurrence.Frequency,
-            AnchorDate: recurrence.StartDate,
-            EndDate: recurrence.EndDate,
-            Description: request.Description,
-            PayerUserId: payerUserId,
-            FundingSource: request.FundingSource), ct);
-
-        return await _schedules.MaterialiseAsync(schedule.RecurringExpenseId, recurrence.StartDate, ct)
-            ?? throw new InvalidOperationException("The schedule was created but its first bill was not.");
     }
 
     public async Task<ExpenseResponseDto?> UpdateGroupExpenseAsync(UpdateGroupExpenseCommand request, CancellationToken cancellationToken = default)

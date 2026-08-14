@@ -18,13 +18,24 @@ Also integrates with Plaid for bank linking and transaction sync — so instead 
 
 ### Ledger posting is event-driven
 
-Controllers never coordinate bookkeeping. Every charge/allocation/settlement mutation commits its
-aggregate change **and the domain events it raised** in one transaction (outbox); `LedgerPostingConsumer`
+Controllers never coordinate bookkeeping. Every expense/share/settlement mutation commits its
+aggregate change **and the domain events it raised** in one transaction (outbox); `LedgerJournalConsumer`
 then consumes those events (outbox → RabbitMQ → consumer) and *converges* the books onto current DB
 state — posting when missing, reverse-and-reposting when stale, no-op when already matching. The
 consumer is serialized (one message at a time) and backed by a partial unique index on active journal
 entries. Ledger-derived reads therefore lag a mutation by ~1–2s (the outbox poll interval); the
 frontend patches `isPaid`/balances optimistically rather than waiting. See `docs/Domain.md`.
+
+Two boundaries this rule leans on, stated so they are not rediscovered as violations:
+
+- **A repository may read, ask the domain, and write in one transaction.** `ConvergeAsync` does
+  exactly that: it loads what is in effect under a source, hands it to `ConvergencePlan` — a pure
+  domain call — and persists the answer. What a repository must never do is *decide* what a state
+  change means. The line is whether the branch is a rule or a round trip.
+- **Bulk SQL is for cascades with no invariant attached.** A user or a household is deleted and
+  their rows go with them; no aggregate has anything to say about it, and loading tens of thousands
+  of rows to call a method on each would be theatre. Everywhere else, a state change goes through
+  the aggregate that owns the rule — see identity `a391a94` for what happens when it does not.
 
 ## Stack
 

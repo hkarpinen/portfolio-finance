@@ -215,17 +215,21 @@ internal sealed class BankSyncManager : IBankSyncManager
         }
     }
 
+    /// <summary>
+    /// Turns what the policy proposes into a document, unless the person already has one like it.
+    /// The decision is SuggestionLinkPolicy's; what is left here is the exists-check and the write,
+    /// which are the only parts that need the database.
+    /// </summary>
     private async Task AutoLinkSuggestionAsync(Guid userId, RecurringSuggestion suggestion, CancellationToken ct)
     {
-        if (suggestion.IsLinked) return;
+        var proposal = SuggestionLinkPolicy.Propose(suggestion, DateTime.UtcNow.Date);
+        if (proposal.Document == SuggestedDocument.None) return;
 
-        var sourceName = SuggestionLinkPolicy.ResolveSourceName(suggestion.MerchantName, suggestion.Description);
-        var schedule = RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate);
         var uid = UserId.Create(userId);
 
-        if (suggestion.Direction == RecurringFlowDirection.Inflow)
+        if (proposal.Document == SuggestedDocument.IncomeSource)
         {
-            if (await _incomeQuery.ExistsForUserAsync(uid, sourceName, suggestion.AverageAmount.Amount, ct))
+            if (await _incomeQuery.ExistsForUserAsync(uid, proposal.SourceName, proposal.Amount.Amount, ct))
             {
                 _logger.LogDebug(
                     "Skipping auto-link for inflow suggestion {SuggestionId} — matching IncomeSource already exists.",
@@ -234,38 +238,34 @@ internal sealed class BankSyncManager : IBankSyncManager
             }
 
             var income = IncomeSource.Create(
-                uid, suggestion.AverageAmount, sourceName, schedule,
+                uid, proposal.Amount, proposal.SourceName,
+                RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate),
                 paymentFrequency: suggestion.Frequency,
-                lastPaymentDate: suggestion.LastDate);
+                lastPaymentDate: proposal.NextDue);
             await _incomeRepository.AddAsync(income, ct);
             suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
             _logger.LogInformation(
                 "Auto-linked suggestion {SuggestionId} → IncomeSource {IncomeId} ({Source})",
-                suggestion.Id, income.Id.Value, sourceName);
+                suggestion.Id, income.Id.Value, proposal.SourceName);
+            return;
         }
-        else
+
+        if (await _expenseQuery.ExistsForUserAsync(uid, proposal.SourceName, proposal.Amount.Amount, ct))
         {
-            if (await _expenseQuery.ExistsForUserAsync(uid, sourceName, suggestion.AverageAmount.Amount, ct))
-            {
-                _logger.LogDebug(
-                    "Skipping auto-link for outflow suggestion {SuggestionId} — matching Expense already exists.",
-                    suggestion.Id);
-                return;
-            }
-
-            var nextDue = SuggestionLinkPolicy.ResolveNextDue(
-                suggestion.PredictedNextDate, suggestion.LastDate, DateTime.UtcNow.Date);
-
-            var expense = Expense.CreateOwn(
-                uid, sourceName, suggestion.AverageAmount, ExpenseCategory.Other, nextDue);
-            await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
-            _logger.LogInformation(
-                "Auto-linked suggestion {SuggestionId} → Expense {ExpenseId} ({Source})",
-                suggestion.Id, expense.Id.Value, sourceName);
+            _logger.LogDebug(
+                "Skipping auto-link for outflow suggestion {SuggestionId} — matching Expense already exists.",
+                suggestion.Id);
+            return;
         }
-    }
 
+        var expense = Expense.CreateOwn(
+            uid, proposal.SourceName, proposal.Amount, ExpenseCategory.Other, proposal.NextDue);
+        await _expenseRepository.AddAsync(expense, ct);
+        suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
+        _logger.LogInformation(
+            "Auto-linked suggestion {SuggestionId} → Expense {ExpenseId} ({Source})",
+            suggestion.Id, expense.Id.Value, proposal.SourceName);
+    }
 
     private async Task<FinancialAccount?> EnsureAccountAsync(
         FinancialConnection connection,
