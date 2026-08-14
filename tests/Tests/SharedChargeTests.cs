@@ -12,8 +12,7 @@ public class SharedChargeTests
     {
         var hId = groupId ?? GroupId.Create(Guid.NewGuid());
         var uId = createdBy ?? UserId.New();
-        return Charge.CreateGroup(
-            hId,
+        return Charge.Create(AccountingEntity.Household(hId),
             uId,
             "Test Bill",
             Money.Create(100m, "USD"),
@@ -27,11 +26,11 @@ public class SharedChargeTests
         var (hId, uId) = NewIds();
         var dueDate = DateTime.UtcNow.Date.AddDays(5);
 
-        var bill = Charge.CreateGroup(hId, uId, "Electricity", Money.Create(80m, "USD"), ChargeCategory.Utilities, dueDate);
+        var bill = Charge.Create(AccountingEntity.Household(hId), uId, "Electricity", Money.Create(80m, "USD"), ChargeCategory.Utilities, dueDate);
 
         Assert.Equal("Electricity", bill.Title);
         Assert.Equal(hId, bill.GroupId);
-        Assert.Equal(uId, bill.CreatedBy);
+        Assert.Equal(uId, bill.EnteredBy);
         Assert.Equal(dueDate, bill.DueDate);
         Assert.True(bill.IsActive);
     }
@@ -51,7 +50,7 @@ public class SharedChargeTests
         var (hId, uId) = NewIds();
 
         Assert.Throws<ArgumentException>(() =>
-            Charge.CreateGroup(hId, uId, "", Money.Create(100m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
+            Charge.Create(AccountingEntity.Household(hId), uId, "", Money.Create(100m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
 
     [Fact]
@@ -105,8 +104,7 @@ public class SharedChargeTests
         var (hId, uId) = NewIds();
         var payer = Guid.NewGuid();
 
-        var bill = Charge.CreateGroup(
-            hId, uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
+        var bill = Charge.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: payer);
 
         // Assert — stored on the aggregate
@@ -123,8 +121,7 @@ public class SharedChargeTests
         // Arrange — created with an initial payer
         var (hId, uId) = NewIds();
         var initialPayer = Guid.NewGuid();
-        var bill = Charge.CreateGroup(
-            hId, uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
+        var bill = Charge.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: initialPayer);
         bill.ClearDomainEvents();
 
@@ -146,8 +143,7 @@ public class SharedChargeTests
         // Arrange — PATCH semantics: a null payer in Update means "leave as-is"
         var (hId, uId) = NewIds();
         var payer = Guid.NewGuid();
-        var bill = Charge.CreateGroup(
-            hId, uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
+        var bill = Charge.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ChargeCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: payer);
         bill.ClearDomainEvents();
 

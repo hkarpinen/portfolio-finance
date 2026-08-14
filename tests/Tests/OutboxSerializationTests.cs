@@ -24,7 +24,7 @@ public class OutboxSerializationTests
     {
         var json = Serialize(new ChargeCreated(
             ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow, null,
+            ChargeCategory.Rent, DateTime.UtcNow,
             GroupId.Create(Guid.NewGuid()), Guid.NewGuid()));
 
         Assert.DoesNotContain("\"value\"", json);
@@ -63,7 +63,7 @@ public class OutboxSerializationTests
     {
         var original = new ChargeCreated(
             ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow, null,
+            ChargeCategory.Rent, DateTime.UtcNow,
             GroupId.Create(Guid.NewGuid()), Guid.NewGuid());
 
         var back = JsonSerializer.Deserialize<ChargeCreated>(Serialize(original), Options);
@@ -96,7 +96,7 @@ public class OutboxSerializationTests
     {
         var personal = new ChargeCreated(
             ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow, null, null, null);
+            ChargeCategory.Rent, DateTime.UtcNow, null, null);
 
         var back = JsonSerializer.Deserialize<ChargeCreated>(Serialize(personal), Options);
 

@@ -15,13 +15,19 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
         builder.Property(b => b.Id)
             .HasConversion(id => id.Value, v => new ChargeId(v));
 
-        builder.Property(b => b.UserId)
-            .HasConversion(id => id.Value, v => new UserId(v));
+        // Whose books this lands in. group_id and user_id used to say it between them, with
+        // user_id meaning two different things depending on the other.
+        builder.Ignore(b => b.GroupId);
+        builder.ComplexProperty(b => b.Owner, owner =>
+        {
+            owner.Property(o => o.Kind).HasColumnName("owner_kind").HasConversion<int>().IsRequired();
+            owner.Property(o => o.Id).HasColumnName("owner_id").IsRequired();
+        });
 
-        // Null = personal, set = household.
-        builder.Property(b => b.GroupId)
-            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new GroupId(v.Value) : (GroupId?)null)
-            .IsRequired(false);
+        builder.Property(b => b.EnteredBy)
+            .HasColumnName("entered_by")
+            .HasConversion(id => id.Value, v => new UserId(v))
+            .IsRequired();
 
         builder.Property(b => b.ScheduleId)
             .HasConversion(
@@ -37,10 +43,6 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
         builder.HasIndex(b => new { b.ScheduleId, b.OccurrenceDate })
             .IsUnique()
             .HasFilter("schedule_id IS NOT NULL");
-
-        builder.Property(b => b.CreatedBy)
-            .HasConversion(id => id.HasValue ? id.Value.Value : (Guid?)null, v => v.HasValue ? new UserId(v.Value) : (UserId?)null)
-            .IsRequired(false);
 
         // The IDENTITY userId of the person who fronted the bill — not a membership id. Null on personal.
         builder.Property(b => b.PayerUserId).IsRequired(false);
@@ -61,15 +63,8 @@ internal sealed class ChargeConfiguration : IEntityTypeConfiguration<Charge>
             money.Property(m => m.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         });
 
-        builder.OwnsOne(b => b.RecurrenceSchedule, rs =>
-        {
-            rs.Property(r => r.Frequency).HasColumnName("recurrence_frequency").HasConversion<string>().HasMaxLength(50);
-            rs.Property(r => r.StartDate).HasColumnName("recurrence_start_date");
-            rs.Property(r => r.EndDate).HasColumnName("recurrence_end_date");
-        });
-
-        builder.HasIndex(b => new { b.GroupId, b.IsActive });
+        // Indexed on the owner columns in the migration with raw SQL: EF 8 cannot name a complex
+        // property's columns in HasIndex, and the index is on how rows are actually looked up.
         builder.HasIndex(b => b.DueDate);
-        builder.HasIndex(b => new { b.UserId, b.IsActive });
     }
 }

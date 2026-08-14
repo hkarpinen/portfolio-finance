@@ -52,7 +52,7 @@ public sealed class IncomeController : ControllerBase
     [HttpPut("{incomeId:guid}")]
     public async Task<IActionResult> Update(Guid groupId, Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerId = User.GetUserId().Value }, ct);
+        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -82,7 +82,7 @@ public sealed class IncomeController : ControllerBase
     [HttpPut("/api/finance/income/{incomeId:guid}")]
     public async Task<IActionResult> UpdateForUser(Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerId = User.GetUserId().Value }, ct);
+        var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 

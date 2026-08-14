@@ -19,6 +19,8 @@ internal sealed class LedgerPostingConsumer :
     IConsumer<ChargeCreated>,
     IConsumer<ChargeUpdated>,
     IConsumer<ChargeActivated>,
+    IConsumer<ChargePaid>,
+    IConsumer<ChargeUnpaid>,
     IConsumer<ChargeDeactivated>,
     IConsumer<AllocationCreated>,
     IConsumer<AllocationUpdated>,
@@ -48,6 +50,17 @@ internal sealed class LedgerPostingConsumer :
     public Task Consume(ConsumeContext<ChargeActivated> context) =>
         HandleAsync(context.Message, nameof(ChargeActivated),
             ct => _bookkeeping.ConvergeChargeAsync(context.Message.ChargeId.Value, ct), context.CancellationToken);
+
+    public Task Consume(ConsumeContext<ChargePaid> context) =>
+        HandleAsync(context.Message, nameof(ChargePaid),
+            ct => _bookkeeping.RecordPersonalPaymentAsync(
+                context.Message.ChargeId.Value, null, context.Message.PaidAt, ct),
+            context.CancellationToken);
+
+    public Task Consume(ConsumeContext<ChargeUnpaid> context) =>
+        HandleAsync(context.Message, nameof(ChargeUnpaid),
+            ct => _bookkeeping.ReversePersonalPaymentAsync(context.Message.ChargeId.Value, ct),
+            context.CancellationToken);
 
     public Task Consume(ConsumeContext<ChargeDeactivated> context) =>
         HandleAsync(context.Message, nameof(ChargeDeactivated), ct =>

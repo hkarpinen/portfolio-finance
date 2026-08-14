@@ -3,9 +3,9 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Queries;
 
-// CallerId: a personal charge is readable ONLY by its owner, so the id alone is not enough to
+// CallerUserId: a personal charge is readable ONLY by its owner, so the id alone is not enough to
 // resolve one.
-public sealed record ChargeDetailParams(Guid ChargeId, Guid CallerId);
+public sealed record ChargeDetailParams(Guid ChargeId, Guid CallerUserId);
 
 public sealed record ListChargesParams(
     Guid UserId,
@@ -18,7 +18,7 @@ public sealed record ListGroupChargesParams(
     int Page = 1,
     int PageSize = 20,
     bool ActiveOnly = true,
-    Guid? CallerId = null);
+    Guid? CallerUserId = null);
 
 public sealed record GroupChargeDetailParams(Guid ChargeId);
 
@@ -33,7 +33,7 @@ public interface IChargeQuery
     Task<ChargeResponseDto?> GetGroupDetailAsync(GroupChargeDetailParams request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<AllocationDto>> ListAllocationsAsync(ListAllocationsParams request, CancellationToken cancellationToken = default);
 
-    Task<GroupChargeDetailDto?> GetGroupChargeDetailAsync(Guid expenseId, Guid callerId, CancellationToken cancellationToken = default);
+    Task<GroupChargeDetailDto?> GetGroupChargeDetailAsync(Guid expenseId, Guid callerUserId, CancellationToken cancellationToken = default);
 
     Task<AllocationDetailDto?> GetAllocationDetailAsync(Guid splitId, CancellationToken cancellationToken = default);
 

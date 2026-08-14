@@ -12,8 +12,8 @@ internal sealed class LedgerRepository : ILedgerRepository
 
     public LedgerRepository(FinanceDbContext db) => _db = db;
 
-    public Task<Ledger?> GetLedgerByOwnerAsync(LedgerOwnerType ownerType, Guid ownerId, CancellationToken ct = default)
-        => _db.Ledgers.FirstOrDefaultAsync(l => l.OwnerType == ownerType && l.OwnerId == ownerId, ct);
+    public Task<Ledger?> GetLedgerByOwnerAsync(AccountingEntity owner, CancellationToken ct = default)
+        => _db.Ledgers.FirstOrDefaultAsync(l => l.Owner.Kind == owner.Kind && l.Owner.Id == owner.Id, ct);
 
     public async Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default)
         => await _db.Ledgers.AddAsync(ledger, ct);
@@ -28,16 +28,14 @@ internal sealed class LedgerRepository : ILedgerRepository
         => await _db.Accounts.AddAsync(account, ct);
 
     public async Task<Ledger> GetOrOpenLedgerAsync(
-        LedgerOwnerType ownerType, Guid ownerId, string currency,
-        Func<LedgerId, IReadOnlyList<Account>> seed, CancellationToken ct = default)
+        AccountingEntity owner, string currency, CancellationToken ct = default)
     {
-        var existing = await _db.Ledgers.FirstOrDefaultAsync(
-            l => l.OwnerType == ownerType && l.OwnerId == ownerId, ct);
+        var existing = await _db.Ledgers.FirstOrDefaultAsync(l => l.Owner.Kind == owner.Kind && l.Owner.Id == owner.Id, ct);
         if (existing is not null) return existing;
 
-        var ledger = Ledger.Open(ownerType, ownerId, currency);
+        var ledger = Ledger.Open(owner, currency);
         await _db.Ledgers.AddAsync(ledger, ct);
-        await _db.Accounts.AddRangeAsync(seed(ledger.Id), ct);
+        await _db.Accounts.AddRangeAsync(Chart.StandardAccounts(ledger.Id), ct);
         await _db.SaveChangesAsync(ct);
         return ledger;
     }
@@ -60,9 +58,13 @@ internal sealed class LedgerRepository : ILedgerRepository
     public async Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default)
         => await _db.DebtTerms.AddAsync(terms, ct);
 
+    /// <summary>Whose debt it is comes from the ledger the account sits in — the terms hold no
+    /// second copy of it.</summary>
     public async Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default)
         => await _db.DebtTerms.AsNoTracking()
-            .Where(t => t.UserId == UserId.Create(userId))
+            .Where(t => _db.Accounts.Any(a => a.Id == t.AccountId
+                && _db.Ledgers.Any(l => l.Id == a.LedgerId
+                    && l.Owner.Kind == EntityKind.Person && l.Owner.Id == userId)))
             .ToListAsync(ct);
 
     public async Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default)

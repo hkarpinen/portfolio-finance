@@ -16,7 +16,6 @@ internal sealed class BankSyncManager : IBankSyncManager
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
     private readonly IChargeRepository _chargeRepository;
-    private readonly IChargePaymentRepository _chargePaymentRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
     private readonly IChargeQuery _chargeQuery;
     private readonly IIncomeQuery _incomeQuery;
@@ -29,7 +28,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
         IChargeRepository chargeRepository,
-        IChargePaymentRepository chargePaymentRepository,
         IIncomeSourceRepository incomeRepository,
         IChargeQuery chargeQuery,
         IIncomeQuery incomeQuery,
@@ -41,7 +39,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         _connectionQuery = connectionQuery;
         _tokenProtector = tokenProtector;
         _chargeRepository = chargeRepository;
-        _chargePaymentRepository = chargePaymentRepository;
         _incomeRepository = incomeRepository;
         _chargeQuery = chargeQuery;
         _incomeQuery = incomeQuery;
@@ -157,7 +154,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         {
             try
             {
-                await TryAutoPayChargesAsync(connection.Id.Value, addedOutflows, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -260,7 +256,8 @@ internal sealed class BankSyncManager : IBankSyncManager
             var nextDue = SuggestionLinkPolicy.ResolveNextDue(
                 suggestion.PredictedNextDate, suggestion.LastDate, DateTime.UtcNow.Date);
 
-            var charge = Charge.Create(uid, sourceName, suggestion.AverageAmount, ChargeCategory.Other, nextDue, schedule);
+            var charge = Charge.CreateOwn(
+                uid, sourceName, suggestion.AverageAmount, ChargeCategory.Other, nextDue);
             await _chargeRepository.AddAsync(charge, ct);
             suggestion.MarkLinked(charge.Id.Value, LinkedEntityType.Charge);
             _logger.LogInformation(
@@ -269,42 +266,6 @@ internal sealed class BankSyncManager : IBankSyncManager
         }
     }
 
-    private async Task TryAutoPayChargesAsync(
-        Guid connectionId,
-        IReadOnlyList<(Guid AccountId, decimal Amount, DateTime Date)> outflows,
-        CancellationToken cancellationToken)
-    {
-        var connectionIdVo = FinancialConnectionId.Create(connectionId);
-        var suggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(connectionIdVo, cancellationToken);
-        var chargeSuggestions = suggestions
-            .Where(s => s.IsLinked && s.LinkedEntityType == LinkedEntityType.Charge && s.LinkedEntityId.HasValue)
-            .ToList();
-
-        if (chargeSuggestions.Count == 0) return;
-
-        foreach (var (accountId, amount, date) in outflows)
-        {
-            var match = chargeSuggestions.FirstOrDefault(s => _matchingEngine.IsMatch(s, accountId, amount));
-            if (match is null) continue;
-
-            var chargeId = ChargeId.Create(match.LinkedEntityId!.Value);
-            var charge = await _chargeRepository.GetByIdAsync(chargeId, cancellationToken);
-            if (charge is null) continue;
-
-            var occurrenceDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
-            var existing = await _chargePaymentRepository.GetAsync(chargeId, occurrenceDate, cancellationToken);
-            if (existing is not null) continue;
-
-            var payment = ChargePayment.Create(charge.Id, charge.UserId, occurrenceDate);
-            await _chargePaymentRepository.AddAsync(payment, cancellationToken);
-
-            _logger.LogInformation(
-                "Auto-paid charge {ChargeId} for occurrence {OccurrenceDate} via synced transaction (amount {Amount}).",
-                charge.Id.Value, occurrenceDate.ToString("yyyy-MM-dd"), amount);
-        }
-
-        await _repo.CommitAsync(cancellationToken);
-    }
 
     private async Task<FinancialAccount?> EnsureAccountAsync(
         FinancialConnection connection,

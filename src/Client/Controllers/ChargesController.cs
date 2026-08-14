@@ -60,7 +60,7 @@ public sealed class ChargesController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateChargeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        var result = await _manager.CreateAsync(request with { UserId = userId.Value }, ct);
+        var result = await _manager.CreateAsync(request with { CallerUserId = userId.Value }, ct);
         return CreatedAtAction(nameof(GetDetail), new { expenseId = result.ChargeId }, result);
     }
 
@@ -70,7 +70,7 @@ public sealed class ChargesController : ControllerBase
         // From the token, OVERWRITING the body — it is bindable, so a client could
         // otherwise nominate whichever owner makes the check pass.
         var userId = User.GetUserId().Value;
-        var result = await _manager.UpdateAsync(request with { ChargeId = expenseId, CallerId = userId }, ct);
+        var result = await _manager.UpdateAsync(request with { ChargeId = expenseId, CallerUserId = userId }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -103,7 +103,7 @@ public sealed class ChargesController : ControllerBase
     {
         var userId = User.GetUserId().Value;
         var result = await _query.ListByGroupAsync(
-            new ListGroupChargesParams(groupId, page, pageSize, ActiveOnly: true, CallerId: userId), ct);
+            new ListGroupChargesParams(groupId, page, pageSize, ActiveOnly: true, CallerUserId: userId), ct);
         return Ok(result);
     }
 
@@ -127,7 +127,7 @@ public sealed class ChargesController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _manager.CreateGroupChargeAsync(
-            request with { GroupId = groupId, CreatedBy = userId.Value }, ct);
+            request with { GroupId = groupId, CallerUserId = userId.Value }, ct);
 
         return CreatedAtAction(nameof(GetGroupDetail), new { groupId, expenseId = result.ChargeId }, result);
     }
@@ -137,7 +137,7 @@ public sealed class ChargesController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _manager.UpdateGroupChargeAsync(
-            request with { ChargeId = expenseId, CallerId = userId.Value }, ct);
+            request with { ChargeId = expenseId, CallerUserId = userId.Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -222,7 +222,7 @@ public sealed class ChargesController : ControllerBase
         // Assigning ANOTHER member's share is role-gated and arrives asynchronously as
         // GroupAllocationAssigned. An explicit foreign userId is rejected rather than silently
         // re-attributed to the caller.
-        if (request.UserId != Guid.Empty && request.UserId != userId.Value)
+        if (request.MemberUserId != Guid.Empty && request.MemberUserId != userId.Value)
             return Forbid();
 
         try
@@ -230,7 +230,7 @@ public sealed class ChargesController : ControllerBase
             // AllocationCreated/AllocationUpdated, committed with the upsert, drive the share's ledger
             // posting — reverse-then-repost on re-amounting.
             var written = await _manager.UpsertAllocationAsync(
-                request with { ChargeId = expenseId, GroupId = groupId, UserId = userId.Value }, ct);
+                request with { ChargeId = expenseId, GroupId = groupId, MemberUserId = userId.Value, CallerUserId = userId.Value }, ct);
 
             // Re-read via the query layer so the caller gets the same enriched shape
             // (displayName, avatarUrl, membershipRole, occurrence-aware isPaid) that the
@@ -282,8 +282,8 @@ public sealed class ChargesController : ControllerBase
     [HttpGet("/api/finance/groups/{groupId:guid}/balances")]
     public async Task<IActionResult> GetMemberBalances(Guid groupId, CancellationToken ct = default)
     {
-        var callerId = User.GetUserId().Value;
-        var result = await _query.ListMemberBalancesAsync(GroupId.Create(groupId), callerId, ct);
+        var callerUserId = User.GetUserId().Value;
+        var result = await _query.ListMemberBalancesAsync(GroupId.Create(groupId), callerUserId, ct);
         return Ok(result);
     }
 

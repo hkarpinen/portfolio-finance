@@ -10,16 +10,28 @@ namespace Finance.Domain.Aggregates;
 /// <see cref="OccurrenceDate"/>, and keeps the amount and split that applied then: that is why
 /// amending a schedule never rewrites a month already recorded.
 ///
-/// GroupId discriminates: null is personal, set is shared.
+/// It belongs to ONE accounting entity — a household or a person — and somebody entered it. Those
+/// are two different facts, and they used to be three fields saying them: a UserId that meant the
+/// owner on a personal charge and the author on a shared one, a nullable GroupId doubling as the
+/// discriminator, and a CreatedBy that repeated the UserId. There is no such thing as a "group
+/// charge"; there is a charge, and an entity whose books it lands in.
 /// </summary>
 public class Charge : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
 
     public ChargeId Id { get; private set; }
-    public UserId UserId { get; private set; }
 
-    public GroupId? GroupId { get; private set; }
+    /// <summary>Whose books this lands in.</summary>
+    public AccountingEntity Owner { get; private set; }
+
+    /// <summary>The person who wrote it down. On a charge somebody keeps for themselves this is
+    /// also the owner; on a household's it is whoever entered it for the house.</summary>
+    public UserId EnteredBy { get; private set; }
+
+    /// <summary>The household when this is one of theirs, null when it is somebody's own. Kept for
+    /// the events other services consume, which still speak in group ids.</summary>
+    public GroupId? GroupId => Owner.AsGroup;
 
     /// <summary>The agreement that generated this one. Null means somebody entered it directly.</summary>
     public ChargeScheduleId? ScheduleId { get; private set; }
@@ -40,8 +52,6 @@ public class Charge : IAggregateRoot
     /// </summary>
     public DateTime OccurrenceDate { get; private set; }
 
-    public UserId? CreatedBy { get; private set; }
-
     /// <summary>Who FRONTED the bill — not necessarily who created it.</summary>
     public Guid? PayerUserId { get; private set; }
 
@@ -56,16 +66,51 @@ public class Charge : IAggregateRoot
     public Money Amount { get; private set; }
     public ChargeCategory Category { get; private set; }
     public DateTime DueDate { get; private set; }
-    public RecurrenceSchedule? RecurrenceSchedule { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public bool IsActive { get; private set; }
 
     /// <summary>
-    /// A personal charge belonging to this person. Group charges are never "own" — they are
-    /// reached through membership, which is a different question with a different answer.
+    /// May this person change the bill itself — its amount, its split, whether the vendor is paid?
+    ///
+    /// Whoever entered it, matching the rule the vendor-payment paths already enforce. Membership
+    /// alone is not enough: being in the house lets you see a bill and settle your own share, not
+    /// re-cut how it was divided.
     /// </summary>
-    public bool IsOwnedBy(Guid userId) => GroupId is null && UserId.Value == userId;
+    public bool IsManagedBy(Guid userId) => EnteredBy.Value == userId;
+
+    /// <summary>
+    /// A charge this person keeps for themselves. A household's is never "own" — it is reached
+    /// through membership, which is a different question with a different answer.
+    /// </summary>
+    public bool IsOwnedBy(Guid userId) => Owner.Is(userId);
+
+    /// <summary>
+    /// Settles a personal charge from whatever funded it. Raises the fact; the books are kept by
+    /// whoever consumes it, so this never decides what the posting looks like.
+    /// </summary>
+    public void RecordPersonalPayment(Guid? fundingAccountId, DateTime paidAt)
+    {
+        if (Owner.IsHousehold)
+            throw new InvalidOperationException("A shared charge is settled through its allocations.");
+
+        if (fundingAccountId is not null) FundingAccountId = fundingAccountId;
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new ChargePaid(Id, EnteredBy, OccurrenceDate, paidAt));
+    }
+
+    /// <summary>
+    /// Undoes a personal settlement. Raises the fact; the books unwind it with a mirror entry,
+    /// because a payment that happened and was undone is two events, not an erasure.
+    /// </summary>
+    public void ReversePersonalPayment()
+    {
+        if (Owner.IsHousehold)
+            throw new InvalidOperationException("A shared charge is settled through its allocations.");
+
+        UpdatedAt = DateTime.UtcNow;
+        _domainEvents.Add(new ChargeUnpaid(Id, EnteredBy, OccurrenceDate));
+    }
 
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
@@ -74,52 +119,69 @@ public class Charge : IAggregateRoot
     {
     }
 
-    /// <summary>Creates a personal expense (GroupId = null).</summary>
+    /// <summary>
+    /// One bill somebody entered directly. <paramref name="owner"/> says whose books it lands in —
+    /// a household's or that person's own — and there is no second factory for the other case,
+    /// because nothing else about the bill turns on which it is.
+    /// </summary>
     public static Charge Create(
-        UserId userId,
+        AccountingEntity owner,
+        UserId enteredBy,
         string title,
         Money amount,
         ChargeCategory category,
         DateTime dueDate,
-        RecurrenceSchedule? recurrenceSchedule = null,
         string? description = null,
-        Guid? fundingAccountId = null)
+        Guid? fundingAccountId = null,
+        Guid? payerUserId = null,
+        FundingSource fundingSource = FundingSource.PayerMember)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Title cannot be empty.", nameof(title));
         if (amount.Amount < 0)
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
+        if (owner.IsPerson && !owner.Is(enteredBy.Value))
+            throw new InvalidOperationException("Nobody enters a charge into somebody else's own book.");
 
-        var expense = new Charge
+        var charge = new Charge
         {
             Id = ChargeId.New(),
-            UserId = userId,
-            GroupId = null,
-            CreatedBy = null,
-            FundingAccountId = fundingAccountId,
+            Owner = owner,
+            EnteredBy = enteredBy,
+            // A person funds their own bill from one of their accounts; a household says which
+            // side funded it instead. Neither is meaningful on the other.
+            FundingAccountId = owner.IsPerson ? fundingAccountId : null,
+            PayerUserId = owner.IsHousehold ? payerUserId : null,
+            FundingSource = fundingSource,
             Title = title,
             Description = description,
             Amount = amount,
             Category = category,
             DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc),
             OccurrenceDate = DateTime.SpecifyKind(dueDate.Date, DateTimeKind.Utc),
-            RecurrenceSchedule = recurrenceSchedule,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             IsActive = true,
         };
 
-        expense._domainEvents.Add(new ChargeCreated(
-            expense.Id,
-            userId,
-            title,
-            amount,
-            category,
-            dueDate,
-            recurrenceSchedule));
+        charge._domainEvents.Add(new ChargeCreated(
+            charge.Id, enteredBy, title, amount, category, dueDate,
+            charge.GroupId, charge.PayerUserId));
 
-        return expense;
+        return charge;
     }
+
+    /// <summary>Somebody's own bill: they own it and they entered it.</summary>
+    public static Charge CreateOwn(
+        UserId owner,
+        string title,
+        Money amount,
+        ChargeCategory category,
+        DateTime dueDate,
+        string? description = null,
+        Guid? fundingAccountId = null)
+        => Create(AccountingEntity.Person(owner), owner, title, amount, category, dueDate,
+            description, fundingAccountId);
 
     /// <summary>
     /// Materialises the occurrence a schedule placed on <paramref name="occurrenceDate"/>.
@@ -147,11 +209,10 @@ public class Charge : IAggregateRoot
         var charge = new Charge
         {
             Id = ChargeId.New(),
-            UserId = schedule.UserId,
-            GroupId = schedule.GroupId,
+            Owner = schedule.Owner,
+            EnteredBy = schedule.CreatedBy,
             ScheduleId = schedule.Id,
             OccurrenceDate = day,
-            CreatedBy = schedule.CreatedBy,
             PayerUserId = schedule.PayerUserId,
             FundingSource = schedule.FundingSource,
             Title = schedule.Title,
@@ -159,70 +220,15 @@ public class Charge : IAggregateRoot
             Amount = schedule.AmountOn(day),
             Category = schedule.Category,
             DueDate = day,
-            // The repetition lives on the schedule. Copying it here would give the charge a second
-            // opinion about when it recurs, and the read side would have two answers to one question.
-            RecurrenceSchedule = null,
             CreatedAt = now,
             UpdatedAt = now,
             IsActive = true,
         };
 
         charge._domainEvents.Add(new ChargeCreated(
-            charge.Id, schedule.UserId, schedule.Title, schedule.AmountOn(day), schedule.Category, day, null));
+            charge.Id, schedule.CreatedBy, schedule.Title, schedule.AmountOn(day), schedule.Category, day));
 
         return charge;
-    }
-
-    /// <summary>UserId is set to the CREATOR here, unlike a personal charge's owner.</summary>
-    public static Charge CreateGroup(
-        GroupId groupId,
-        UserId createdBy,
-        string title,
-        Money amount,
-        ChargeCategory category,
-        DateTime dueDate,
-        RecurrenceSchedule? recurrenceSchedule = null,
-        string? description = null,
-        Guid? payerUserId = null,
-        FundingSource fundingSource = FundingSource.PayerMember)
-    {
-        if (string.IsNullOrWhiteSpace(title))
-            throw new ArgumentException("Title cannot be empty.", nameof(title));
-        if (amount.Amount < 0)
-            throw new ArgumentException("Amount cannot be negative.", nameof(amount));
-
-        var expense = new Charge
-        {
-            Id = ChargeId.New(),
-            UserId = createdBy,
-            GroupId = groupId,
-            CreatedBy = createdBy,
-            PayerUserId = payerUserId,
-            FundingSource = fundingSource,
-            Title = title,
-            Description = description,
-            Amount = amount,
-            Category = category,
-            DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc),
-            OccurrenceDate = DateTime.SpecifyKind(dueDate.Date, DateTimeKind.Utc),
-            RecurrenceSchedule = recurrenceSchedule,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            IsActive = true,
-        };
-
-        expense._domainEvents.Add(new ChargeCreated(
-            expense.Id,
-            createdBy,
-            title,
-            amount,
-            category,
-            dueDate,
-            recurrenceSchedule,
-            groupId,
-            payerUserId));
-
-        return expense;
     }
 
     public void Update(
@@ -230,7 +236,6 @@ public class Charge : IAggregateRoot
         Money amount,
         ChargeCategory category,
         DateTime dueDate,
-        RecurrenceSchedule? recurrenceSchedule = null,
         string? description = null,
         Guid? payerUserId = null)
     {
@@ -245,14 +250,13 @@ public class Charge : IAggregateRoot
         DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
         // OccurrenceDate deliberately does NOT follow. It is which period this charge belongs to,
         // and moving that would restate a month that has already been reported.
-        RecurrenceSchedule = recurrenceSchedule;
         Description = description;
-        // Only mutate payer when explicitly supplied; null on personal expenses, optional on group
-        if (GroupId is not null && payerUserId is not null)
+        // Only mutate payer when explicitly supplied; meaningless on somebody's own bill.
+        if (Owner.IsHousehold && payerUserId is not null)
             PayerUserId = payerUserId;
         UpdatedAt = DateTime.UtcNow;
 
-        _domainEvents.Add(new ChargeUpdated(Id, title, amount, category, dueDate, recurrenceSchedule, GroupId, PayerUserId));
+        _domainEvents.Add(new ChargeUpdated(Id, title, amount, category, dueDate, GroupId, PayerUserId));
     }
 
     public void Deactivate()

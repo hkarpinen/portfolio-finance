@@ -31,7 +31,7 @@ public sealed record ScheduledOccurrenceDto(
 
 public sealed record CreateChargeScheduleCommand(
     Guid? GroupId,
-    Guid UserId,
+    Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,
@@ -50,7 +50,7 @@ public sealed record CreateChargeScheduleCommand(
 /// </summary>
 public sealed record AmendChargeScheduleCommand(
     Guid ScheduleId,
-    Guid CallerId,
+    Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,

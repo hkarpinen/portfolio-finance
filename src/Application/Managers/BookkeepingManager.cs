@@ -12,7 +12,7 @@ namespace Finance.Application.Managers;
 /// debt; it posts against opening-balance equity so the book balances from the first entry.
 /// </summary>
 public sealed record OpenDebtAccountCommand(
-    Guid UserId,
+    Guid CallerUserId,
     string Name,
     string Currency,
     decimal AnnualPercentageRate,
@@ -126,6 +126,29 @@ public interface IBookkeepingManager
     Task RecordSettlementAsync(RecordSettlementCommand command, CancellationToken ct = default);
 
     /// <summary>
+    /// Settles a personal charge: <c>Dr Payable / Cr</c> whichever account funded it.
+    ///
+    /// Cash, checking or a card — the company was paid either way, and the funding account only
+    /// says where the money came from. Crediting a card moves the debt from the company to the
+    /// card issuer, which is exactly what happened.
+    /// </summary>
+    Task RecordPersonalPaymentAsync(
+        Guid chargeId, Guid? fundingAccountId, DateTime valueDate, CancellationToken ct = default);
+
+    /// <summary>
+    /// Unwinds a personal settlement with a mirror entry, leaving the payable owed again. The
+    /// original stands: the money did move, and then it moved back.
+    /// </summary>
+    Task ReversePersonalPaymentAsync(Guid chargeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Posts every personal charge whose day has arrived and which is not on the books yet, and
+    /// returns how many that was. The other half of "a passing period becomes a charge": a bill
+    /// entered ahead of time waits here until the date it belongs to.
+    /// </summary>
+    Task<int> PostDuePersonalChargesAsync(Guid userId, DateTime asOf, CancellationToken ct = default);
+
+    /// <summary>
     /// Posts a personal charge into the caller's OWN book: Dr Expense / Cr whatever paid for it.
     ///
     /// This never touches a group ledger — a cost only one person bore is not the household's —
@@ -205,9 +228,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task<bool> SyncChargeAccrualAsync(PostChargeToLedgerCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
 
-        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Expense(ledger.Id, cmd.Category), ct);
+        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, cmd.Category), ct);
 
         var source = LedgerSources.Charge(cmd.ChargeId);
         var date = DateTime.SpecifyKind(cmd.Date.Date, DateTimeKind.Utc);
@@ -235,7 +258,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // after creation is tracked exactly like a create-time one. Who pays the vendor (the pot) is
         // recorded later. "Is it paid" is derived from the Vendor Payable balance — the ledger is the
         // single source of truth.
-        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.VendorPayable(ledger.Id), ct);
+        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
         var draft = _journalizing.JournalizeTransfer(new TransferContext(
             DebitAccount: expenseAccount.Id, CreditAccount: vendorPayable.Id,
@@ -252,11 +275,11 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         Guid groupId, Guid chargeId, string category, Guid userId, decimal amount, string currency,
         Guid allocationId, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, groupId, currency, GroupChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
         var source = LedgerSources.Allocation(allocationId);
 
-        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Expense(ledger.Id, category), ct);
-        var member = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, userId), ct);
+        var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, category), ct);
+        var member = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, userId), ct);
 
         // Already in sync? One active entry moving the right amount from the right member onto the
         // right expense account — nothing to do (redeliveries and unchanged upserts land here).
@@ -282,17 +305,17 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
 
         // Idempotent: if this occurrence's vendor payment is already on the books, do nothing.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.VendorPayable(ledger.Id), ct);
+        var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
         // The funding account is whoever actually paid the vendor — the payer's own Member account
         // (front-and-reimburse) or the shared Cash pool (pooled). One resolver, one volatility axis.
         var funding = await _ledgers.GetOrOpenAccountAsync(
-            ledger.Id, GroupChart.Funding(ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty), ct);
+            ledger.Id, Chart.Funding(ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty), ct);
 
         // Clear the liability against the funding account: Dr Vendor Payable / Cr funding.
         var draft = _journalizing.JournalizeTransfer(new TransferContext(
@@ -309,18 +332,18 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, cmd.GroupId, cmd.Currency, GroupChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
 
         // Idempotent: if this settlement is already on the books (active entry under its
         // source), do nothing. The ledger is the single source of truth — no dual write.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, cmd.FromUserId), ct);
+        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, cmd.FromUserId), ct);
         // The debtor settles INTO the funding account that paid the vendor — the payer's Member
         // account (front-and-reimburse) or the shared Cash pool (pooled). Resolved the same way
         // the charge was posted, so a settlement always mirrors its charge's funding.
-        var funding = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Funding(ledger.Id, cmd.FundingSource, cmd.ToUserId), ct);
+        var funding = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Funding(ledger.Id, cmd.FundingSource, cmd.ToUserId), ct);
 
         // A settlement debits the funding account and credits the debtor — that direction is the
         // workflow's call; the engine just balances it.
@@ -343,7 +366,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Household(groupId), ct);
         if (ledger is null) return;
 
         var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
@@ -358,14 +381,14 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.Group, groupId, currency, GroupChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
 
         // Idempotent on source — re-posting the same settle-up payment is a no-op.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, fromUserId), ct);
-        var to = await _ledgers.GetOrOpenAccountAsync(ledger.Id, GroupChart.Member(ledger.Id, toUserId), ct);
+        var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, fromUserId), ct);
+        var to = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, toUserId), ct);
 
         // The payer (from, a debtor) squares up with a creditor (to): Dr Member:to / Cr Member:from,
         // moving both toward zero. The cash changed hands directly between the two — no pot involved.
@@ -382,7 +405,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task ReverseChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetLedgerByOwnerAsync(LedgerOwnerType.Group, groupId, ct);
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Household(groupId), ct);
         if (ledger is null) return;
 
         // Every in-effect entry for the charge — accrual, vendor payment, and settlements all carry
@@ -420,7 +443,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             charge.Amount.Amount, charge.Amount.Currency, date,
             // Whoever entered the bill. Not stored on the event, so it is read from the charge
             // the converge already loaded — no wire contract has to change to get an audit trail.
-            charge.CreatedBy?.Value), ct);
+            charge.EnteredBy.Value), ct);
 
         // Re-sync every share — allocations credit the category's expense account, so a category
         // change moves them too. Each sync is a cheap no-op when the books already match.
@@ -495,7 +518,12 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
         if (charge is null || charge.GroupId is not null) return;
 
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.User, charge.UserId.Value, charge.Amount.Currency, PersonalChart.StandardAccounts, ct);
+        // Not yet. Somebody recording next month's expense has not spent the money, and posting it
+        // now would book a cost that has not happened — the same rule that stops CatchUp writing
+        // past today. PostDuePersonalChargesAsync picks it up when the day comes.
+        if (charge.IsActive && charge.OccurrenceDate.Date > DateTime.UtcNow.Date) return;
+
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(charge.Owner, charge.Amount.Currency, ct);
         var source = LedgerSources.Charge(chargeId);
         var date = DateTime.SpecifyKind(charge.OccurrenceDate.Date, DateTimeKind.Utc);
 
@@ -511,45 +539,109 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         }
 
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(
-            ledger.Id, PersonalChart.Expense(ledger.Id, charge.Category.ToString()), ct);
+            ledger.Id, Chart.Expense(ledger.Id, charge.Category.ToString()), ct);
 
-        // Whatever paid for it: a card they told us about, else their cash account.
-        var fundingAccount = charge.FundingAccountId is { } declared
-            ? await _ledgers.GetAccountAsync(AccountId.Create(declared), ct)
-              ?? throw new InvalidOperationException("That funding account is not in this book.")
-            : await _ledgers.GetOrOpenAccountAsync(ledger.Id, PersonalChart.Cash(ledger.Id), ct);
+        // What is owed until it is settled. Collapsing this into the funding account would post
+        // the cost and its payment as one movement, and "has this been paid" would have nothing
+        // in the books to answer with — which is the hole a paid FLAG kept getting invented for.
+        var payable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        var description = $"{charge.Title} — paid";
+        var description = $"{charge.Title} — incurred";
         if (active.Count == 1 && active[0].SaysAccrual(expenseAccount.Id, charge.Amount.Amount, charge.Amount.Currency, description, date))
             return;
 
         foreach (var stale in active)
             await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
 
-        // Cr the card and the debt grows; Cr cash and it shrinks. One posting, both meanings,
-        // because the account type already carries the difference.
         var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: expenseAccount.Id, CreditAccount: fundingAccount.Id,
+            DebitAccount: expenseAccount.Id, CreditAccount: payable.Id,
             charge.Amount, date, description, source));
 
         await _ledgers.AddJournalEntryAsync(
             JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-                sourceChargeId: chargeId, postedByUserId: charge.UserId.Value),
+                sourceChargeId: chargeId, postedByUserId: charge.EnteredBy.Value),
             ct);
         await _ledgers.CommitAsync(ct);
     }
 
+    public async Task RecordPersonalPaymentAsync(
+        Guid chargeId, Guid? fundingAccountId, DateTime valueDate, CancellationToken ct = default)
+    {
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge is null || charge.GroupId is not null) return;
+
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(charge.Owner, charge.Amount.Currency, ct);
+
+        var payable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
+
+        // The charge names its own funding account when one was chosen at entry; the argument wins
+        // when somebody settles from somewhere else.
+        var declared = fundingAccountId ?? charge.FundingAccountId;
+        var funding = declared is { } id
+            ? await _ledgers.GetAccountAsync(AccountId.Create(id), ct)
+              ?? throw new InvalidOperationException("That funding account is not in this book.")
+            : await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Cash(ledger.Id), ct);
+
+        var source = LedgerSources.VendorPayment(chargeId, charge.OccurrenceDate);
+        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
+        if (existing.Count > 0) return;
+
+        var draft = _journalizing.JournalizeTransfer(new TransferContext(
+            DebitAccount: payable.Id, CreditAccount: funding.Id,
+            charge.Amount, DateTime.SpecifyKind(valueDate.Date, DateTimeKind.Utc),
+            $"{charge.Title} — paid", source));
+
+        await _ledgers.AddJournalEntryAsync(
+            JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+                sourceChargeId: chargeId, sourceOccurrence: charge.OccurrenceDate,
+                postedByUserId: charge.EnteredBy.Value),
+            ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task ReversePersonalPaymentAsync(Guid chargeId, CancellationToken ct = default)
+    {
+        var charge = await _charges.GetByIdAsync(ChargeId.Create(chargeId), ct);
+        if (charge is null || charge.GroupId is not null) return;
+
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(charge.Owner, ct);
+        if (ledger is null) return;
+
+        var source = LedgerSources.VendorPayment(chargeId, charge.OccurrenceDate);
+        var settled = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
+        if (settled.Count == 0) return;
+
+        // Undoing a payment is a new event, so it is dated today rather than restating the day the
+        // money moved — the same rule the settlement and vendor-payment reversals already follow.
+        foreach (var entry in settled)
+            await _ledgers.AddJournalEntryAsync(entry.Reverse(DateTime.UtcNow.Date, reversedByUserId: charge.EnteredBy.Value), ct);
+
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task<int> PostDuePersonalChargesAsync(Guid userId, DateTime asOf, CancellationToken ct = default)
+    {
+        var due = await _charges.ListUnpostedPersonalAsync(UserId.Create(userId), asOf.Date, ct);
+
+        var posted = 0;
+        foreach (var charge in due)
+        {
+            await ConvergePersonalChargeAsync(charge.Id.Value, ct);
+            posted++;
+        }
+        return posted;
+    }
+
     public async Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(LedgerOwnerType.User, cmd.UserId, cmd.Currency, PersonalChart.StandardAccounts, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Person(cmd.CallerUserId), cmd.Currency, ct);
 
         var accountKey = Guid.NewGuid();
-        var account = PersonalChart.OpenDebtAccount(ledger.Id, accountKey, cmd.Name);
+        var account = Chart.OpenDebtAccount(ledger.Id, accountKey, cmd.Name);
         await _ledgers.AddAccountAsync(account, ct);
 
         var terms = DebtTerms.For(
-            account.Id,
-            UserId.Create(cmd.UserId),
+            account,
             cmd.AnnualPercentageRate,
             cmd.CreditLimit,
             cmd.StatementDayOfMonth,
@@ -561,7 +653,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // with no postings already reads as a zero balance.
         if (cmd.OpeningBalance > 0m)
         {
-            var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, PersonalChart.OpeningBalance(ledger.Id), ct);
+            var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.OpeningBalance(ledger.Id), ct);
 
             var draft = _journalizing.JournalizeTransfer(new TransferContext(
                 DebitAccount: opening.Id,
@@ -573,7 +665,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
             await _ledgers.AddJournalEntryAsync(
                 JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-                    postedByUserId: cmd.UserId),
+                    postedByUserId: cmd.CallerUserId),
                 ct);
         }
 

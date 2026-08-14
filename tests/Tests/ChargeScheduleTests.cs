@@ -15,7 +15,7 @@ public class ChargeScheduleTests
 
     private static ChargeSchedule Rent(decimal amount = 1000m, RecurrenceFrequency freq = RecurrenceFrequency.Monthly) =>
         ChargeSchedule.Create(
-            User, Group, "Rent", Money.Create(amount, "USD"), ChargeCategory.Rent,
+            AccountingEntity.Household(Group), User, "Rent", Money.Create(amount, "USD"), ChargeCategory.Rent,
             RecurrenceSchedule.Create(freq, Jan3));
 
     [Fact]
@@ -63,9 +63,6 @@ public class ChargeScheduleTests
         Assert.Equal(Jan3, charge.OccurrenceDate);
         Assert.Equal(1000m, charge.Amount.Amount);
         Assert.Equal(schedule.GroupId, charge.GroupId);
-        // The repetition stays on the schedule; a charge with its own copy would be a second
-        // opinion about when it recurs.
-        Assert.Null(charge.RecurrenceSchedule);
     }
 
     [Fact]
@@ -98,7 +95,7 @@ public class ChargeScheduleTests
         var charge = Charge.GenerateFrom(Rent(), Jan3);
 
         charge.Update("Rent", Money.Create(1100m, "USD"), ChargeCategory.Rent,
-            dueDate: Jan3.AddMonths(1), recurrenceSchedule: null, description: null);
+            dueDate: Jan3.AddMonths(1), description: null);
 
         // The due date may be corrected; the occurrence is which month it reports in.
         Assert.Equal(Jan3, charge.OccurrenceDate);
@@ -107,8 +104,7 @@ public class ChargeScheduleTests
     [Fact]
     public void ADirectlyEnteredCharge_HasNoScheduleAndOwnsItsDate()
     {
-        var charge = Charge.Create(
-            User, "Coffee", Money.Create(4.50m, "USD"), ChargeCategory.Other, Jan3);
+        var charge = Charge.CreateOwn(User, "Coffee", Money.Create(4.50m, "USD"), ChargeCategory.Other, Jan3);
 
         Assert.Null(charge.ScheduleId);
         Assert.Equal(Jan3, charge.OccurrenceDate);

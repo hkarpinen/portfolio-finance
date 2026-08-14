@@ -59,7 +59,7 @@ internal sealed class IncomeManager : IIncomeManager
         }
 
         // Owner check. Null (→ 404), never 403 — a 403 would confirm the id exists.
-        if (income.UserId.Value != request.CallerId)
+        if (income.UserId.Value != request.CallerUserId)
         {
             return null;
         }
@@ -105,7 +105,7 @@ internal sealed class IncomeManager : IIncomeManager
         }
 
         // Owner check. Null (→ 404), never 403.
-        if (income.UserId.Value != request.CallerId)
+        if (income.UserId.Value != request.CallerUserId)
         {
             return null;
         }

@@ -37,27 +37,27 @@ internal sealed class DemoSeedManager : IDemoSeedManager
 
         var expenses = new[]
         {
-            Charge.Create(uid, "Rent", Money.Create(1500m, "USD"),
-                ChargeCategory.Rent, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Internet", Money.Create(60m, "USD"),
-                ChargeCategory.Internet, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Spotify", Money.Create(11m, "USD"),
-                ChargeCategory.Subscriptions, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Phone Plan", Money.Create(45m, "USD"),
-                ChargeCategory.Phone, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Health Insurance", Money.Create(200m, "USD"),
-                ChargeCategory.Insurance, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Gym Membership", Money.Create(25m, "USD"),
-                ChargeCategory.Healthcare, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
-            Charge.Create(uid, "Car Insurance", Money.Create(110m, "USD"),
-                ChargeCategory.Insurance, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth)),
+            Charge.CreateOwn(
+                uid, "Rent", Money.Create(1500m, "USD"),
+                ChargeCategory.Rent, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Internet", Money.Create(60m, "USD"),
+                ChargeCategory.Internet, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Spotify", Money.Create(11m, "USD"),
+                ChargeCategory.Subscriptions, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Phone Plan", Money.Create(45m, "USD"),
+                ChargeCategory.Phone, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Health Insurance", Money.Create(200m, "USD"),
+                ChargeCategory.Insurance, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Gym Membership", Money.Create(25m, "USD"),
+                ChargeCategory.Healthcare, startOfMonth.AddMonths(1)),
+            Charge.CreateOwn(
+                uid, "Car Insurance", Money.Create(110m, "USD"),
+                ChargeCategory.Insurance, startOfMonth.AddMonths(1)),
         };
         foreach (var charge in expenses)
             await _chargeRepo.AddAsync(charge, cancellationToken);
@@ -88,14 +88,13 @@ internal sealed class DemoSeedManager : IDemoSeedManager
             // A PayerMember charge has to name the member who fronted it — the default left
             // payerUserId null, so the bill detail rendered "Someone, out of their own pocket" and
             // there was nobody for the house to pay back.
-            var charge = Charge.CreateGroup(
-                gid, uid, title, Money.Create(amount, "USD"),
+            var charge = Charge.Create(
+                AccountingEntity.Household(gid), uid, title, Money.Create(amount, "USD"),
                 category, startOfMonth.AddMonths(1),
-                RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, startOfMonth),
                 payerUserId: userId);
             await _chargeRepo.AddAsync(charge, cancellationToken);
 
-            var allocation = Allocation.Create(charge.Id, gid, uid, Money.Create(amount, "USD"));
+            var allocation = Allocation.Create(charge, uid, Money.Create(amount, "USD"));
             await _allocationRepo.AddAsync(allocation, cancellationToken);
         }
 

@@ -14,7 +14,7 @@ public class PersonalLedgerTests
     private static readonly Guid User = Guid.NewGuid();
 
     private static OpenDebtAccountCommand Card(decimal openingBalance, decimal apr = 24.99m) => new(
-        UserId: User,
+        CallerUserId: User,
         Name: "Visa",
         Currency: "USD",
         AnnualPercentageRate: apr,
@@ -33,9 +33,9 @@ public class PersonalLedgerTests
 
         await manager.OpenDebtAccountAsync(Card(1200m));
 
-        var ledger = await repo.GetLedgerByOwnerAsync(LedgerOwnerType.User, User);
+        var ledger = await repo.GetLedgerByOwnerAsync(AccountingEntity.Person(User));
         Assert.NotNull(ledger);
-        Assert.Equal(LedgerOwnerType.User, ledger!.OwnerType);
+        Assert.Equal(AccountingEntity.Person(User), ledger!.Owner);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class PersonalLedgerTests
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
-        var ledger = (await repo.GetLedgerByOwnerAsync(LedgerOwnerType.User, User))!;
+        var ledger = (await repo.GetLedgerByOwnerAsync(AccountingEntity.Person(User)))!;
         var accounts = await repo.GetAccountsAsync(ledger.Id);
         var card = accounts.Single(a => a.Id.Value == accountId);
 
@@ -124,12 +124,14 @@ public class PersonalLedgerTests
         await manager.OpenDebtAccountAsync(Card(1200m));
         await manager.OpenDebtAccountAsync(Card(300m) with { Name = "Amex" });
 
-        var ledger = (await repo.GetLedgerByOwnerAsync(LedgerOwnerType.User, User))!;
+        var ledger = (await repo.GetLedgerByOwnerAsync(AccountingEntity.Person(User)))!;
         var accounts = await repo.GetAccountsAsync(ledger.Id);
 
-        Assert.Equal(2, accounts.Count(a => a.AccountType == AccountType.Liability));
+        // Two cards. Counting liabilities outright would also catch the seeded payable, which
+        // every book gets whoever owns it.
+        Assert.Equal(2, accounts.Count(a => a.Code.StartsWith("2000:")));
         // Seeded once, not per card.
-        Assert.Single(accounts.Where(a => a.Code == PersonalChart.OpeningBalanceCode));
+        Assert.Single(accounts.Where(a => a.Code == Chart.OpeningBalanceCode));
     }
 
     [Theory]
@@ -137,12 +139,24 @@ public class PersonalLedgerTests
     [InlineData(101)]
     public void DebtTerms_RefusesARateThatIsNotOne(decimal apr) =>
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => DebtTerms.For(AccountId.New(), UserId.Create(User), apr));
+            () => DebtTerms.For(Card(), apr));
+
+    [Fact]
+    public void DebtTerms_RefuseAnAccountNobodyLentYouAnythingOn()
+    {
+        var cash = Chart.OpenCashAccount(LedgerId.New(), Guid.NewGuid(), "Checking");
+        var payable = Chart.Payable(LedgerId.New()).Open();
+
+        // A rate on money you hold, or on the shared payable, is not wrong-looking data —
+        // it is meaningless data, so the pairing is refused rather than stored.
+        Assert.Throws<InvalidOperationException>(() => DebtTerms.For(cash, 24.99m));
+        Assert.Throws<InvalidOperationException>(() => DebtTerms.For(payable, 24.99m));
+    }
 
     [Fact]
     public void DebtTerms_MonthlyRateIsTheAnnualOneOverTwelve()
     {
-        var terms = DebtTerms.For(AccountId.New(), UserId.Create(User), 24m);
+        var terms = DebtTerms.For(Card(), 24m);
 
         Assert.Equal(0.02m, terms.MonthlyRate);
     }
@@ -150,14 +164,17 @@ public class PersonalLedgerTests
     [Fact]
     public void DebtTerms_ALoanHasNoHeadroom()
     {
-        var loan = DebtTerms.For(AccountId.New(), UserId.Create(User), 6.5m, creditLimit: null);
+        var loan = DebtTerms.For(Card(), 6.5m, creditLimit: null);
 
         Assert.Null(loan.HeadroomAgainst(10_000m));
     }
 
+    /// A real card account: terms only mean anything against something borrowed.
+    private static Account Card() =>
+        Chart.OpenDebtAccount(LedgerId.New(), Guid.NewGuid(), "Visa");
+
     private static Charge Groceries(decimal amount = 45m, Guid? fundedBy = null) =>
-        Charge.Create(
-            UserId.Create(User), "Groceries", Money.Create(amount, "USD"),
+        Charge.CreateOwn(UserId.Create(User), "Groceries", Money.Create(amount, "USD"),
             ChargeCategory.Groceries, new DateTime(2026, 8, 3, 0, 0, 0, DateTimeKind.Utc),
             fundingAccountId: fundedBy);
 
@@ -169,12 +186,15 @@ public class PersonalLedgerTests
         public Task RemoveAsync(Charge c, CancellationToken ct = default) { Items.Remove(c); return Task.CompletedTask; }
         public Task<Charge?> GetByIdAsync(ChargeId id, CancellationToken ct = default)
             => Task.FromResult(Items.FirstOrDefault(c => c.Id == id));
+        public Task<IReadOnlyList<Charge>> ListUnpostedPersonalAsync(UserId userId, DateTime asOf, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Charge>>(
+                Items.Where(c => c.Owner == AccountingEntity.Person(userId) && c.IsActive && c.OccurrenceDate.Date <= asOf.Date).ToList());
         public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAllForUserAsync(UserId u, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     [Fact]
-    public async Task PersonalCharge_PostsDrExpenseCrCash_InTheirOwnBook()
+    public async Task PersonalCharge_IncursAPayable_RatherThanSettlingItself()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var charges = new ChargeStore();
@@ -186,14 +206,16 @@ public class PersonalLedgerTests
 
         var entry = Assert.Single(repo.JournalEntries);
         Assert.Equal(0m, entry.Postings.Sum(p => p.SignedAmount));
-        Assert.Equal(PersonalChart.ExpenseCode("groceries"),
+        Assert.Equal(Chart.ExpenseCode("groceries"),
             repo.CodeOf(entry.Postings.Single(p => p.Direction == EntryDirection.Debit).AccountId));
-        Assert.Equal(PersonalChart.CashCode,
+        // Owed until settled. Crediting the funding account here would collapse the cost and its
+        // payment into one movement, leaving "has this been paid" with nothing to read.
+        Assert.Equal(ChartCodes.VendorPayable,
             repo.CodeOf(entry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
     [Fact]
-    public async Task PersonalCharge_OnACard_CreditsTheCardSoTheDebtGrows()
+    public async Task PayingWithACard_ClearsTheCompanyAndMovesTheDebtToTheCard()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var charges = new ChargeStore();
@@ -204,14 +226,57 @@ public class PersonalLedgerTests
         await charges.AddAsync(charge);
 
         await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, cardId, DateTime.UtcNow);
 
-        var onCard = repo.JournalEntries
-            .SelectMany(e => e.Postings)
-            .Where(p => p.AccountId.Value == cardId);
+        var postings = repo.JournalEntries.SelectMany(e => e.Postings).ToList();
 
-        // Liability credited, so owing 45 more. No special case anywhere — the account type
-        // already carries the difference between a card and a bank account.
-        Assert.Equal(45m, LedgerMath.AccountBalance(NormalBalance.Credit, onCard));
+        // The company is paid — the payable nets to nothing.
+        Assert.Equal(0m, LedgerMath.AccountBalance(
+            NormalBalance.Credit,
+            postings.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
+
+        // And the 45 is now owed to the card issuer instead, which is what happened.
+        Assert.Equal(45m, LedgerMath.AccountBalance(
+            NormalBalance.Credit, postings.Where(p => p.AccountId.Value == cardId)));
+    }
+
+    [Fact]
+    public async Task PayingFromCash_SettlesTheSameWay_OnlyTheFundingDiffers()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, null, DateTime.UtcNow);
+
+        var postings = repo.JournalEntries.SelectMany(e => e.Postings).ToList();
+
+        Assert.Equal(0m, LedgerMath.AccountBalance(
+            NormalBalance.Credit,
+            postings.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
+        // Cash is an asset, so paying out leaves it 45 down.
+        Assert.Equal(-45m, LedgerMath.AccountBalance(
+            NormalBalance.Debit,
+            postings.Where(p => repo.CodeOf(p.AccountId) == Chart.CashCode)));
+    }
+
+    [Fact]
+    public async Task RecordPersonalPayment_IsIdempotent()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, null, DateTime.UtcNow);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, null, DateTime.UtcNow);
+
+        Assert.Equal(2, repo.JournalEntries.Count);
     }
 
     [Fact]
@@ -240,7 +305,73 @@ public class PersonalLedgerTests
 
         await manager.ConvergePersonalChargeAsync(charge.Id.Value);
 
-        Assert.Null(await repo.GetLedgerByOwnerAsync(LedgerOwnerType.Group, User));
-        Assert.NotNull(await repo.GetLedgerByOwnerAsync(LedgerOwnerType.User, User));
+        Assert.Null(await repo.GetLedgerByOwnerAsync(AccountingEntity.Household(User)));
+        Assert.NotNull(await repo.GetLedgerByOwnerAsync(AccountingEntity.Person(User)));
+    }
+
+    [Fact]
+    public async Task ReversingAPayment_LeavesThePayableOwedAgain()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, null, DateTime.UtcNow);
+        await manager.ReversePersonalPaymentAsync(charge.Id.Value);
+
+        var payable = repo.JournalEntries.SelectMany(e => e.Postings)
+            .Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable);
+
+        // Owed once more — the cost never went away, only the settlement did.
+        Assert.Equal(45m, LedgerMath.AccountBalance(NormalBalance.Credit, payable));
+    }
+
+    [Fact]
+    public async Task ReversingAPayment_KeepsTheOriginalOnTheRecord()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.RecordPersonalPaymentAsync(charge.Id.Value, null, DateTime.UtcNow);
+        await manager.ReversePersonalPaymentAsync(charge.Id.Value);
+
+        // Incurred, settled, unsettled — three entries. The money did move and then move back,
+        // which is two facts, not an erasure.
+        Assert.Equal(3, repo.JournalEntries.Count);
+        Assert.Single(repo.JournalEntries.Where(e => e.ReversalOfEntryId is not null));
+    }
+
+    [Fact]
+    public async Task ReversingAPayment_IsANoOpWhenNothingWasSettled()
+    {
+        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
+        var charges = new ChargeStore();
+        var manager = new BookkeepingManager(repo, new CashBasisJournalizingEngine(), charges, null!);
+        var charge = Groceries();
+        await charges.AddAsync(charge);
+
+        await manager.ConvergePersonalChargeAsync(charge.Id.Value);
+        await manager.ReversePersonalPaymentAsync(charge.Id.Value);
+
+        Assert.Single(repo.JournalEntries);
+    }
+
+    [Fact]
+    public void RecordPersonalPayment_RefusesASharedCharge()
+    {
+        var shared = Charge.Create(
+            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), UserId.Create(User), "Rent", Money.Create(900m, "USD"),
+            ChargeCategory.Rent, DateTime.UtcNow, null, payerUserId: User, fundingSource: FundingSource.PayerMember);
+
+        // A shared cost is settled through its allocations — one member paying does not clear it.
+        Assert.Throws<InvalidOperationException>(() => shared.RecordPersonalPayment(null, DateTime.UtcNow));
+        Assert.Throws<InvalidOperationException>(() => shared.ReversePersonalPayment());
     }
 }

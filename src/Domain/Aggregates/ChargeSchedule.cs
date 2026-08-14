@@ -19,12 +19,20 @@ public sealed class ChargeSchedule : IAggregateRoot
     private readonly List<DomainEvent> _domainEvents = new();
 
     public ChargeScheduleId Id { get; private set; }
-    public UserId UserId { get; private set; }
 
-    /// <summary>Null is personal, set is shared — same discriminator <see cref="Charge"/> uses.</summary>
-    public GroupId? GroupId { get; private set; }
+    /// <summary>Whose books the charges it generates will land in — the same entity
+    /// <see cref="Charge"/> carries.</summary>
+    public AccountingEntity Owner { get; private set; }
 
-    public UserId? CreatedBy { get; private set; }
+    /// <summary>The household when this is one of theirs, null when it is somebody's own.</summary>
+    public GroupId? GroupId => Owner.AsGroup;
+
+    /// <summary>
+    /// Who opened the agreement. On a personal schedule that is also whose it is; on a shared one
+    /// the house holds the agreement and this names whoever set it up. One field for both because
+    /// the two were always written with the same value.
+    /// </summary>
+    public UserId CreatedBy { get; private set; }
     public Guid? PayerUserId { get; private set; }
     public FundingSource FundingSource { get; private set; }
 
@@ -59,14 +67,13 @@ public sealed class ChargeSchedule : IAggregateRoot
     private ChargeSchedule() { }
 
     public static ChargeSchedule Create(
-        UserId userId,
-        GroupId? groupId,
+        AccountingEntity owner,
+        UserId createdBy,
         string title,
         Money amount,
         ChargeCategory category,
         RecurrenceSchedule recurrence,
         string? description = null,
-        UserId? createdBy = null,
         Guid? payerUserId = null,
         FundingSource fundingSource = FundingSource.PayerMember)
     {
@@ -76,11 +83,13 @@ public sealed class ChargeSchedule : IAggregateRoot
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
 
         var now = DateTime.UtcNow;
+        if (owner.IsPerson && !owner.Is(createdBy.Value))
+            throw new InvalidOperationException("Nobody opens an agreement in somebody else's own book.");
+
         var schedule = new ChargeSchedule
         {
             Id = ChargeScheduleId.New(),
-            UserId = userId,
-            GroupId = groupId,
+            Owner = owner,
             CreatedBy = createdBy,
             PayerUserId = payerUserId,
             FundingSource = fundingSource,
@@ -96,7 +105,7 @@ public sealed class ChargeSchedule : IAggregateRoot
         // The first version runs from the anchor, so an occurrence on day one has an amount.
         schedule._amounts.Add(ScheduledAmount.From(recurrence.StartDate, amount.Amount));
         schedule._domainEvents.Add(new ChargeScheduleCreated(
-            schedule.Id.Value, userId.Value, groupId?.Value, title, amount.Amount, amount.Currency,
+            schedule.Id.Value, createdBy.Value, schedule.GroupId?.Value, title, amount.Amount, amount.Currency,
             category.ToString(), recurrence.Frequency.ToString(), recurrence.StartDate, now));
         return schedule;
     }

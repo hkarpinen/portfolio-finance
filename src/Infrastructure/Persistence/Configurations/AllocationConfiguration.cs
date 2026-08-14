@@ -18,9 +18,6 @@ internal sealed class AllocationConfiguration : IEntityTypeConfiguration<Allocat
         builder.Property(s => s.ChargeId)
             .HasConversion(id => id.Value, v => new ChargeId(v));
 
-        builder.Property(s => s.GroupId)
-            .HasConversion(id => id.Value, v => new GroupId(v));
-
         builder.Property(s => s.UserId)
             .HasConversion(id => id.Value, v => new UserId(v));
 

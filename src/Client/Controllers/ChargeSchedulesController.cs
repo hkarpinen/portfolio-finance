@@ -18,7 +18,9 @@ namespace Client.Controllers;
 [Authorize]
 [RequireGroupMembership]
 [Route("api/finance/schedules")]
-public sealed class ChargeSchedulesController(IChargeScheduleManager schedules) : ControllerBase
+public sealed class ChargeSchedulesController(
+    IChargeScheduleManager schedules,
+    IBookkeepingManager bookkeeping) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> ListMine(CancellationToken ct = default)
@@ -32,7 +34,7 @@ public sealed class ChargeSchedulesController(IChargeScheduleManager schedules) 
     [EnableRateLimiting("write")]
     public async Task<IActionResult> Create([FromBody] CreateChargeScheduleCommand request, CancellationToken ct = default)
     {
-        var result = await schedules.CreateAsync(request with { UserId = User.GetUserId().Value }, ct);
+        var result = await schedules.CreateAsync(request with { CallerUserId = User.GetUserId().Value }, ct);
         return CreatedAtAction(nameof(ListMine), new { }, result);
     }
 
@@ -41,7 +43,7 @@ public sealed class ChargeSchedulesController(IChargeScheduleManager schedules) 
     public async Task<IActionResult> Amend(Guid scheduleId, [FromBody] AmendChargeScheduleCommand request, CancellationToken ct = default)
     {
         var result = await schedules.AmendAsync(
-            request with { ScheduleId = scheduleId, CallerId = User.GetUserId().Value }, ct);
+            request with { ScheduleId = scheduleId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -70,7 +72,16 @@ public sealed class ChargeSchedulesController(IChargeScheduleManager schedules) 
     [HttpPost("catch-up")]
     [EnableRateLimiting("write")]
     public async Task<IActionResult> CatchUpMine(CancellationToken ct = default)
-        => Ok(new { generated = await schedules.CatchUpAsync(null, User.GetUserId().Value, DateTime.UtcNow, ct) });
+    {
+        var userId = User.GetUserId().Value;
+
+        // Two halves of the same catch-up: write the bills whose period has come round, then post
+        // anything now due — including a one-off somebody entered ahead of its date.
+        var generated = await schedules.CatchUpAsync(null, userId, DateTime.UtcNow, ct);
+        var posted = await bookkeeping.PostDuePersonalChargesAsync(userId, DateTime.UtcNow, ct);
+
+        return Ok(new { generated, posted });
+    }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/schedules/catch-up")]
     [EnableRateLimiting("write")]

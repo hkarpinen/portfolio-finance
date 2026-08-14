@@ -26,10 +26,10 @@ public static class UserBudgetCalculator
         decimal total = 0m;
         foreach (var s in splits)
         {
-            int occurrences = s.Charge.RecurrenceSchedule is not null
-                ? s.Charge.RecurrenceSchedule.GetOccurrencesInRange(monthStart, monthEndExclusive).Count
-                : (s.Charge.DueDate >= monthStart && s.Charge.DueDate < monthEndExclusive) ? 1 : 0;
-            total += occurrences * s.Allocation.Amount.Amount;
+            // One charge IS one occurrence, so this counts rather than projects. A repeating bill
+            // reaches here as a row per month, generated when that month came round.
+            if (s.Charge.OccurrenceDate >= monthStart && s.Charge.OccurrenceDate < monthEndExclusive)
+                total += s.Allocation.Amount.Amount;
         }
         return total;
     }

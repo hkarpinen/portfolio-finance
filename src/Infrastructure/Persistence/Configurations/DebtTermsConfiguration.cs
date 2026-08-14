@@ -17,10 +17,6 @@ internal sealed class DebtTermsConfiguration : IEntityTypeConfiguration<DebtTerm
         // One set of terms per account: a card cannot be on two rates at once.
         builder.HasIndex(t => t.AccountId).IsUnique();
 
-        builder.Property(t => t.UserId)
-            .HasConversion(id => id.Value, v => UserId.Create(v));
-        builder.HasIndex(t => t.UserId);
-
         // A rate is a percentage to two places (24.99), not money.
         builder.Property(t => t.AnnualPercentageRate).HasPrecision(6, 3);
 

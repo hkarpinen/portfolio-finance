@@ -13,7 +13,6 @@ namespace Finance.Application.Managers;
 internal sealed class ChargeManager : IChargeManager
 {
     private readonly IChargeRepository _repository;
-    private readonly IChargePaymentRepository _paymentRepository;
     private readonly IAllocationRepository _splitRepository;
     private readonly IFinancialConnectionRepository _connectionRepository;
     private readonly ILedgerQuery _ledgerQuery;
@@ -22,7 +21,6 @@ internal sealed class ChargeManager : IChargeManager
 
     public ChargeManager(
         IChargeRepository repository,
-        IChargePaymentRepository paymentRepository,
         IAllocationRepository splitRepository,
         IFinancialConnectionRepository connectionRepository,
         ILedgerQuery ledgerQuery,
@@ -30,7 +28,6 @@ internal sealed class ChargeManager : IChargeManager
         ILogger<ChargeManager> logger)
     {
         _repository = repository;
-        _paymentRepository = paymentRepository;
         _splitRepository = splitRepository;
         _connectionRepository = connectionRepository;
         _ledgerQuery = ledgerQuery;
@@ -43,14 +40,38 @@ internal sealed class ChargeManager : IChargeManager
         if (!Enum.TryParse<ChargeCategory>(request.Category, ignoreCase: true, out var category))
             category = ChargeCategory.Other;
 
-        var expense = Charge.Create(
-            UserId.Create(request.UserId),
+        var recurrence = RecurrenceSchedule.ParseOrNone(
+            request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
+
+        // A repeating personal cost is an agreement, same as a repeating house bill. Only the
+        // one-off is a charge somebody typed straight in.
+        if (recurrence is not null)
+        {
+            var schedule = await _schedules.CreateAsync(new CreateChargeScheduleCommand(
+                GroupId: null,
+                CallerUserId: request.CallerUserId,
+                Title: request.Title,
+                Amount: request.Amount,
+                Currency: request.Currency,
+                Category: category,
+                Frequency: recurrence.Frequency,
+                AnchorDate: recurrence.StartDate,
+                EndDate: recurrence.EndDate,
+                Description: request.Description), cancellationToken);
+
+            var first = await _schedules.MaterialiseAsync(schedule.ScheduleId, recurrence.StartDate, cancellationToken)
+                ?? throw new InvalidOperationException("The schedule was created but its first charge was not.");
+            return ChargeMapper.ToResponse(first);
+        }
+
+        var expense = Charge.CreateOwn(
+            UserId.Create(request.CallerUserId),
             request.Title,
             Money.Create(request.Amount, request.Currency),
             category,
             request.DueDate,
-            RecurrenceSchedule.ParseOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
-            request.Description);
+            request.Description,
+            request.FundingAccountId);
 
         await _repository.AddAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
@@ -63,7 +84,7 @@ internal sealed class ChargeManager : IChargeManager
         if (expense is null) return null;
 
         // Owner check. Null (→ 404), never 403, so ids stay unprobeable.
-        if (!expense.IsOwnedBy(request.CallerId)) return null;
+        if (!expense.IsOwnedBy(request.CallerUserId)) return null;
 
         if (!Enum.TryParse<ChargeCategory>(request.Category, ignoreCase: true, out var category))
             category = ChargeCategory.Other;
@@ -73,7 +94,6 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             category,
             request.DueDate,
-            RecurrenceSchedule.ParseOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description);
 
         await _repository.UpdateAsync(expense, cancellationToken);
@@ -87,7 +107,7 @@ internal sealed class ChargeManager : IChargeManager
         if (expense is null) return null;
 
         // Owner check — deletion must not be reachable by id alone.
-        if (!expense.IsOwnedBy(request.CallerId)) return null;
+        if (!expense.IsOwnedBy(request.CallerUserId)) return null;
 
         if (expense.TryDeactivate())
             await _repository.UpdateAsync(expense, cancellationToken);
@@ -107,7 +127,7 @@ internal sealed class ChargeManager : IChargeManager
     {
         // A group charge ALWAYS has a payer; defaulting it here makes PayerUserId a real
         // invariant, so readers never need a `?? CreatedBy` fallback.
-        var payerUserId = request.PayerUserId ?? request.CreatedBy;
+        var payerUserId = request.PayerUserId ?? request.CallerUserId;
         var recurrence = RecurrenceSchedule.CreateOrNone(
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
@@ -115,10 +135,10 @@ internal sealed class ChargeManager : IChargeManager
         // from it. Creating a repeating Charge instead would put the cadence back on the document
         // and every month would be derived from it again.
         var expense = recurrence is null
-            ? Charge.CreateGroup(
-                GroupId.Create(request.GroupId), UserId.Create(request.CreatedBy), request.Title,
+            ? Charge.Create(
+                AccountingEntity.Household(request.GroupId), UserId.Create(request.CallerUserId), request.Title,
                 Money.Create(request.Amount, request.Currency), request.Category, request.DueDate,
-                null, request.Description, payerUserId, request.FundingSource)
+                request.Description, payerUserId: payerUserId, fundingSource: request.FundingSource)
             : await OpenScheduleAndBillFirstOccurrenceAsync(request, recurrence, payerUserId, cancellationToken);
 
         if (expense.ScheduleId is null)
@@ -131,9 +151,8 @@ internal sealed class ChargeManager : IChargeManager
             foreach (var split in request.Allocations)
             {
                 var entity = Allocation.Create(
-                    expense.Id,
-                    expense.GroupId!.Value,
-                    UserId.Create(split.UserId),
+                    expense,
+                    UserId.Create(split.MemberUserId),
                     Money.Create(split.Amount, split.Currency));
                 await _splitRepository.AddAsync(entity, cancellationToken);
             }
@@ -152,7 +171,7 @@ internal sealed class ChargeManager : IChargeManager
     {
         var schedule = await _schedules.CreateAsync(new CreateChargeScheduleCommand(
             GroupId: request.GroupId,
-            UserId: request.CreatedBy,
+            CallerUserId: request.CallerUserId,
             Title: request.Title,
             Amount: request.Amount,
             Currency: request.Currency,
@@ -186,7 +205,6 @@ internal sealed class ChargeManager : IChargeManager
             Money.Create(request.Amount, request.Currency),
             request.Category,
             request.DueDate,
-            RecurrenceSchedule.CreateOrNone(request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate),
             request.Description,
             request.PayerUserId);
 
@@ -212,7 +230,13 @@ internal sealed class ChargeManager : IChargeManager
         var expenseId = ChargeId.Create(request.ChargeId);
 
         var charge = await _repository.GetByIdAsync(expenseId, cancellationToken)
-            ?? throw new InvalidOperationException("Charge not found.");
+            ?? throw new KeyNotFoundException("Charge not found.");
+
+        // Your own share, or you entered the bill. Being in the house lets you settle what you owe;
+        // it does not let you re-cut how somebody else's bill was divided.
+        if (request.MemberUserId != request.CallerUserId && !charge.IsManagedBy(request.CallerUserId))
+            throw new UnauthorizedAccessException("Only the bill's owner can set another member's share.");
+
         var chargeTotal = charge.Amount.Amount;
 
         if (request.AllocationId.HasValue)
@@ -225,7 +249,7 @@ internal sealed class ChargeManager : IChargeManager
                     throw new InvalidOperationException(
                         $"Allocations would exceed the charge total of {chargeTotal:0.##}.");
 
-                existing.Update(money);
+                existing.Update(charge, money);
                 await _splitRepository.UpdateAsync(existing, cancellationToken);
                 await _splitRepository.CommitAsync(cancellationToken);
                 return ChargeMapper.ToAllocationResponse(existing);
@@ -234,7 +258,7 @@ internal sealed class ChargeManager : IChargeManager
 
         var duplicate = await _splitRepository.GetByChargeAndUserAsync(
             expenseId,
-            UserId.Create(request.UserId),
+            UserId.Create(request.MemberUserId),
             cancellationToken);
 
         if (duplicate is not null)
@@ -245,11 +269,9 @@ internal sealed class ChargeManager : IChargeManager
             throw new InvalidOperationException(
                 $"Allocations would exceed the charge total of {chargeTotal:0.##}.");
 
-        var split = Allocation.Create(
-            expenseId,
-            GroupId.Create(request.GroupId),
-            UserId.Create(request.UserId),
-            money);
+        // The group comes off the charge, not off the request — a caller naming a different one
+        // was never a share of this bill.
+        var split = Allocation.Create(charge, UserId.Create(request.MemberUserId), money);
 
         await _splitRepository.AddAsync(split, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
@@ -261,7 +283,10 @@ internal sealed class ChargeManager : IChargeManager
         var split = await _splitRepository.GetByIdAsync(AllocationId.Create(request.AllocationId), cancellationToken);
         if (split is null) return null;
 
-        split.Remove();
+        var charge = await _repository.GetByIdAsync(split.ChargeId, cancellationToken)
+            ?? throw new InvalidOperationException("Charge not found.");
+
+        split.Remove(charge);
         await _splitRepository.RemoveAsync(split, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
         return ChargeMapper.ToAllocationResponse(split);
@@ -289,12 +314,12 @@ internal sealed class ChargeManager : IChargeManager
             var existing = await _splitRepository.GetByChargeAndUserAsync(expense.Id, uid, cancellationToken);
             if (existing is not null)
             {
-                existing.Update(money);
+                existing.Update(expense, money);
                 await _splitRepository.UpdateAsync(existing, cancellationToken);
             }
             else
             {
-                var split = Allocation.Create(expense.Id, expense.GroupId.Value, uid, money);
+                var split = Allocation.Create(expense, uid, money);
                 await _splitRepository.AddAsync(split, cancellationToken);
             }
         }
@@ -329,13 +354,13 @@ internal sealed class ChargeManager : IChargeManager
 
         if (existing is not null)
         {
-            existing.Update(money);
+            existing.Update(charge, money);
             await _splitRepository.UpdateAsync(existing, cancellationToken);
             result = existing;
         }
         else
         {
-            result = Allocation.Create(expenseId, charge.GroupId.Value, uid, money);
+            result = Allocation.Create(charge, uid, money);
             await _splitRepository.AddAsync(result, cancellationToken);
         }
         await _splitRepository.CommitAsync(cancellationToken);
@@ -355,7 +380,7 @@ internal sealed class ChargeManager : IChargeManager
             // The share settles into whichever account funded the bill: PayerMember pays the
             // payer back (Dr Member:payer / Cr Member:debtor), GroupCash pays into the pot
             // (Dr Cash / Cr Member:debtor). The committed fact drives the posting.
-            var userId = UserId.Create(request.UserId);
+            var userId = UserId.Create(request.CallerUserId);
             var split = await _splitRepository.GetByChargeAndUserAsync(expense.Id, userId, cancellationToken)
                 ?? throw new InvalidOperationException("No allocation found for this user on this charge.");
 
@@ -365,28 +390,26 @@ internal sealed class ChargeManager : IChargeManager
 
             // The fact names the payer as nominal payee; the funding account is resolved
             // downstream from the charge's FundingSource.
-            var nominalTo = UserId.Create(expense.PayerUserId ?? expense.CreatedBy?.Value ?? request.UserId);
+            var nominalTo = UserId.Create(expense.PayerUserId ?? expense.EnteredBy.Value);
             var valueDate = DateTime.UtcNow.Date;
-            split.Settle(nominalTo, occurrenceDate, valueDate);
+            split.Settle(expense, nominalTo, occurrenceDate, valueDate);
             await _splitRepository.CommitAsync(cancellationToken);
 
             return new SettlementOutcome(
                 expense.GroupId.Value.Value, expense.Id.Value, split.Id.Value,
                 userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
                 occurrenceDate, valueDate,
-                LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.UserId),
+                LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.CallerUserId),
                 expense.FundingSource);
         }
 
         // Personal expense: record direct payment (no group ledger involved).
-        if (expense.UserId.Value != request.UserId)
+        if (!expense.IsOwnedBy(request.CallerUserId))
             throw new InvalidOperationException("Access denied.");
 
-        var existingPayment = await _paymentRepository.GetAsync(expense.Id, occurrenceDate, cancellationToken);
-        if (existingPayment is not null) return null; // idempotent
-
-        var directPayment = ChargePayment.Create(expense.Id, expense.UserId, occurrenceDate, request.TransactionReference);
-        await _paymentRepository.AddAsync(directPayment, cancellationToken);
+        // Raises the fact; the posting consumer settles the payable from whatever funded it.
+        expense.RecordPersonalPayment(request.FundingAccountId, DateTime.UtcNow);
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
         return null;
     }
@@ -401,7 +424,7 @@ internal sealed class ChargeManager : IChargeManager
         if (expense.GroupId.HasValue)
         {
             // The reversal fact drives the contra entry, keyed by the same source.
-            var userId = UserId.Create(request.UserId);
+            var userId = UserId.Create(request.CallerUserId);
             var split = await _splitRepository.GetByChargeAndUserAsync(expense.Id, userId, cancellationToken);
             if (split is null) return null;
 
@@ -409,23 +432,20 @@ internal sealed class ChargeManager : IChargeManager
             if (!await _ledgerQuery.IsAllocationSettledAsync(split.Id.Value, occurrenceDate, cancellationToken))
                 return null;
 
-            split.ReverseSettlement(occurrenceDate);
+            split.ReverseSettlement(expense, occurrenceDate);
             await _splitRepository.CommitAsync(cancellationToken);
 
-            var nominalTo = UserId.Create(expense.PayerUserId ?? expense.CreatedBy?.Value ?? request.UserId);
+            var nominalTo = UserId.Create(expense.PayerUserId ?? expense.EnteredBy.Value);
             return new SettlementOutcome(
                 expense.GroupId.Value.Value, expense.Id.Value, split.Id.Value,
                 userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
                 occurrenceDate, DateTime.UtcNow.Date,
-                LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.UserId),
+                LedgerSources.Settlement(request.ChargeId, occurrenceDate, request.CallerUserId),
                 expense.FundingSource);
         }
 
-        var payment = await _paymentRepository.GetAsync(ChargeId.Create(request.ChargeId), occurrenceDate, cancellationToken);
-        if (payment is null) return null;
-
-        payment.Remove();
-        await _paymentRepository.RemoveAsync(payment, cancellationToken);
+        expense.ReversePersonalPayment();
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
         return null;
     }
@@ -435,7 +455,7 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null || expense.GroupId is null) return null;
 
-        if (expense.CreatedBy?.Value != request.CallerId)
+        if (!expense.IsManagedBy(request.CallerUserId))
             throw new InvalidOperationException("Only the bill's owner can mark it paid to the vendor.");
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
@@ -461,7 +481,7 @@ internal sealed class ChargeManager : IChargeManager
         var expense = await _repository.GetByIdAsync(ChargeId.Create(request.ChargeId), cancellationToken);
         if (expense is null || expense.GroupId is null) return null;
 
-        if (expense.CreatedBy?.Value != request.CallerId)
+        if (!expense.IsManagedBy(request.CallerUserId))
             throw new InvalidOperationException("Only the bill's owner can undo the vendor payment.");
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);

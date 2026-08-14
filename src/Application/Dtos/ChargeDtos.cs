@@ -2,6 +2,8 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Dtos;
 
+/// <summary>Whose books the charge lands in. The wire's word for
+/// <see cref="Finance.Domain.ValueObjects.EntityKind"/>.</summary>
 public enum ChargeScope
 {
     Personal,
@@ -12,18 +14,18 @@ public enum ChargeScope
 public sealed record ChargeResponseDto(
     Guid ChargeId,
     ChargeScope Scope,
-    Guid? UserId,                   // set when Scope == Personal
-    Guid? GroupId,                  // set when Scope == Group
-    Guid? CreatedBy,                // creator user-id; set when Scope == Group
+    // Whose books it lands in: a household id when Scope is Group, a person's when Personal. One
+    // field, because three (userId/groupId/createdBy) said it between them and disagreed about
+    // what userId meant.
+    Guid OwnerId,
+    // The person who wrote it down — the same person as OwnerId on a personal charge.
+    Guid EnteredBy,
     string Title,
     string? Description,
     decimal Amount,
     string Currency,
     ChargeCategory Category,
     DateTime DueDate,
-    RecurrenceFrequency? RecurrenceFrequency,
-    DateTime? RecurrenceStartDate,
-    DateTime? RecurrenceEndDate,
     bool IsActive,
     DateTime CreatedAt,
     DateTime UpdatedAt,
@@ -63,7 +65,6 @@ public sealed record GroupChargeDetailDto(
 public sealed record AllocationDto(
     Guid AllocationId,
     Guid ChargeId,
-    Guid GroupId,
     Guid UserId,
     decimal Amount,
     string Currency,

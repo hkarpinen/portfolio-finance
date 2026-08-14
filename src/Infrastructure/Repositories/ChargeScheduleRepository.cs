@@ -22,7 +22,7 @@ internal sealed class ChargeScheduleRepository(FinanceDbContext db) : IChargeSch
 
     public async Task<IReadOnlyList<ChargeSchedule>> ListForUserAsync(UserId userId, CancellationToken ct = default)
         => await db.ChargeSchedules.AsNoTracking()
-            .Where(s => s.UserId == userId && s.GroupId == null && s.IsActive)
+            .Where(s => s.CreatedBy == userId && s.GroupId == null && s.IsActive)
             .OrderBy(s => s.Title)
             .ToListAsync(ct);
 

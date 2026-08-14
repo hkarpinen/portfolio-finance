@@ -9,7 +9,6 @@ public record ChargeCreated(
     Money Amount,
     ChargeCategory Category,
     DateTime DueDate,
-    RecurrenceSchedule? RecurrenceSchedule,
     GroupId? GroupId = null,
     Guid? PayerUserId = null) : DomainEvent;
 
@@ -19,7 +18,6 @@ public record ChargeUpdated(
     Money Amount,
     ChargeCategory Category,
     DateTime DueDate,
-    RecurrenceSchedule? RecurrenceSchedule,
     GroupId? GroupId = null,
     Guid? PayerUserId = null) : DomainEvent;
 

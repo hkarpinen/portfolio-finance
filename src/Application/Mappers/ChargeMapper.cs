@@ -5,63 +5,33 @@ namespace Finance.Application.Mappers;
 
 public static class ChargeMapper
 {
-    public static ChargeResponseDto ToResponse(Charge expense, bool isPaid = false, bool vendorPaid = false)
-    {
-        if (expense.GroupId.HasValue)
-        {
-            return new ChargeResponseDto(
-                ChargeId: expense.Id.Value,
-                Scope: ChargeScope.Group,
-                UserId: null,
-                GroupId: expense.GroupId.Value.Value,
-                CreatedBy: expense.CreatedBy?.Value,
-                Title: expense.Title,
-                Description: expense.Description,
-                Amount: expense.Amount.Amount,
-                Currency: expense.Amount.Currency,
-                Category: expense.Category,
-                DueDate: expense.DueDate,
-                RecurrenceFrequency: expense.RecurrenceSchedule?.Frequency,
-                RecurrenceStartDate: expense.RecurrenceSchedule?.StartDate,
-                RecurrenceEndDate: expense.RecurrenceSchedule?.EndDate,
-                IsActive: expense.IsActive,
-                CreatedAt: expense.CreatedAt,
-                UpdatedAt: expense.UpdatedAt,
-                IsPaid: isPaid,
-                CurrentOccurrenceDate: expense.OccurrenceDate,
-                ScheduleId: expense.ScheduleId?.Value,
-                PayerUserId: expense.PayerUserId,
-                FundingSource: expense.FundingSource,
-                VendorPaid: vendorPaid);
-        }
-
-        return new ChargeResponseDto(
+    public static ChargeResponseDto ToResponse(Charge expense, bool isPaid = false, bool vendorPaid = false) =>
+        new(
             ChargeId: expense.Id.Value,
-            Scope: ChargeScope.Personal,
-            UserId: expense.UserId.Value,
-            GroupId: null,
-            CreatedBy: null,
+            Scope: expense.Owner.IsHousehold ? ChargeScope.Group : ChargeScope.Personal,
+            OwnerId: expense.Owner.Id,
+            EnteredBy: expense.EnteredBy.Value,
             Title: expense.Title,
             Description: expense.Description,
             Amount: expense.Amount.Amount,
             Currency: expense.Amount.Currency,
             Category: expense.Category,
             DueDate: expense.DueDate,
-            RecurrenceFrequency: expense.RecurrenceSchedule?.Frequency,
-            RecurrenceStartDate: expense.RecurrenceSchedule?.StartDate,
-            RecurrenceEndDate: expense.RecurrenceSchedule?.EndDate,
             IsActive: expense.IsActive,
             CreatedAt: expense.CreatedAt,
             UpdatedAt: expense.UpdatedAt,
             IsPaid: isPaid,
             CurrentOccurrenceDate: expense.OccurrenceDate,
-            ScheduleId: expense.ScheduleId?.Value);
-    }
+            ScheduleId: expense.ScheduleId?.Value,
+            // Only a shared bill has a payer or a funding side; on somebody's own there is nobody
+            // to be paid back and nothing to pool.
+            PayerUserId: expense.Owner.IsHousehold ? expense.PayerUserId : null,
+            FundingSource: expense.Owner.IsHousehold ? expense.FundingSource : null,
+            VendorPaid: expense.Owner.IsHousehold && vendorPaid);
 
     public static AllocationDto ToAllocationResponse(Allocation split) => new(
         split.Id.Value,
         split.ChargeId.Value,
-        split.GroupId.Value,
         split.UserId.Value,
         split.Amount.Amount,
         split.Amount.Currency,

@@ -14,19 +14,16 @@ internal sealed class ChargeScheduleConfiguration : IEntityTypeConfiguration<Cha
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Id).HasConversion(id => id.Value, v => new ChargeScheduleId(v));
 
-        builder.Property(s => s.UserId).HasConversion(id => id.Value, v => new UserId(v));
+        // group_id becomes the owner's id and a kind column beside it; a row that had no group
+        // was always somebody's own.
+        builder.Ignore(s => s.GroupId);
+        builder.ComplexProperty(s => s.Owner, owner =>
+        {
+            owner.Property(o => o.Kind).HasColumnName("owner_kind").HasConversion<int>().IsRequired();
+            owner.Property(o => o.Id).HasColumnName("owner_id").IsRequired();
+        });
 
-        builder.Property(s => s.GroupId)
-            .HasConversion(
-                id => id.HasValue ? id.Value.Value : (Guid?)null,
-                v => v.HasValue ? new GroupId(v.Value) : (GroupId?)null)
-            .IsRequired(false);
-
-        builder.Property(s => s.CreatedBy)
-            .HasConversion(
-                id => id.HasValue ? id.Value.Value : (Guid?)null,
-                v => v.HasValue ? new UserId(v.Value) : (UserId?)null)
-            .IsRequired(false);
+        builder.Property(s => s.CreatedBy).HasConversion(id => id.Value, v => new UserId(v));
 
         builder.Property(s => s.Currency).IsRequired().HasMaxLength(3);
         builder.Property(s => s.Title).IsRequired().HasMaxLength(200);
@@ -57,8 +54,9 @@ internal sealed class ChargeScheduleConfiguration : IEntityTypeConfiguration<Cha
         });
         builder.Navigation(s => s.Recurrence).IsRequired();
 
-        builder.HasIndex(s => s.GroupId);
-        builder.HasIndex(s => s.UserId);
+        // Indexed on the owner columns in the migration with raw SQL: EF 8 cannot name a complex
+        // property's columns in HasIndex, and the index is on how rows are actually looked up.
+        builder.HasIndex(s => s.CreatedBy);
 
     }
 }

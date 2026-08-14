@@ -1,12 +1,5 @@
 namespace Finance.Domain.ValueObjects;
 
-// Owner ids are opaque — finance knows nothing of "household".
-public enum LedgerOwnerType
-{
-    Group,
-    User
-}
-
 public enum AccountType
 {
     Asset,

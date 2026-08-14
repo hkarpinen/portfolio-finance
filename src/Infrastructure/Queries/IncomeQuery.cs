@@ -65,9 +65,9 @@ internal sealed class IncomeQuery : IIncomeQuery
     public async Task<IncomeDto?> GetDetailAsync(IncomeDetailParams request, CancellationToken cancellationToken = default)
     {
         // Owner-scoped: null (→ 404) for anyone else, so an id cannot be probed.
-        var callerId = UserId.Create(request.CallerId);
+        var callerUserId = UserId.Create(request.CallerUserId);
         var income = await _db.IncomeSources.FirstOrDefaultAsync(
-            i => i.Id == IncomeId.Create(request.IncomeId) && i.UserId == callerId, cancellationToken);
+            i => i.Id == IncomeId.Create(request.IncomeId) && i.UserId == callerUserId, cancellationToken);
         return income is null ? null : IncomeMapper.ToResponse(income);
     }
 
@@ -189,7 +189,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         var personalCharges = await _db.Charges
             .AsNoTracking()
-            .Where(e => e.UserId == uid && e.IsActive && e.GroupId == null)
+            .Where(e => e.Owner.Kind == EntityKind.Person && e.Owner.Id == uid.Value && e.IsActive)
             .OrderBy(e => e.DueDate)
             .ToListAsync(cancellationToken);
 
@@ -215,17 +215,13 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         var expenseIds = splits.Select(s => s.ChargeId).Distinct().ToList();
 
-        var expenses = await _db.Charges
+        // One charge is one occurrence, so the window is a plain date filter the database can run.
+        var relevantCharges = (await _db.Charges
             .AsNoTracking()
-            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.GroupId != null)
-            .ToListAsync(cancellationToken);
-
-        var relevantCharges = expenses.Where(b =>
-            b.RecurrenceSchedule == null
-                ? b.DueDate >= from && b.DueDate <= to
-                : b.RecurrenceSchedule.StartDate <= to &&
-                  (b.RecurrenceSchedule.EndDate == null || b.RecurrenceSchedule.EndDate >= from)
-        ).ToDictionary(b => b.Id);
+            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.Owner.Kind == EntityKind.Household
+                        && b.OccurrenceDate >= from && b.OccurrenceDate <= to)
+            .ToListAsync(cancellationToken))
+            .ToDictionary(b => b.Id);
 
         if (relevantCharges.Count == 0) return [];
 
@@ -265,20 +261,27 @@ internal sealed class IncomeQuery : IIncomeQuery
     {
         var expenseIds = await _db.Charges
             .AsNoTracking()
-            .Where(b => b.UserId == userId && b.GroupId == null)
+            .Where(b => b.Owner.Kind == EntityKind.Person && b.Owner.Id == userId.Value)
             .Select(b => b.Id)
             .ToListAsync(cancellationToken);
 
         if (expenseIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
-        var payments = await _db.ChargePayments
-            .AsNoTracking()
-            .Where(p => expenseIds.Contains(p.ChargeId) && p.OccurrenceDate >= from && p.OccurrenceDate <= to)
-            .Select(p => new { ChargeId = p.ChargeId.Value, p.OccurrenceDate, p.PaidAt })
+        // When a personal charge was paid IS when it was booked: it posts on the day it belongs
+        // to, so the entry's own date answers this without a second record of the same fact.
+        // Method syntax deliberately: `from` is a query-expression keyword and this method's
+        // parameter is called `from`, which the query form cannot see past.
+        var entries = await _db.JournalEntries.AsNoTracking()
+            .Where(e => e.ReversalOfEntryId == null && e.ReversedByEntryId == null
+                        && e.Date >= from && e.Date <= to && e.SourceChargeId != null)
+            .Join(_db.Charges.AsNoTracking().Where(c => c.Owner.Kind == EntityKind.Person && c.Owner.Id == userId.Value),
+                  e => e.SourceChargeId!.Value,
+                  c => c.Id.Value,
+                  (e, c) => new { ChargeId = c.Id.Value, c.OccurrenceDate, e.RecordedAt })
             .ToListAsync(cancellationToken);
 
-        return payments
-            .GroupBy(p => (p.ChargeId, p.OccurrenceDate.Date))
-            .ToDictionary(g => g.Key, g => g.Max(p => p.PaidAt));
+        return entries
+            .GroupBy(e => (e.ChargeId, e.OccurrenceDate.Date))
+            .ToDictionary(g => g.Key, g => g.Max(e => e.RecordedAt));
     }
 }

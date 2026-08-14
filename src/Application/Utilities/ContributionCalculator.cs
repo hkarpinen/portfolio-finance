@@ -41,9 +41,12 @@ internal sealed class ContributionCalculator : IContributionCalculator
         var projected = new List<(DateTime OccurrenceDate, ContributionItemDto Item)>();
         foreach (var s in splits)
         {
-            IEnumerable<DateTime> occurrenceDates = s.Charge.RecurrenceSchedule is not null
-                ? s.Charge.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
-                : (IEnumerable<DateTime>)[s.Charge.DueDate];
+            // One charge, one occurrence. A repeating bill arrives here as a row per period,
+            // generated when that period came round, so nothing is projected.
+            IEnumerable<DateTime> occurrenceDates =
+                s.Charge.OccurrenceDate >= windowStart && s.Charge.OccurrenceDate < windowEndExclusive
+                    ? [s.Charge.OccurrenceDate]
+                    : [];
 
             // The payer's own share is covered by fronting the bill — they never reimburse themselves, so
             // there is no payment record and hence no PaidAt.
@@ -57,7 +60,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
                     s.Allocation.Id.Value, s.Charge.Id.Value, s.Charge.Title, s.Charge.Category.ToString(),
                     s.Allocation.Amount.Amount, s.Allocation.Amount.Currency, date,
                     isPaid,
-                    s.Allocation.GroupId.Value,
+                    s.Charge.GroupId!.Value.Value,
                     hasPayment ? paidAt : null)));
             }
         }
@@ -65,9 +68,10 @@ internal sealed class ContributionCalculator : IContributionCalculator
         var projectedPersonal = new List<(DateTime OccurrenceDate, PersonalBillItemDto Item)>();
         foreach (var e in activePersonal)
         {
-            IEnumerable<DateTime> occurrenceDates = e.RecurrenceSchedule is not null
-                ? e.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
-                : (IEnumerable<DateTime>)[e.DueDate];
+            IEnumerable<DateTime> occurrenceDates =
+                e.OccurrenceDate >= windowStart && e.OccurrenceDate < windowEndExclusive
+                    ? [e.OccurrenceDate]
+                    : [];
 
             foreach (var date in occurrenceDates)
             {

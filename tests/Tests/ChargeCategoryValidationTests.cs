@@ -11,7 +11,7 @@ namespace Tests;
 public class ChargeCategoryValidationTests
 {
     private static CreateChargeCommand Cmd(string category) => new(
-        UserId: Guid.NewGuid(), Title: "Gym", Amount: 50m, Currency: "USD",
+        CallerUserId: Guid.NewGuid(), Title: "Gym", Amount: 50m, Currency: "USD",
         Category: category, DueDate: DateTime.UtcNow.Date);
 
     [Theory]

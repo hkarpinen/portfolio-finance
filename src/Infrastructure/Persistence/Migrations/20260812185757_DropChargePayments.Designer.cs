@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    partial class FinanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260812185757_DropChargePayments")]
+    partial class DropChargePayments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,6 +92,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -142,6 +149,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
@@ -150,10 +161,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_date");
-
-                    b.Property<Guid>("EnteredBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("entered_by");
 
                     b.Property<Guid?>("FundingAccountId")
                         .HasColumnType("uuid")
@@ -164,6 +171,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("funding_source");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -191,6 +202,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.Charge.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
@@ -205,27 +220,22 @@ namespace Infrastructure.Persistence.Migrations
                                 .HasColumnName("currency");
                         });
 
-                    b.ComplexProperty<Dictionary<string, object>>("Owner", "Finance.Domain.Aggregates.Charge.Owner#AccountingEntity", b1 =>
-                        {
-                            b1.Property<Guid>("Id")
-                                .HasColumnType("uuid")
-                                .HasColumnName("owner_id");
-
-                            b1.Property<int>("Kind")
-                                .HasColumnType("integer")
-                                .HasColumnName("owner_kind");
-                        });
-
                     b.HasKey("Id")
                         .HasName("pk_charges");
 
                     b.HasIndex("DueDate")
                         .HasDatabaseName("ix_charges_due_date");
 
+                    b.HasIndex("GroupId", "IsActive")
+                        .HasDatabaseName("ix_charges_group_id_is_active");
+
                     b.HasIndex("ScheduleId", "OccurrenceDate")
                         .IsUnique()
                         .HasDatabaseName("ix_charges_schedule_id_occurrence_date")
                         .HasFilter("schedule_id IS NOT NULL");
+
+                    b.HasIndex("UserId", "IsActive")
+                        .HasDatabaseName("ix_charges_user_id_is_active");
 
                     b.ToTable("charges", "finance");
                 });
@@ -246,7 +256,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid>("CreatedBy")
+                    b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
@@ -267,6 +277,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("funding_source");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -285,22 +299,18 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Owner", "Finance.Domain.Aggregates.ChargeSchedule.Owner#AccountingEntity", b1 =>
-                        {
-                            b1.Property<Guid>("Id")
-                                .HasColumnType("uuid")
-                                .HasColumnName("owner_id");
-
-                            b1.Property<int>("Kind")
-                                .HasColumnType("integer")
-                                .HasColumnName("owner_kind");
-                        });
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
 
                     b.HasKey("Id")
                         .HasName("pk_charge_schedules");
 
-                    b.HasIndex("CreatedBy")
-                        .HasDatabaseName("ix_charge_schedules_created_by");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_charge_schedules_group_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_charge_schedules_user_id");
 
                     b.ToTable("charge_schedules", "finance");
                 });
@@ -347,12 +357,19 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id")
                         .HasName("pk_debt_terms");
 
                     b.HasIndex("AccountId")
                         .IsUnique()
                         .HasDatabaseName("ix_debt_terms_account_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_debt_terms_user_id");
 
                     b.ToTable("debt_terms", "finance");
                 });
@@ -587,19 +604,20 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Owner", "Finance.Domain.Aggregates.Ledger.Owner#AccountingEntity", b1 =>
-                        {
-                            b1.Property<Guid>("Id")
-                                .HasColumnType("uuid")
-                                .HasColumnName("owner_id");
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
 
-                            b1.Property<int>("Kind")
-                                .HasColumnType("integer")
-                                .HasColumnName("owner_type");
-                        });
+                    b.Property<int>("OwnerType")
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_type");
 
                     b.HasKey("Id")
                         .HasName("pk_ledgers");
+
+                    b.HasIndex("OwnerType", "OwnerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ledgers_owner_type_owner_id");
 
                     b.ToTable("ledgers", "finance");
                 });
@@ -1242,6 +1260,40 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_processed_events_processed_at");
 
                     b.ToTable("processed_events", "finance");
+                });
+
+            modelBuilder.Entity("Finance.Domain.Aggregates.Charge", b =>
+                {
+                    b.OwnsOne("Finance.Domain.ValueObjects.RecurrenceSchedule", "RecurrenceSchedule", b1 =>
+                        {
+                            b1.Property<Guid>("ChargeId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<DateTime?>("EndDate")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("recurrence_end_date");
+
+                            b1.Property<string>("Frequency")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)")
+                                .HasColumnName("recurrence_frequency");
+
+                            b1.Property<DateTime>("StartDate")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("recurrence_start_date");
+
+                            b1.HasKey("ChargeId");
+
+                            b1.ToTable("charges", "finance");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ChargeId")
+                                .HasConstraintName("fk_charges_charges_id");
+                        });
+
+                    b.Navigation("RecurrenceSchedule");
                 });
 
             modelBuilder.Entity("Finance.Domain.Aggregates.ChargeSchedule", b =>

@@ -24,7 +24,7 @@ public class ChargeScheduleManagerTests
     }
 
     private static CreateChargeScheduleCommand Rent(decimal amount = 1000m) => new(
-        GroupId: Group, UserId: User, Title: "Rent", Amount: amount, Currency: "USD",
+        GroupId: Group, CallerUserId: User, Title: "Rent", Amount: amount, Currency: "USD",
         Category: ChargeCategory.Rent, Frequency: RecurrenceFrequency.Monthly, AnchorDate: Jan3);
 
     [Fact]
@@ -195,7 +195,7 @@ public class ChargeScheduleManagerTests
         public Task<IReadOnlyList<ChargeSchedule>> ListForGroupAsync(GroupId g, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<ChargeSchedule>>(Schedules.Where(s => s.GroupId == g).ToList());
         public Task<IReadOnlyList<ChargeSchedule>> ListForUserAsync(UserId u, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<ChargeSchedule>>(Schedules.Where(s => s.UserId == u).ToList());
+            => Task.FromResult<IReadOnlyList<ChargeSchedule>>(Schedules.Where(s => s.CreatedBy == u && s.GroupId == null).ToList());
         public Task<Charge?> GetGeneratedAsync(ChargeScheduleId id, DateTime date, CancellationToken ct = default)
             => Task.FromResult(Charges.FirstOrDefault(c => c.ScheduleId == id && c.OccurrenceDate == date.Date));
         public Task<IReadOnlyDictionary<DateTime, Charge>> ListGeneratedAsync(
@@ -215,6 +215,9 @@ public class ChargeScheduleManagerTests
         public Task RemoveAsync(Charge c, CancellationToken ct = default) { shared.Charges.Remove(c); return Task.CompletedTask; }
         public Task<Charge?> GetByIdAsync(ChargeId id, CancellationToken ct = default)
             => Task.FromResult(shared.Charges.FirstOrDefault(c => c.Id == id));
+        public Task<IReadOnlyList<Charge>> ListUnpostedPersonalAsync(UserId userId, DateTime asOf, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Charge>>(
+                shared.Charges.Where(c => c.Owner == AccountingEntity.Person(userId) && c.IsActive && c.OccurrenceDate.Date <= asOf.Date).ToList());
         public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAllForUserAsync(UserId u, CancellationToken ct = default) => Task.CompletedTask;
     }

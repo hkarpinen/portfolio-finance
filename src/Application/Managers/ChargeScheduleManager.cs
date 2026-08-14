@@ -10,7 +10,7 @@ public interface IChargeScheduleManager
 {
     Task<ChargeScheduleDto> CreateAsync(CreateChargeScheduleCommand command, CancellationToken ct = default);
     Task<ChargeScheduleDto?> AmendAsync(AmendChargeScheduleCommand command, CancellationToken ct = default);
-    Task<bool> DeactivateAsync(Guid scheduleId, Guid callerId, CancellationToken ct = default);
+    Task<bool> DeactivateAsync(Guid scheduleId, Guid callerUserId, CancellationToken ct = default);
     Task<IReadOnlyList<ChargeScheduleDto>> ListForGroupAsync(Guid groupId, CancellationToken ct = default);
     Task<IReadOnlyList<ChargeScheduleDto>> ListForUserAsync(Guid userId, CancellationToken ct = default);
 
@@ -46,14 +46,13 @@ internal sealed class ChargeScheduleManager(
     public async Task<ChargeScheduleDto> CreateAsync(CreateChargeScheduleCommand cmd, CancellationToken ct = default)
     {
         var schedule = ChargeSchedule.Create(
-            UserId.Create(cmd.UserId),
-            cmd.GroupId is { } g ? GroupId.Create(g) : null,
+            cmd.GroupId is { } g ? AccountingEntity.Household(g) : AccountingEntity.Person(cmd.CallerUserId),
+            UserId.Create(cmd.CallerUserId),
             cmd.Title,
             Money.Create(cmd.Amount, cmd.Currency),
             cmd.Category,
             RecurrenceSchedule.Create(cmd.Frequency, cmd.AnchorDate, cmd.EndDate),
             cmd.Description,
-            UserId.Create(cmd.UserId),
             cmd.PayerUserId,
             cmd.FundingSource);
 
@@ -76,7 +75,7 @@ internal sealed class ChargeScheduleManager(
         return ChargeScheduleMapper.ToResponse(schedule);
     }
 
-    public async Task<bool> DeactivateAsync(Guid scheduleId, Guid callerId, CancellationToken ct = default)
+    public async Task<bool> DeactivateAsync(Guid scheduleId, Guid callerUserId, CancellationToken ct = default)
     {
         var schedule = await schedules.GetByIdAsync(ChargeScheduleId.Create(scheduleId), ct);
         if (schedule is null) return false;

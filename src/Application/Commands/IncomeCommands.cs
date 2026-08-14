@@ -18,9 +18,9 @@ public sealed record CreateIncomeCommand(
     IReadOnlyList<PayrollDeductionDto>? InitialDeductions = null,
     string? Notes = null);
 
-// CallerId is the owner check and is always overwritten server-side from the token.
+// CallerUserId is the owner check and is always overwritten server-side from the token.
 public sealed record UpdateIncomeCommand(
-    Guid CallerId,
+    Guid CallerUserId,
     Guid IncomeId,
     decimal Amount,
     string Currency,
@@ -50,5 +50,5 @@ public sealed record RemoveDeductionCommand(
 
 public sealed record DeleteIncomeCommand(Guid IncomeId);
 
-// CallerId is the owner check, always overwritten server-side from the token.
-public sealed record DeactivateIncomeCommand(Guid IncomeId, Guid CallerId);
+// CallerUserId is the owner check, always overwritten server-side from the token.
+public sealed record DeactivateIncomeCommand(Guid IncomeId, Guid CallerUserId);

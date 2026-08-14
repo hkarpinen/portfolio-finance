@@ -22,6 +22,15 @@ internal sealed class ChargeRepository : IChargeRepository
         _dbContext.Charges.Update(expense);
     }
 
+    public async Task<IReadOnlyList<Charge>> ListUnpostedPersonalAsync(UserId userId, DateTime asOf, CancellationToken cancellationToken = default)
+    {
+        var day = DateTime.SpecifyKind(asOf.Date, DateTimeKind.Utc);
+        return await _dbContext.Charges
+            .Where(c => c.Owner.Kind == EntityKind.Person && c.Owner.Id == userId.Value
+                        && c.IsActive && c.OccurrenceDate <= day)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Charge?> GetByIdAsync(ChargeId id, CancellationToken cancellationToken = default)
         => _dbContext.Charges.FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
@@ -34,5 +43,6 @@ internal sealed class ChargeRepository : IChargeRepository
         => _dbContext.SaveChangesAsync(cancellationToken);
 
     public Task DeleteAllForUserAsync(UserId userId, CancellationToken cancellationToken = default)
-        => _dbContext.Charges.Where(e => e.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        => _dbContext.Charges.Where(e => e.Owner.Kind == EntityKind.Person && e.Owner.Id == userId.Value)
+            .ExecuteDeleteAsync(cancellationToken);
 }

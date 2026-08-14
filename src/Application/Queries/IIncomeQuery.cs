@@ -15,9 +15,9 @@ public sealed record ListUserIncomeParams(
     int PageSize = 20,
     bool ActiveOnly = true);
 
-// CallerId: income is readable ONLY by its owner — the app promises it is never shown to anyone
+// CallerUserId: income is readable ONLY by its owner — the app promises it is never shown to anyone
 // in the household — so the id alone must not resolve one.
-public sealed record IncomeDetailParams(Guid IncomeId, Guid CallerId);
+public sealed record IncomeDetailParams(Guid IncomeId, Guid CallerUserId);
 
 public sealed record GetNetPayBreakdownParams(
     Guid IncomeId,

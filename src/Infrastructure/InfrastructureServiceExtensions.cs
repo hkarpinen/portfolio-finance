@@ -74,7 +74,6 @@ public static class InfrastructureServiceExtensions
 
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
         services.AddScoped<IChargeRepository, ChargeRepository>();
-        services.AddScoped<IChargePaymentRepository, ChargePaymentRepository>();
         services.AddScoped<IAllocationRepository, AllocationRepository>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
 

@@ -3,16 +3,18 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-// Finance knows nothing of "household" — the owner is just a typed opaque id. Accounts and journal
-// entries reference the ledger by id; the root itself only fixes ownership and the reporting
-// currency. One currency per ledger.
+// One set of books for one accounting entity. Finance knows nothing of "household" — the owner is
+// an opaque id with a kind. Accounts and journal entries reference the ledger by id; the root
+// itself only fixes whose books these are and the reporting currency. One currency per ledger.
 public sealed class Ledger : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();
 
     public LedgerId Id { get; private set; }
-    public LedgerOwnerType OwnerType { get; private set; }
-    public Guid OwnerId { get; private set; }
+
+    /// <summary>Whose books these are. The accounting equation only balances within one entity,
+    /// which is what makes this the boundary rather than a label on it.</summary>
+    public AccountingEntity Owner { get; private set; }
     public string Currency { get; private set; } = "USD";
     public DateTime CreatedAt { get; private set; }
 
@@ -21,22 +23,21 @@ public sealed class Ledger : IAggregateRoot
 
     private Ledger() { }
 
-    public static Ledger Open(LedgerOwnerType ownerType, Guid ownerId, string currency)
+    public static Ledger Open(AccountingEntity owner, string currency)
     {
-        if (ownerId == Guid.Empty)
-            throw new ArgumentException("Ledger owner id is required.", nameof(ownerId));
+        if (owner.Id == Guid.Empty)
+            throw new ArgumentException("Ledger owner id is required.", nameof(owner));
         if (string.IsNullOrWhiteSpace(currency) || currency.Length != 3)
             throw new ArgumentException("Currency must be a 3-letter ISO code.", nameof(currency));
 
         var ledger = new Ledger
         {
             Id = LedgerId.New(),
-            OwnerType = ownerType,
-            OwnerId = ownerId,
+            Owner = owner,
             Currency = currency.ToUpperInvariant(),
             CreatedAt = DateTime.UtcNow,
         };
-        ledger._domainEvents.Add(new LedgerOpened(ledger.Id, ownerType, ownerId, ledger.Currency));
+        ledger._domainEvents.Add(new LedgerOpened(ledger.Id, owner, ledger.Currency));
         return ledger;
     }
 }

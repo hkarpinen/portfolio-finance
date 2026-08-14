@@ -10,16 +10,14 @@ public class ChargeTests
         UserId? userId = null,
         decimal amount = 75m,
         ChargeCategory category = ChargeCategory.Utilities,
-        string title = "Phone Bill",
-        RecurrenceSchedule? schedule = null)
+        string title = "Phone Bill")
     {
-        return Charge.Create(
+        return Charge.CreateOwn(
             userId ?? UserId.New(),
             title,
             Money.Create(amount, "USD"),
             category,
-            DateTime.UtcNow.Date.AddDays(3),
-            schedule);
+            DateTime.UtcNow.Date.AddDays(3));
     }
 
     [Fact]
@@ -29,16 +27,15 @@ public class ChargeTests
         var dueDate = DateTime.UtcNow.Date.AddDays(7);
         var amount = Money.Create(120m, "USD");
 
-        var bill = Charge.Create(userId, "Netflix", amount, ChargeCategory.Other, dueDate, description: "Streaming");
+        var bill = Charge.CreateOwn(userId, "Netflix", amount, ChargeCategory.Other, dueDate, description: "Streaming");
 
-        Assert.Equal(userId, bill.UserId);
+        Assert.Equal(userId, bill.EnteredBy);
         Assert.Equal("Netflix", bill.Title);
         Assert.Equal(120m, bill.Amount.Amount);
         Assert.Equal(ChargeCategory.Other, bill.Category);
         Assert.Equal(dueDate, bill.DueDate);
         Assert.Equal("Streaming", bill.Description);
         Assert.True(bill.IsActive);
-        Assert.Null(bill.RecurrenceSchedule);
     }
 
     [Fact]
@@ -54,7 +51,7 @@ public class ChargeTests
     public void Create_EmptyTitle_ShouldThrow()
     {
         Assert.Throws<ArgumentException>(() =>
-            Charge.Create(UserId.New(), "  ", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
+            Charge.CreateOwn(UserId.New(), "  ", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
 
     [Fact]
@@ -63,18 +60,7 @@ public class ChargeTests
         // Money is signed now (refunds, contra entries, inflows). The non-negative
         // invariant for an expense lives on the Charge aggregate, not on Money.
         Assert.Throws<ArgumentException>(() =>
-            Charge.Create(UserId.New(), "Rent", Money.Create(-10m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
-    }
-
-    [Fact]
-    public void Create_WithRecurrenceSchedule_ShouldSetSchedule()
-    {
-        var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, new DateTime(2024, 1, 1));
-
-        var bill = CreateValidCharge(schedule: schedule);
-
-        Assert.NotNull(bill.RecurrenceSchedule);
-        Assert.Equal(RecurrenceFrequency.Monthly, bill.RecurrenceSchedule.Frequency);
+            Charge.CreateOwn(UserId.New(), "Rent", Money.Create(-10m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
 
     [Fact]
@@ -112,18 +98,6 @@ public class ChargeTests
 
         Assert.Throws<ArgumentException>(() =>
             bill.Update("", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
-    }
-
-    [Fact]
-    public void Update_WithRecurrenceSchedule_ShouldUpdateSchedule()
-    {
-        var bill = CreateValidCharge();
-        var newSchedule = RecurrenceSchedule.Create(RecurrenceFrequency.Weekly, new DateTime(2024, 6, 1));
-
-        bill.Update("Title", Money.Create(50m, "USD"), ChargeCategory.Other, DateTime.UtcNow.Date.AddDays(1), recurrenceSchedule: newSchedule);
-
-        Assert.NotNull(bill.RecurrenceSchedule);
-        Assert.Equal(RecurrenceFrequency.Weekly, bill.RecurrenceSchedule.Frequency);
     }
 
     [Fact]

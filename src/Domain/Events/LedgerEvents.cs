@@ -4,8 +4,7 @@ namespace Finance.Domain.Events;
 
 public record LedgerOpened(
     LedgerId LedgerId,
-    LedgerOwnerType OwnerType,
-    Guid OwnerId,
+    AccountingEntity Owner,
     string Currency) : DomainEvent;
 
 public record AccountOpened(

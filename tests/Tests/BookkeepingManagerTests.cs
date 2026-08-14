@@ -42,8 +42,8 @@ public class BookkeepingManagerTests
         var debit = entry.Postings.Single(p => p.Direction == EntryDirection.Debit);
         var credit = entry.Postings.Single(p => p.Direction == EntryDirection.Credit);
 
-        Assert.Equal(GroupChart.MemberCode(Payer), repo.CodeOf(debit.AccountId));
-        Assert.Equal(GroupChart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
+        Assert.Equal(Chart.MemberCode(Payer), repo.CodeOf(debit.AccountId));
+        Assert.Equal(Chart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
         Assert.Equal(40m, debit.Amount.Amount);
     }
 
@@ -58,8 +58,8 @@ public class BookkeepingManagerTests
         var debit = entry.Postings.Single(p => p.Direction == EntryDirection.Debit);
         var credit = entry.Postings.Single(p => p.Direction == EntryDirection.Credit);
 
-        Assert.Equal(GroupChart.CashCode, repo.CodeOf(debit.AccountId));
-        Assert.Equal(GroupChart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
+        Assert.Equal(Chart.CashCode, repo.CodeOf(debit.AccountId));
+        Assert.Equal(Chart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
     }
 
     [Fact]
@@ -74,9 +74,9 @@ public class BookkeepingManagerTests
 
         var payerEntry = Assert.Single(payerRepo.JournalEntries);
         // Dr Vendor Payable / Cr Member:payer — the payer fronted it.
-        Assert.Equal(GroupChart.VendorPayableCode,
+        Assert.Equal(Chart.PayableCode,
             payerRepo.CodeOf(payerEntry.Postings.Single(p => p.Direction == EntryDirection.Debit).AccountId));
-        Assert.Equal(GroupChart.MemberCode(Payer),
+        Assert.Equal(Chart.MemberCode(Payer),
             payerRepo.CodeOf(payerEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
 
         var poolManager = NewManager(out var poolRepo);
@@ -88,7 +88,7 @@ public class BookkeepingManagerTests
 
         var poolEntry = Assert.Single(poolRepo.JournalEntries);
         // Dr Vendor Payable / Cr Cash — paid from the pot.
-        Assert.Equal(GroupChart.CashCode,
+        Assert.Equal(Chart.CashCode,
             poolRepo.CodeOf(poolEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
@@ -127,7 +127,7 @@ public class BookkeepingManagerTests
 
         // Original + reversal + re-post: the payable nets to the corrected figure.
         var postings = repo.JournalEntries.SelectMany(e => e.Postings)
-            .Where(p => repo.CodeOf(p.AccountId) == GroupChart.VendorPayableCode);
+            .Where(p => repo.CodeOf(p.AccountId) == Chart.PayableCode);
 
         Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, postings));
     }
@@ -165,21 +165,20 @@ public class BookkeepingManagerTests
 
         public string CodeOf(AccountId id) => _accounts.Single(a => a.Id == id).Code;
 
-        public Task<Ledger?> GetLedgerByOwnerAsync(LedgerOwnerType ownerType, Guid ownerId, CancellationToken ct = default)
-            => Task.FromResult(_ledgers.FirstOrDefault(l => l.OwnerType == ownerType && l.OwnerId == ownerId));
+        public Task<Ledger?> GetLedgerByOwnerAsync(AccountingEntity owner, CancellationToken ct = default)
+            => Task.FromResult(_ledgers.FirstOrDefault(l => l.Owner == owner));
 
         public Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default) { _ledgers.Add(ledger); return Task.CompletedTask; }
 
         public Task<Ledger> GetOrOpenLedgerAsync(
-            LedgerOwnerType ownerType, Guid ownerId, string currency,
-            Func<LedgerId, IReadOnlyList<Account>> seed, CancellationToken ct = default)
+            AccountingEntity owner, string currency, CancellationToken ct = default)
         {
-            var existing = _ledgers.FirstOrDefault(l => l.OwnerType == ownerType && l.OwnerId == ownerId);
+            var existing = _ledgers.FirstOrDefault(l => l.Owner == owner);
             if (existing is not null) return Task.FromResult(existing);
 
-            var ledger = Ledger.Open(ownerType, ownerId, currency);
+            var ledger = Ledger.Open(owner, currency);
             _ledgers.Add(ledger);
-            _accounts.AddRange(seed(ledger.Id));
+            _accounts.AddRange(Chart.StandardAccounts(ledger.Id));
             return Task.FromResult(ledger);
         }
 
@@ -205,8 +204,13 @@ public class BookkeepingManagerTests
 
         public List<DebtTerms> DebtTerms { get; } = new();
         public Task AddDebtTermsAsync(DebtTerms terms, CancellationToken ct = default) { DebtTerms.Add(terms); return Task.CompletedTask; }
+        // Whose debt it is comes from the ledger the account sits in — the same join the real
+        // repository does.
         public Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DebtTerms>>(DebtTerms.Where(t => t.UserId.Value == userId).ToList());
+            => Task.FromResult<IReadOnlyList<DebtTerms>>(DebtTerms.Where(t =>
+                _accounts.Any(a => a.Id == t.AccountId
+                    && _ledgers.Any(l => l.Id == a.LedgerId
+                        && l.Owner == AccountingEntity.Person(userId)))).ToList());
 
         public Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default) { JournalEntries.Add(entry); return Task.CompletedTask; }
 

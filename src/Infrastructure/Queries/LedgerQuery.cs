@@ -15,7 +15,7 @@ internal sealed class LedgerQuery : ILedgerQuery
     public async Task<LedgerViewDto?> GetGroupLedgerAsync(Guid groupId, CancellationToken ct = default)
     {
         var ledger = await _db.Ledgers.AsNoTracking()
-            .FirstOrDefaultAsync(l => l.OwnerType == LedgerOwnerType.Group && l.OwnerId == groupId, ct);
+            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Household && l.Owner.Id == groupId, ct);
         if (ledger is null) return null;
 
         var accounts = await _db.Accounts.AsNoTracking()
@@ -45,7 +45,7 @@ internal sealed class LedgerQuery : ILedgerQuery
     public async Task<AccountStatementDto?> GetAccountStatementAsync(Guid groupId, Guid accountId, CancellationToken ct = default)
     {
         var ledger = await _db.Ledgers.AsNoTracking()
-            .FirstOrDefaultAsync(l => l.OwnerType == LedgerOwnerType.Group && l.OwnerId == groupId, ct);
+            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Household && l.Owner.Id == groupId, ct);
         if (ledger is null) return null;
 
         var accId = new AccountId(accountId);
@@ -87,7 +87,7 @@ internal sealed class LedgerQuery : ILedgerQuery
 
     public async Task<UserPositionDto> GetUserPositionAsync(Guid userId, CancellationToken ct = default)
     {
-        var memberCode = GroupChart.MemberCode(userId);
+        var memberCode = Chart.MemberCode(userId);
 
         // The user's cross-group position is the RECIPROCAL of these member-equity balances — recorded
         // once, in the group ledger, never double-posted into a second book.
@@ -95,8 +95,8 @@ internal sealed class LedgerQuery : ILedgerQuery
             from p in _db.Postings.AsNoTracking()
             join a in _db.Accounts.AsNoTracking() on p.AccountId equals a.Id
             join l in _db.Ledgers.AsNoTracking() on a.LedgerId equals l.Id
-            where a.Code == memberCode && l.OwnerType == LedgerOwnerType.Group
-            select new { Posting = p, GroupId = l.OwnerId, l.Currency, a.NormalBalance }).ToListAsync(ct);
+            where a.Code == memberCode && l.Owner.Kind == EntityKind.Household
+            select new { Posting = p, GroupId = l.Owner.Id, l.Currency, a.NormalBalance }).ToListAsync(ct);
 
         var groups = rows
             .GroupBy(x => new { x.GroupId, x.Currency, x.NormalBalance })

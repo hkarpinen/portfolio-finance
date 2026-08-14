@@ -18,7 +18,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
     private readonly IChargeRepository _expenseRepository;
-    private readonly IChargePaymentRepository _expensePaymentRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
     private readonly IBankSyncManager _syncService;
     private readonly ILogger<FinancialConnectionManager> _logger;
@@ -29,7 +28,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
         IChargeRepository expenseRepository,
-        IChargePaymentRepository expensePaymentRepository,
         IIncomeSourceRepository incomeRepository,
         IBankSyncManager syncService,
         ILogger<FinancialConnectionManager> logger)
@@ -39,7 +37,6 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         _connectionQuery = connectionQuery;
         _tokenProtector = tokenProtector;
         _expenseRepository = expenseRepository;
-        _expensePaymentRepository = expensePaymentRepository;
         _incomeRepository = incomeRepository;
         _syncService = syncService;
         _logger = logger;
@@ -256,9 +253,9 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (nextDue < DateTime.UtcNow.Date)
                 nextDue = DateTime.UtcNow.Date.AddDays(1);
 
-            var expense = Charge.Create(
+            var expense = Charge.CreateOwn(
                 UserId.Create(userId), sourceName, suggestion.AverageAmount,
-                ChargeCategory.Other, nextDue, schedule);
+                ChargeCategory.Other, nextDue);
             await _expenseRepository.AddAsync(expense, ct);
             suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveSuggestionAsync(suggestion, ct);
@@ -306,24 +303,22 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             Charge expense;
             if (request.GroupId.HasValue)
             {
-                expense = Charge.CreateGroup(
-                    GroupId.Create(request.GroupId.Value),
+                expense = Charge.Create(
+                    AccountingEntity.Household(request.GroupId.Value),
                     UserId.Create(userId),
-                    displayName, amount, ChargeCategory.Other, nextDue, schedule);
+                    displayName, amount, ChargeCategory.Other, nextDue);
                 expense.Activate();
             }
             else
             {
-                expense = Charge.Create(
+                expense = Charge.CreateOwn(
                     UserId.Create(userId), displayName, amount,
-                    ChargeCategory.Other, nextDue, schedule);
+                    ChargeCategory.Other, nextDue);
             }
 
-            var payment = ChargePayment.Create(
-                expense.Id, expense.UserId,
-                suggestion.TransactionDate, suggestion.ExternalTransactionId);
+            // No separate payment row: the charge posts on the day it belongs to, so accepting a
+            // suggestion for a transaction that already happened is on the books by that alone.
             await _expenseRepository.AddAsync(expense, ct);
-            await _expensePaymentRepository.AddAsync(payment, ct);
             suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);

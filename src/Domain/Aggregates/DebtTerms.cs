@@ -14,10 +14,11 @@ public sealed class DebtTerms
 {
     public Guid Id { get; private set; }
 
-    /// <summary>The liability account this describes. One set of terms per account.</summary>
+    /// <summary>
+    /// The debt account this describes. One set of terms per account, and the only link this
+    /// needs: whose debt it is, is whoever owns the ledger the account sits in.
+    /// </summary>
     public AccountId AccountId { get; private set; }
-
-    public UserId UserId { get; private set; }
 
     /// <summary>Annual percentage rate as a percentage — 24.99 means 24.99%, not 0.2499.</summary>
     public decimal AnnualPercentageRate { get; private set; }
@@ -40,23 +41,30 @@ public sealed class DebtTerms
 
     private DebtTerms() { }
 
+    /// <summary>
+    /// Takes the account rather than its id, so the pairing is checked here instead of being a
+    /// foreign key anybody could point at a cash or expense account. A rate on something that is
+    /// not borrowed is not wrong-looking data — it is meaningless data.
+    /// </summary>
     public static DebtTerms For(
-        AccountId accountId,
-        UserId userId,
+        Account account,
         decimal annualPercentageRate,
         decimal? creditLimit = null,
         int? statementDayOfMonth = null,
         int? paymentDueDayOfMonth = null,
         decimal? minimumPayment = null)
     {
+        if (account.AccountType != AccountType.Liability || !ChartCodes.IsDeclaredDebt(account.Code))
+            throw new InvalidOperationException(
+                $"{account.Name} is not a borrowing account, so it has no rate or limit.");
+
         Validate(annualPercentageRate, creditLimit, statementDayOfMonth, paymentDueDayOfMonth, minimumPayment);
 
         var now = DateTime.UtcNow;
         return new DebtTerms
         {
             Id = Guid.NewGuid(),
-            AccountId = accountId,
-            UserId = userId,
+            AccountId = account.Id,
             AnnualPercentageRate = annualPercentageRate,
             CreditLimit = creditLimit,
             StatementDayOfMonth = statementDayOfMonth,

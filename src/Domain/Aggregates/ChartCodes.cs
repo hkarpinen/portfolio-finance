@@ -17,6 +17,10 @@ public static class ChartCodes
 
     public static string Asset(Guid accountId) => $"1000:{accountId:N}";
     public static string Liability(Guid accountId) => $"2000:{accountId:N}";
+
+    /// <summary>A named debt somebody declared — a card or a loan, which carries terms. The
+    /// shared payable is 2000 with no subject and is not one: nobody quotes you a rate on it.</summary>
+    public static bool IsDeclaredDebt(string code) => code.StartsWith("2000:", StringComparison.Ordinal);
     public static string MemberEquity(Guid userId) => $"3000:{userId:N}";
     public static string Reciprocal(Guid counterpartyId) => $"4000:{counterpartyId:N}";
     public static string Expense(string category) => $"5000:{category.ToLowerInvariant()}";

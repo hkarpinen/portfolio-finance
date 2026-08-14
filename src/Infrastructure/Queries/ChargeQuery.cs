@@ -17,7 +17,7 @@ internal sealed class ChargeQuery : IChargeQuery
     public async Task<ChargeListDto> ListByUserAsync(ListChargesParams request, CancellationToken cancellationToken = default)
     {
         var userId = UserId.Create(request.UserId);
-        var query = _db.Charges.Where(b => b.UserId == userId && b.GroupId == null);
+        var query = _db.Charges.Where(b => b.Owner.Kind == EntityKind.Person && b.Owner.Id == userId.Value);
         if (request.ActiveOnly) query = query.Where(b => b.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -36,19 +36,11 @@ internal sealed class ChargeQuery : IChargeQuery
             b => b.Id,
             b => b.OccurrenceDate);
 
-        var payments = await _db.ChargePayments
-            .AsNoTracking()
-            .Where(p => expenseIds.Contains(p.ChargeId))
-            .ToListAsync(cancellationToken);
-
-        var paidChargeIds = payments
-            .Where(p => occurrencesByChargeId.TryGetValue(p.ChargeId, out var occ)
-                        && p.OccurrenceDate.Date == occ.Date)
-            .Select(p => p.ChargeId)
-            .ToHashSet();
+        var paidChargeIds = await PersonalChargeReads.GetPaidAsync(
+            _db, expenseIds.Select(id => id.Value).ToList(), cancellationToken);
 
         var responses = items
-            .Select(b => ChargeMapper.ToResponse(b, paidChargeIds.Contains(b.Id)))
+            .Select(b => ChargeMapper.ToResponse(b, paidChargeIds.Contains(b.Id.Value)))
             .ToArray();
 
         return new ChargeListDto(responses, total);
@@ -57,27 +49,23 @@ internal sealed class ChargeQuery : IChargeQuery
     public async Task<ChargeResponseDto?> GetDetailAsync(ChargeDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ChargeId.Create(request.ChargeId);
-        var callerId = UserId.Create(request.CallerId);
+        var callerUserId = UserId.Create(request.CallerUserId);
         // `GroupId == null` says "personal", not "yours" — the owner predicate is what
         // makes it yours. Null (→ 404), never 403, so an id can't be confirmed.
         var expense = await _db.Charges.AsNoTracking()
             .FirstOrDefaultAsync(
-                b => b.Id == id && b.GroupId == null && b.UserId == callerId,
+                b => b.Id == id && b.Owner.Kind == EntityKind.Person && b.Owner.Id == callerUserId.Value,
                 cancellationToken);
         if (expense is null) return null;
 
-        var occurrenceDate = expense.OccurrenceDate;
-        var payment = await _db.ChargePayments
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChargeId == id && p.OccurrenceDate == occurrenceDate, cancellationToken);
-
-        return ChargeMapper.ToResponse(expense, payment is not null);
+        var paid = await PersonalChargeReads.IsPaidAsync(_db, id.Value, cancellationToken);
+        return ChargeMapper.ToResponse(expense, paid);
     }
 
     public async Task<GroupChargeListDto> ListByGroupAsync(ListGroupChargesParams request, CancellationToken cancellationToken = default)
     {
         var groupId = GroupId.Create(request.GroupId);
-        var query = _db.Charges.Where(b => b.GroupId == groupId);
+        var query = _db.Charges.Where(b => b.Owner.Kind == EntityKind.Household && b.Owner.Id == groupId.Value);
         if (request.ActiveOnly) query = query.Where(b => b.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -100,9 +88,9 @@ internal sealed class ChargeQuery : IChargeQuery
         // The caller's REAL allocation — the split may be uneven, so this is never derived
         // by dividing the total.
         Dictionary<Guid, decimal> callerShareByCharge = [];
-        if (request.CallerId.HasValue)
+        if (request.CallerUserId.HasValue)
         {
-            var callerUserId = UserId.Create(request.CallerId.Value);
+            var callerUserId = UserId.Create(request.CallerUserId.Value);
             var expenseIds = items.Select(b => b.Id).ToList();
             var callerAllocations = await _db.Allocations
                 .AsNoTracking()
@@ -151,7 +139,7 @@ internal sealed class ChargeQuery : IChargeQuery
     public async Task<ChargeResponseDto?> GetGroupDetailAsync(GroupChargeDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ChargeId.Create(request.ChargeId);
-        var expense = await _db.Charges.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.GroupId != null, cancellationToken);
+        var expense = await _db.Charges.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.Owner.Kind == EntityKind.Household, cancellationToken);
         if (expense is null) return null;
 
         var owed = await VendorPaymentReads.GetOwedToVendorByChargeAsync(_db, new[] { id.Value }, cancellationToken);
@@ -170,7 +158,7 @@ internal sealed class ChargeQuery : IChargeQuery
         return splits.Select(ChargeMapper.ToAllocationResponse).ToArray();
     }
 
-    public async Task<GroupChargeDetailDto?> GetGroupChargeDetailAsync(Guid expenseId, Guid callerId, CancellationToken cancellationToken = default)
+    public async Task<GroupChargeDetailDto?> GetGroupChargeDetailAsync(Guid expenseId, Guid callerUserId, CancellationToken cancellationToken = default)
     {
         var expense = await GetGroupDetailAsync(new GroupChargeDetailParams(expenseId), cancellationToken);
         if (expense is null) return null;
@@ -188,9 +176,9 @@ internal sealed class ChargeQuery : IChargeQuery
             .ToDictionary(p => p.UserId.Value);
 
         // "Member" is the fallback for rows predating the membership projection.
-        var roles = expense.GroupId is { } gid
+        var roles = expense.Scope == ChargeScope.Group
             ? await _db.GroupMemberProjections.AsNoTracking()
-                .Where(m => m.GroupId == gid)
+                .Where(m => m.GroupId == expense.OwnerId)
                 .ToDictionaryAsync(m => m.UserId, m => m.Role, cancellationToken)
             : new Dictionary<Guid, string>();
 
@@ -231,9 +219,9 @@ internal sealed class ChargeQuery : IChargeQuery
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == split.UserId, cancellationToken);
 
-        var membershipRole = expense.GroupId is { } groupId
+        var membershipRole = expense.Owner.IsHousehold
             ? await _db.GroupMemberProjections.AsNoTracking()
-                .Where(m => m.GroupId == groupId.Value && m.UserId == split.UserId.Value)
+                .Where(m => m.GroupId == expense.Owner.Id && m.UserId == split.UserId.Value)
                 .Select(m => m.Role)
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
@@ -252,23 +240,19 @@ internal sealed class ChargeQuery : IChargeQuery
     public Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default)
         => _db.Charges.AsNoTracking()
             .AnyAsync(
-                e => e.UserId == userId && e.IsActive && e.Title == title && e.Amount.Amount == amount,
+                e => e.Owner.Kind == EntityKind.Person && e.Owner.Id == userId.Value
+                    && e.IsActive && e.Title == title && e.Amount.Amount == amount,
                 cancellationToken);
 
     public async Task<IReadOnlyCollection<GroupMonthlyContributionsDto>> ListAllocationsByGroupAsync(
         GroupId groupId, DateTime windowStart, DateTime windowEnd, CancellationToken cancellationToken = default)
     {
-        var allCharges = await _db.Charges
+        // One charge is one occurrence, so the window is a plain date filter the database can run.
+        var relevantCharges = await _db.Charges
             .AsNoTracking()
-            .Where(b => b.GroupId == groupId && b.IsActive)
+            .Where(b => b.Owner.Kind == EntityKind.Household && b.Owner.Id == groupId.Value && b.IsActive
+                        && b.OccurrenceDate >= windowStart && b.OccurrenceDate <= windowEnd)
             .ToListAsync(cancellationToken);
-
-        var relevantCharges = allCharges.Where(b =>
-            b.RecurrenceSchedule == null
-                ? b.DueDate >= windowStart && b.DueDate <= windowEnd
-                : b.RecurrenceSchedule.StartDate <= windowEnd &&
-                  (b.RecurrenceSchedule.EndDate == null || b.RecurrenceSchedule.EndDate >= windowStart)
-        ).ToList();
 
         if (relevantCharges.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
 
@@ -312,9 +296,7 @@ internal sealed class ChargeQuery : IChargeQuery
         {
             if (!expenseById.TryGetValue(split.ChargeId, out var expense)) continue;
 
-            IEnumerable<DateTime> occurrenceDates = expense.RecurrenceSchedule != null
-                ? expense.RecurrenceSchedule.GetOccurrencesInRange(windowStart, windowEndExclusive)
-                : [expense.DueDate];
+            IEnumerable<DateTime> occurrenceDates = [expense.OccurrenceDate];
 
             // Before the vendor is paid the bill is upcoming and no share is settled.
             var isPayerOwnShare = expense.PayerUserId == split.UserId.Value && vendorPaidFor(expense.Id.Value);

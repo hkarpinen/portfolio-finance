@@ -24,7 +24,7 @@ internal static class VendorPaymentReads
             where e.SourceChargeId != null && chargeIds.Contains(e.SourceChargeId.Value)
             join p in db.Postings.AsNoTracking() on e.Id equals p.EntryId
             join a in db.Accounts.AsNoTracking() on p.AccountId equals a.Id
-            where a.Code == GroupChart.VendorPayableCode
+            where a.Code == Chart.PayableCode
             select new { ChargeId = e.SourceChargeId!.Value, p.Direction, Amount = p.Amount.Amount })
             .ToListAsync(ct);
 
