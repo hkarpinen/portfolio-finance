@@ -115,6 +115,9 @@ internal sealed class IncomeManager : IIncomeManager
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
 
+        // Owner check. Null (→ 404), never 403 — a 403 would confirm the id exists.
+        if (income.UserId.Value != request.CallerUserId) return null;
+
         if (request.TaxProfile is null)
             income.ClearTaxProfile();
         else
@@ -134,6 +137,9 @@ internal sealed class IncomeManager : IIncomeManager
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
 
+        // Owner check. Null (→ 404), never 403 — a 403 would confirm the id exists.
+        if (income.UserId.Value != request.CallerUserId) return null;
+
         income.AddDeduction(IncomeMapper.ToDeduction(request.Deduction));
 
         await _incomeRepository.UpdateAsync(income, cancellationToken);
@@ -145,6 +151,9 @@ internal sealed class IncomeManager : IIncomeManager
     {
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
+
+        // Owner check. Null (→ 404), never 403 — a 403 would confirm the id exists.
+        if (income.UserId.Value != request.CallerUserId) return null;
 
         income.RemoveDeduction(
             Enum.Parse<DeductionType>(request.DeductionType, ignoreCase: true),

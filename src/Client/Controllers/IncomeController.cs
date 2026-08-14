@@ -96,21 +96,21 @@ public sealed class IncomeController : ControllerBase
     [HttpPut("/api/finance/income/{incomeId:guid}/tax-profile")]
     public async Task<IActionResult> SetTaxProfile(Guid incomeId, [FromBody] SetTaxProfileCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.SetTaxProfileAsync(request with { IncomeId = incomeId }, ct);
+        var result = await _manager.SetTaxProfileAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost("/api/finance/income/{incomeId:guid}/deductions")]
     public async Task<IActionResult> AddDeduction(Guid incomeId, [FromBody] AddDeductionCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.AddDeductionAsync(request with { IncomeId = incomeId }, ct);
+        var result = await _manager.AddDeductionAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("/api/finance/income/{incomeId:guid}/deductions")]
     public async Task<IActionResult> RemoveDeduction(Guid incomeId, [FromBody] RemoveDeductionCommand request, CancellationToken ct = default)
     {
-        var result = await _manager.RemoveDeductionAsync(request with { IncomeId = incomeId }, ct);
+        var result = await _manager.RemoveDeductionAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
         return result is null ? NotFound() : Ok(result);
     }
 

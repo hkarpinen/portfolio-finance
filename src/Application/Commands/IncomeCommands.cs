@@ -34,19 +34,23 @@ public sealed record UpdateIncomeCommand(
     DateTime? EndDate = null,
     string? Notes = null);
 
+// CallerUserId is the owner check, always overwritten in the controller from the token.
 public sealed record SetTaxProfileCommand(
     Guid IncomeId,
     // Null CLEARS the tax profile.
-    TaxProfileDto? TaxProfile);
+    TaxProfileDto? TaxProfile,
+    Guid CallerUserId = default);
 
 public sealed record AddDeductionCommand(
     Guid IncomeId,
-    PayrollDeductionDto Deduction);
+    PayrollDeductionDto Deduction,
+    Guid CallerUserId = default);
 
 public sealed record RemoveDeductionCommand(
     Guid IncomeId,
     string DeductionType,
-    string Label);
+    string Label,
+    Guid CallerUserId = default);
 
 public sealed record DeleteIncomeCommand(Guid IncomeId);
 
