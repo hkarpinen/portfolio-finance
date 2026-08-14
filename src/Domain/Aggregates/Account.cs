@@ -22,6 +22,21 @@ public sealed class Account : IAggregateRoot
 
     public NormalBalance NormalBalance => AccountType.NormalBalance();
 
+    /// <summary>
+    /// What these lines leave on this account, oriented to its normal balance: a debit-normal
+    /// account (asset, expense) reads positive when net-debited, a credit-normal one (liability,
+    /// equity, revenue) when net-credited.
+    ///
+    /// Takes the lines rather than fetching them — an account does not hold its own postings, and
+    /// a stored balance could drift from the journal it came from. But the ORIENTATION is the
+    /// account's own, so nobody has to pass it and nobody can pass the wrong one.
+    /// </summary>
+    public decimal BalanceFrom(IEnumerable<JournalLine> lines)
+    {
+        var (debits, credits) = LedgerMath.TrialBalance(lines);
+        return NormalBalance == NormalBalance.Debit ? debits - credits : credits - debits;
+    }
+
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 

@@ -34,7 +34,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .Select(a => new AccountBalanceDto(
                 a.Id.Value, a.Code, a.Name,
                 a.AccountType.ToString(), a.NormalBalance.ToString(),
-                LedgerMath.AccountBalance(a.NormalBalance, byAccount[a.Id])))
+                a.BalanceFrom(byAccount[a.Id])))
             .OrderBy(a => a.Code)
             .ToList();
 
