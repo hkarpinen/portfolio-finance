@@ -19,7 +19,12 @@ internal sealed class GroupQuery : IGroupQuery
     public Task<bool> ExpenseBelongsToGroupAsync(Guid groupId, Guid expenseId, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(expenseId);
-        var gid = GroupId.Create(groupId);
-        return _db.Expenses.AsNoTracking().AnyAsync(c => c.Id == id && c.GroupId == gid, cancellationToken);
+
+        // Owner.Kind/Owner.Id, not the GroupId shorthand: that one is computed from Owner and has
+        // no column, so EF cannot translate it and the whole query throws at runtime rather than
+        // failing to compile. Every group route carrying an {expenseId} runs through here.
+        return _db.Expenses.AsNoTracking().AnyAsync(
+            e => e.Id == id && e.Owner.Kind == EntityKind.Group && e.Owner.Id == groupId,
+            cancellationToken);
     }
 }

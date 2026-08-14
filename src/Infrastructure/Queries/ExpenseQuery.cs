@@ -372,7 +372,9 @@ internal sealed class ExpenseQuery : IExpenseQuery
         // Gather all active expenses in this group along with their splits.
         var expenses = await _db.Expenses
             .AsNoTracking()
-            .Where(e => e.GroupId == groupId && e.IsActive)
+            // Owner.Kind/Owner.Id rather than the computed GroupId, which has no column and
+            // cannot be translated — see GroupQuery.ExpenseBelongsToGroupAsync.
+            .Where(e => e.Owner.Kind == EntityKind.Group && e.Owner.Id == groupId.Value && e.IsActive)
             .ToListAsync(cancellationToken);
 
         if (expenses.Count == 0)

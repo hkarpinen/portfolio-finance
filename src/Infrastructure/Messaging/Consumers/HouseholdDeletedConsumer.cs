@@ -43,13 +43,16 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
 
         await _db.GroupMemberProjections.Where(p => p.GroupId == groupId).ExecuteDeleteAsync(ct);
 
-        var group = GroupId.Create(groupId);
-        // An share's group is its expense's, so the shares go first, matched through the bills
-        // they are on.
+        // A share's group is its expense's, so the shares go first, matched through the bills
+        // they are on. Owner.Kind/Owner.Id rather than the computed GroupId, which has no column
+        // and cannot be translated — see GroupQuery.ExpenseBelongsToGroupAsync.
         await _db.Shares
-            .Where(a => _db.Expenses.Any(c => c.Id == a.ExpenseId && c.GroupId == group))
+            .Where(a => _db.Expenses.Any(
+                e => e.Id == a.ExpenseId && e.Owner.Kind == EntityKind.Group && e.Owner.Id == groupId))
             .ExecuteDeleteAsync(ct);
-        await _db.Expenses.Where(c => c.GroupId == group).ExecuteDeleteAsync(ct);
+        await _db.Expenses
+            .Where(e => e.Owner.Kind == EntityKind.Group && e.Owner.Id == groupId)
+            .ExecuteDeleteAsync(ct);
 
         _db.ProcessedEvents.Add(new ProcessedEvent(messageId, nameof(HouseholdDeleted), DateTime.UtcNow));
         try
