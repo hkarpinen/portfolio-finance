@@ -14,24 +14,19 @@ public class ConvergenceTests
 
     private static Money Usd(decimal a) => Money.Create(a, "USD");
 
-    private static EntryDraft Accrual(decimal amount = 90m, AccountId? credit = null) =>
-        EntryDraft.Between(Groceries, credit ?? Payable, Usd(amount), Jan3, "Shop — incurred", "expense:1");
-
-    private static JournalEntry Posted(EntryDraft d) =>
-        JournalEntry.Post(L, d.Date, d.Description, d.Lines, d.Source);
+    private static JournalEntry Accrual(decimal amount = 90m, AccountId? credit = null) =>
+        JournalEntry.Movement(L, Groceries, credit ?? Payable, Usd(amount), Jan3, "Shop — incurred", "expense:1");
 
     [Fact]
     public void AnEntrySayingTheSameThing_IsRecognised()
     {
-        var draft = Accrual();
-
-        Assert.True(draft.AlreadySaidBy(Posted(draft)));
+        Assert.True(Accrual().SaysTheSameAs(Accrual()));
     }
 
     [Fact]
     public void ADifferentAmount_IsNotTheSameThing()
     {
-        Assert.False(Accrual(95m).AlreadySaidBy(Posted(Accrual(90m))));
+        Assert.False(Accrual(95m).SaysTheSameAs(Accrual(90m)));
     }
 
     // The comparators this replaced read the first DEBIT line and nothing else. An entry whose
@@ -42,28 +37,29 @@ public class ConvergenceTests
     {
         var somewhereElse = Accrual(credit: Hank);
 
-        Assert.False(Accrual().AlreadySaidBy(Posted(somewhereElse)));
+        Assert.False(Accrual().SaysTheSameAs(somewhereElse));
     }
 
     [Fact]
     public void ADifferentDateOrDescription_IsNotTheSameThing()
     {
-        var moved = EntryDraft.Between(Groceries, Payable, Usd(90m), Jan3.AddDays(1), "Shop — incurred", "expense:1");
-        var retitled = EntryDraft.Between(Groceries, Payable, Usd(90m), Jan3, "Corner shop — incurred", "expense:1");
+        var moved = JournalEntry.Movement(L, Groceries, Payable, Usd(90m), Jan3.AddDays(1), "Shop — incurred", "expense:1");
+        var retitled = JournalEntry.Movement(L, Groceries, Payable, Usd(90m), Jan3, "Corner shop — incurred", "expense:1");
 
-        Assert.False(Accrual().AlreadySaidBy(Posted(moved)));
-        Assert.False(Accrual().AlreadySaidBy(Posted(retitled)));
+        Assert.False(Accrual().SaysTheSameAs(moved));
+        Assert.False(Accrual().SaysTheSameAs(retitled));
     }
 
-    // Order is an artefact of how the draft was assembled, not a fact about the entry.
+    // Order is an artefact of how the caller assembled the lines, not a fact about the entry.
     [Fact]
     public void TheSameLinesInAnotherOrder_AreTheSameEntry()
     {
-        var draft = Accrual();
-        var reversedOrder = new EntryDraft(
-            draft.Source, draft.Date, draft.Description, draft.Lines.Reverse().ToList());
+        var lines = Accrual().JournalLines
+            .Select(l => new JournalLineDraft(l.AccountId, l.Direction, l.Amount))
+            .Reverse().ToList();
+        var reversedOrder = JournalEntry.Post(L, Jan3, "Shop — incurred", lines, "expense:1");
 
-        Assert.True(draft.AlreadySaidBy(Posted(reversedOrder)));
+        Assert.True(Accrual().SaysTheSameAs(reversedOrder));
     }
 
     [Fact]
@@ -71,15 +67,15 @@ public class ConvergenceTests
     {
         // It nets to nothing and still satisfies double-entry, so nothing downstream would object.
         Assert.Throws<InvalidOperationException>(
-            () => EntryDraft.Between(Groceries, Groceries, Usd(90m), Jan3, "Nowhere", "s"));
+            () => JournalEntry.Movement(L, Groceries, Groceries, Usd(90m), Jan3, "Nowhere", "s"));
     }
 
     [Fact]
     public void BooksThatAlreadyAgree_NeedNoWriting()
     {
-        var draft = Accrual();
+        var candidate = Accrual();
 
-        var plan = ConvergencePlan.For(draft, [Posted(draft)]);
+        var plan = ConvergencePlan.For(candidate, [Accrual()]);
 
         Assert.True(plan.AlreadyThere);
         Assert.Empty(plan.Reverse);
@@ -87,27 +83,27 @@ public class ConvergenceTests
     }
 
     [Fact]
-    public void BooksThatSayNothing_GetTheDraft()
+    public void BooksThatSayNothing_GetTheEntry()
     {
-        var draft = Accrual();
+        var candidate = Accrual();
 
-        var plan = ConvergencePlan.For(draft, []);
+        var plan = ConvergencePlan.For(candidate, []);
 
         Assert.False(plan.AlreadyThere);
         Assert.Empty(plan.Reverse);
-        Assert.Same(draft, plan.Post);
+        Assert.Same(candidate, plan.Post);
     }
 
     [Fact]
     public void BooksThatSaySomethingElse_AreReversedAndReplaced()
     {
-        var stale = Posted(Accrual(90m));
-        var draft = Accrual(120m);
+        var stale = Accrual(90m);
+        var candidate = Accrual(120m);
 
-        var plan = ConvergencePlan.For(draft, [stale]);
+        var plan = ConvergencePlan.For(candidate, [stale]);
 
         Assert.Equal([stale], plan.Reverse);
-        Assert.Same(draft, plan.Post);
+        Assert.Same(candidate, plan.Post);
     }
 
     // Two in-effect entries under one source should not happen. Reversing both and re-posting
@@ -115,20 +111,20 @@ public class ConvergenceTests
     [Fact]
     public void SeveralEntriesUnderOneSource_AreAllReversed()
     {
-        var draft = Accrual();
-        var first = Posted(draft);
-        var second = Posted(draft);
+        var candidate = Accrual();
+        var first = Accrual();
+        var second = Accrual();
 
-        var plan = ConvergencePlan.For(draft, [first, second]);
+        var plan = ConvergencePlan.For(candidate, [first, second]);
 
         Assert.Equal(2, plan.Reverse.Count);
-        Assert.Same(draft, plan.Post);
+        Assert.Same(candidate, plan.Post);
     }
 
     [Fact]
     public void RemovingASource_ReversesWithoutReplacing()
     {
-        var posted = Posted(Accrual());
+        var posted = Accrual();
 
         var plan = ConvergencePlan.Remove([posted]);
 

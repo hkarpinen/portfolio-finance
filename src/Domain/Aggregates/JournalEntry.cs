@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Aggregates;
 
 /// <summary>The DIRECTION carries the sign; the amount is always positive.</summary>
-public sealed class JournalLine : IJournalLineFacts
+public sealed class JournalLine
 {
     public JournalLineId Id { get; private set; }
     public JournalEntryId EntryId { get; private set; }
@@ -31,7 +31,7 @@ public sealed class JournalLine : IJournalLineFacts
 /// An entry cannot exist unless Σ debits == Σ credits, and is immutable once posted —
 /// corrections are mirror entries referencing the original, never edits.
 /// </summary>
-public sealed class JournalEntry : IAggregateRoot, IJournalEntryFacts
+public sealed class JournalEntry : IAggregateRoot
 {
     private readonly List<JournalLine> _lines = new();
     private readonly List<DomainEvent> _domainEvents = new();
@@ -64,14 +64,39 @@ public sealed class JournalEntry : IAggregateRoot, IJournalEntryFacts
     public Guid? SourceMemberId { get; private set; }
 
     public IReadOnlyList<JournalLine> JournalLines => _lines.AsReadOnly();
-
-    /// <summary>The lines as a draft sees them, so convergence can compare without the value
-    /// object depending on this aggregate.</summary>
-    IReadOnlyList<IJournalLineFacts> IJournalEntryFacts.Lines => _lines;
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 
     private JournalEntry() { }
+
+    /// <summary>
+    /// A balanced movement between two accounts — the shape of every entry this service posts.
+    /// Which two accounts and in which direction is the accounting; the shape is not.
+    /// </summary>
+    public static JournalEntry Movement(
+        LedgerId ledgerId,
+        AccountId debit,
+        AccountId credit,
+        Money amount,
+        DateTime date,
+        string description,
+        string? source = null,
+        Guid? sourceExpenseId = null,
+        Guid? sourceShareId = null,
+        DateTime? sourceOccurrence = null,
+        Guid? sourceMemberId = null,
+        Guid? postedByUserId = null)
+    {
+        // Both legs on one account nets to nothing while still satisfying double-entry, so it
+        // passes every check below and records an event that did not happen.
+        if (debit == credit)
+            throw new InvalidOperationException("A movement needs two different accounts.");
+
+        return Post(
+            ledgerId, DateTime.SpecifyKind(date.Date, DateTimeKind.Utc), description,
+            [JournalLineDraft.Debit(debit, amount), JournalLineDraft.Credit(credit, amount)],
+            source, sourceExpenseId, sourceShareId, sourceOccurrence, sourceMemberId, postedByUserId);
+    }
 
     /// <summary>
     /// Post a balanced journal entry. Throws unless the lines satisfy double-entry:
@@ -163,6 +188,37 @@ public sealed class JournalEntry : IAggregateRoot, IJournalEntryFacts
     /// deciding this never means scanning for reversal pairs.
     /// </summary>
     public bool IsInEffect => ReversalOfEntryId is null && ReversedByEntryId is null;
+
+    /// <summary>
+    /// Does this entry already say exactly what <paramref name="other"/> says?
+    ///
+    /// Compares the WHOLE entry — date, description, and every line by account, direction and
+    /// amount. The per-path checks this replaced read one debit line each and let every other
+    /// difference through, so an entry that had drifted in a way its check did not inspect was
+    /// left standing and reported as in sync.
+    ///
+    /// Line order is not significant: the same lines in another order are the same entry, and the
+    /// order is an artefact of how the caller assembled them.
+    /// </summary>
+    public bool SaysTheSameAs(JournalEntry other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (other.Date != Date || other.Description != Description) return false;
+        if (other._lines.Count != _lines.Count) return false;
+
+        var unmatched = _lines.ToList();
+        foreach (var line in other._lines)
+        {
+            var i = unmatched.FindIndex(l =>
+                l.AccountId == line.AccountId
+                && l.Direction == line.Direction
+                && l.Amount.Amount == line.Amount.Amount
+                && l.Amount.Currency == line.Amount.Currency);
+            if (i < 0) return false;
+            unmatched.RemoveAt(i);
+        }
+        return true;
+    }
 
     private static EntryDirection Flip(EntryDirection d) =>
         d == EntryDirection.Debit ? EntryDirection.Credit : EntryDirection.Debit;
