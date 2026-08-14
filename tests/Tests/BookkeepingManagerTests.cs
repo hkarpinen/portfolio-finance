@@ -126,10 +126,10 @@ public class BookkeepingManagerTests
             Group, Expense, "Rent", "Housing", 1100m, "USD", july));
 
         // Original + reversal + re-post: the payable nets to the corrected figure.
-        var journal_lines = repo.JournalEntries.SelectMany(e => e.JournalLines)
+        var lines = repo.JournalEntries.SelectMany(e => e.JournalLines)
             .Where(p => repo.CodeOf(p.AccountId) == Chart.PayableCode);
 
-        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines));
+        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, lines));
     }
 
     [Fact]

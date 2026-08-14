@@ -18,9 +18,9 @@ public sealed record RecurringExpenseDto(
     bool IsActive);
 
 /// <summary>
-/// One date the schedule places a expense on, and whether that expense exists yet.
+/// One date the schedule places an expense on, and whether that expense exists yet.
 ///
-/// Unrecorded is the normal state: a expense is only written when somebody acts on it, so most of
+/// Unrecorded is the normal state: an expense is only written when somebody acts on it, so most of
 /// what a screen shows is forecast — real dates and amounts, no rows behind them.
 /// </summary>
 public sealed record ScheduledOccurrenceDto(

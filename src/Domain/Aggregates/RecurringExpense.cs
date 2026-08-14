@@ -7,7 +7,7 @@ namespace Finance.Domain.Aggregates;
 /// The standing agreement behind a repeating cost — rent, a subscription, the internet bill.
 ///
 /// It says which <see cref="Expense"/>s SHOULD exist and when: an anchor date stepped by an
-/// interval. It never posts anything itself. A expense only becomes real when somebody acts on
+/// interval. It never posts anything itself. An expense only becomes real when somebody acts on
 /// that occurrence, and it takes the amount and split this schedule held AT THAT MOMENT.
 ///
 /// That copy is the whole point. Editing a schedule changes what has not happened yet and cannot
@@ -43,7 +43,7 @@ public sealed class RecurringExpense : IAggregateRoot
 
     /// <summary>
     /// Every amount this schedule has expensed, each from the date it took effect. A rise is a new
-    /// version rather than an edit, so generating a expense for a month in the past uses what was
+    /// version rather than an edit, so generating an expense for a month in the past uses what was
     /// true then — not today's figure.
     /// </summary>
     public IReadOnlyList<RecurringExpenseTerm> Amounts => _amounts.AsReadOnly();
@@ -168,14 +168,14 @@ public sealed class RecurringExpense : IAggregateRoot
     }
 
     /// <summary>
-    /// The dates this schedule says a expense belongs on, within a window. Nothing is stored — the
-    /// forecast every screen draws is this, and a expense exists for a date only once acted on.
+    /// The dates this schedule says an expense belongs on, within a window. Nothing is stored — the
+    /// forecast every screen draws is this, and an expense exists for a date only once acted on.
     /// </summary>
     public IReadOnlyList<DateTime> OccurrencesIn(DateTime from, DateTime toExclusive) =>
         IsActive ? Recurrence.GetOccurrencesInRange(from, toExclusive) : [];
 
     /// <summary>
-    /// True when this schedule really does place a expense on that date. Guards generation: a
+    /// True when this schedule really does place an expense on that date. Guards generation: a
     /// caller cannot invent an occurrence the agreement never described.
     /// </summary>
     public bool Covers(DateTime occurrenceDate)

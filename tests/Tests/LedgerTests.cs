@@ -84,14 +84,14 @@ public class LedgerTests
     public void AccountBalance_DebitNormal_Asset()
     {
         // Cash: +700 +300 −1000 = 0 (asset, debit-normal)
-        var journal_lines = new[]
+        var lines = new[]
         {
             JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { JournalLineDraft.Debit(Cash, Usd(700)),  JournalLineDraft.Credit(MemberHank, Usd(700)) }),
             JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { JournalLineDraft.Debit(Cash, Usd(300)),  JournalLineDraft.Credit(MemberBob, Usd(300)) }),
             JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { JournalLineDraft.Debit(MemberHank, Usd(700)), JournalLineDraft.Debit(MemberBob, Usd(300)), JournalLineDraft.Credit(Cash, Usd(1000)) }),
         }.SelectMany(e => e.JournalLines).Where(p => p.AccountId == Cash);
 
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, lines));
     }
 
     [Fact]

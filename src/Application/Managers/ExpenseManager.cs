@@ -44,7 +44,7 @@ internal sealed class ExpenseManager : IExpenseManager
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
         // A repeating personal cost is an agreement, same as a repeating house bill. Only the
-        // one-off is a expense somebody typed straight in.
+        // one-off is an expense somebody typed straight in.
         if (recurrence is not null)
         {
             var schedule = await _schedules.CreateAsync(new CreateRecurringExpenseCommand(
@@ -163,7 +163,7 @@ internal sealed class ExpenseManager : IExpenseManager
     }
 
     /// <summary>
-    /// Opens the agreement and bills the occurrence the caller was entering, so they get a expense
+    /// Opens the agreement and bills the occurrence the caller was entering, so they get an expense
     /// back exactly as before — the schedule sits behind it, and every later month comes from it.
     /// </summary>
     private async Task<Expense> OpenScheduleAndBillFirstOccurrenceAsync(

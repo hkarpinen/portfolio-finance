@@ -4,7 +4,7 @@ namespace Finance.Domain.ValueObjects;
 /// What a schedule expensed from a given date onward.
 ///
 /// A rent rise is a new version, not an edit. That is how an agreement actually changes, and it
-/// means a expense generated for a date in the past picks up what was true THEN even if nobody had
+/// means an expense generated for a date in the past picks up what was true THEN even if nobody had
 /// got round to recording that month yet.
 ///
 /// A bare decimal: the currency belongs to the schedule and cannot change halfway through an

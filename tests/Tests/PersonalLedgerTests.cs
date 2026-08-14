@@ -81,11 +81,11 @@ public class PersonalLedgerTests
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
-        var journal_lines = repo.JournalEntries
+        var lines = repo.JournalEntries
             .SelectMany(e => e.JournalLines)
             .Where(p => p.AccountId.Value == accountId);
 
-        Assert.Equal(1200m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines));
+        Assert.Equal(1200m, LedgerMath.AccountBalance(NormalBalance.Credit, lines));
     }
 
     [Fact]
@@ -228,16 +228,16 @@ public class PersonalLedgerTests
         await manager.ConvergePersonalExpenseAsync(expense.Id.Value);
         await manager.RecordPersonalPaymentAsync(expense.Id.Value, cardId, DateTime.UtcNow);
 
-        var journal_lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
+        var lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
 
         // The company is paid — the payable nets to nothing.
         Assert.Equal(0m, LedgerMath.AccountBalance(
             NormalBalance.Credit,
-            journal_lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
+            lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
 
         // And the 45 is now owed to the card issuer instead, which is what happened.
         Assert.Equal(45m, LedgerMath.AccountBalance(
-            NormalBalance.Credit, journal_lines.Where(p => p.AccountId.Value == cardId)));
+            NormalBalance.Credit, lines.Where(p => p.AccountId.Value == cardId)));
     }
 
     [Fact]
@@ -252,15 +252,15 @@ public class PersonalLedgerTests
         await manager.ConvergePersonalExpenseAsync(expense.Id.Value);
         await manager.RecordPersonalPaymentAsync(expense.Id.Value, null, DateTime.UtcNow);
 
-        var journal_lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
+        var lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
 
         Assert.Equal(0m, LedgerMath.AccountBalance(
             NormalBalance.Credit,
-            journal_lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
+            lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
         // Cash is an asset, so paying out leaves it 45 down.
         Assert.Equal(-45m, LedgerMath.AccountBalance(
             NormalBalance.Debit,
-            journal_lines.Where(p => repo.CodeOf(p.AccountId) == Chart.CashCode)));
+            lines.Where(p => repo.CodeOf(p.AccountId) == Chart.CashCode)));
     }
 
     [Fact]

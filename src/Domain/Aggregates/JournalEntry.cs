@@ -33,7 +33,7 @@ public sealed class JournalLine
 /// </summary>
 public sealed class JournalEntry : IAggregateRoot
 {
-    private readonly List<JournalLine> _journalLines = new();
+    private readonly List<JournalLine> _lines = new();
     private readonly List<DomainEvent> _domainEvents = new();
 
     public JournalEntryId Id { get; private set; }
@@ -63,7 +63,7 @@ public sealed class JournalEntry : IAggregateRoot
     public DateTime? SourceOccurrence { get; private set; }
     public Guid? SourceMemberId { get; private set; }
 
-    public IReadOnlyList<JournalLine> JournalLines => _journalLines.AsReadOnly();
+    public IReadOnlyList<JournalLine> JournalLines => _lines.AsReadOnly();
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 
@@ -71,7 +71,7 @@ public sealed class JournalEntry : IAggregateRoot
 
     /// <summary>
     /// Post a balanced journal entry. Throws unless the lines satisfy double-entry:
-    /// ≥2 journal_lines, all positive, single currency (P10), and Σ debits == Σ credits (P2).
+    /// ≥2 lines, all positive, single currency (P10), and Σ debits == Σ credits (P2).
     /// </summary>
     public static JournalEntry Post(
         LedgerId ledgerId,
@@ -103,7 +103,7 @@ public sealed class JournalEntry : IAggregateRoot
             PostedByUserId = postedByUserId,
         };
         foreach (var l in lines)
-            entry._journalLines.Add(new JournalLine(JournalLineId.New(), entry.Id, l.AccountId, l.Direction, l.Amount));
+            entry._lines.Add(new JournalLine(JournalLineId.New(), entry.Id, l.AccountId, l.Direction, l.Amount));
 
         entry._domainEvents.Add(new JournalEntryPosted(entry.Id, ledgerId, entry.Date, description));
         return entry;
@@ -121,7 +121,7 @@ public sealed class JournalEntry : IAggregateRoot
         if (ReversedByEntryId is not null)
             throw new InvalidOperationException("Entry has already been reversed.");
 
-        var mirrored = _journalLines
+        var mirrored = _lines
             .Select(p => new JournalLineDraft(p.AccountId, Flip(p.Direction), p.Amount))
             .ToList();
 
@@ -144,7 +144,7 @@ public sealed class JournalEntry : IAggregateRoot
             PostedByUserId = reversedByUserId,
         };
         foreach (var l in mirrored)
-            reversal._journalLines.Add(new JournalLine(JournalLineId.New(), reversal.Id, l.AccountId, l.Direction, l.Amount));
+            reversal._lines.Add(new JournalLine(JournalLineId.New(), reversal.Id, l.AccountId, l.Direction, l.Amount));
 
         reversal._domainEvents.Add(new JournalEntryReversed(reversal.Id, Id, LedgerId));
 
@@ -167,7 +167,7 @@ public sealed class JournalEntry : IAggregateRoot
     /// </summary>
     public bool SaysAccrual(AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
     {
-        var debit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var debit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
         return debit is not null
             && debit.AccountId == expenseAccount
             && debit.Amount.Amount == total
@@ -179,8 +179,8 @@ public sealed class JournalEntry : IAggregateRoot
     /// <summary>Already says the same 1↔1 move — same two accounts, same amount.</summary>
     public bool SaysTransfer(AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
     {
-        var debit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        var credit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
+        var debit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var credit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
         return debit is not null && credit is not null
             && debit.AccountId == debitAccount
             && credit.AccountId == creditAccount

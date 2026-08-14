@@ -65,7 +65,7 @@ public static class Chart
         new(MemberCode(userId), () => OpenMemberAccount(ledgerId, userId));
 
     /// <summary>
-    /// Which account funds a expense. The ledger has no opinion about funding sources and the
+    /// Which account funds an expense. The ledger has no opinion about funding sources and the
     /// engine takes account ids, so this switch is the one place the two meet.
     /// </summary>
     public static AccountSpec Funding(LedgerId ledgerId, FundingSource fundingSource, Guid payerUserId) =>
@@ -86,7 +86,7 @@ public static class Chart
         Account.Open(ledgerId, AssetCode(accountId), name, AccountType.Asset);
 
     /// <summary>A card or loan. Liability, so a purchase CREDITS it and a payment DEBITS it —
-    /// which is why nothing about the journalLine engine changes for debt.</summary>
+    /// which is why nothing about the posting engine changes for debt.</summary>
     public static Account OpenDebtAccount(LedgerId ledgerId, Guid accountId, string name) =>
         Account.Open(ledgerId, LiabilityCode(accountId), name, AccountType.Liability);
 

@@ -12,7 +12,7 @@ namespace Client.Controllers;
 /// Repeating costs — the agreement, not the individual bills.
 ///
 /// A schedule posts nothing. It says which expenses should exist; the forecast every screen draws
-/// is <c>occurrences</c>, and a expense is written only when somebody acts on one.
+/// is <c>occurrences</c>, and an expense is written only when somebody acts on one.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -53,7 +53,7 @@ public sealed class RecurringExpensesController(
         => await schedules.DeactivateAsync(recurringExpenseId, User.GetUserId().Value, ct) ? NoContent() : NotFound();
 
     /// <summary>
-    /// The dates this schedule places a expense on, and the expense for each where one exists.
+    /// The dates this schedule places an expense on, and the expense for each where one exists.
     /// Most will be null — that is the forecast, and nothing is written until somebody acts.
     /// </summary>
     [HttpGet("{recurringExpenseId:guid}/occurrences")]
@@ -66,7 +66,7 @@ public sealed class RecurringExpensesController(
 
     /// <summary>
     /// Writes every occurrence that has come due and is not recorded yet. What turns a period
-    /// passing into a expense: the money screens call it before they read, so by the time anyone
+    /// passing into an expense: the money screens call it before they read, so by the time anyone
     /// looks, the bills that came due are on the books.
     /// </summary>
     [HttpPost("catch-up")]

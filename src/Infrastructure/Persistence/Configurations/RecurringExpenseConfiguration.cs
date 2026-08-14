@@ -45,7 +45,7 @@ internal sealed class RecurringExpenseConfiguration : IEntityTypeConfiguration<R
         });
         builder.Navigation(s => s.Amounts).AutoInclude();
 
-        // The anchor and interval. Nothing here is a date a expense exists on — those are computed.
+        // The anchor and interval. Nothing here is a date an expense exists on — those are computed.
         builder.OwnsOne(s => s.Recurrence, r =>
         {
             r.Property(x => x.Frequency).HasColumnName("frequency").HasConversion<string>().HasMaxLength(50).IsRequired();

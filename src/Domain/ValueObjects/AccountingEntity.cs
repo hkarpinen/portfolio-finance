@@ -19,7 +19,7 @@ public enum EntityKind
 ///
 /// This replaces the pairs that used to say the same thing twice — a nullable GroupId doubling as
 /// a discriminator with a UserId that meant the owner in one case and the author in another, and a
-/// ledger's OwnerType beside its OwnerId. A expense, a schedule and a ledger all belong to an
+/// ledger's OwnerType beside its OwnerId. An expense, a schedule and a ledger all belong to an
 /// entity; nothing else about them turns on which kind it is.
 /// </summary>
 public readonly record struct AccountingEntity(EntityKind Kind, Guid Id)

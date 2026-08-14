@@ -26,8 +26,8 @@ public static class ShareMath
     public static bool Fits(decimal alreadyAllocated, decimal newAmount, decimal expenseTotal)
         => alreadyAllocated + newAmount <= expenseTotal;
 
-    // The same rule read from the other end: shrinking a expense must not strand shares above
-    // it. Journalizing such a expense has no account that can absorb the negative remainder, and
+    // The same rule read from the other end: shrinking an expense must not strand shares above
+    // it. Journalizing such an expense has no account that can absorb the negative remainder, and
     // that failure surfaces inside the journalLine consumer where nobody can act on it.
     public static bool CoversShares(decimal expenseTotal, decimal allocatedTotal)
         => allocatedTotal <= expenseTotal;

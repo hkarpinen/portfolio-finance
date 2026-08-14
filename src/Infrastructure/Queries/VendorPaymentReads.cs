@@ -13,7 +13,7 @@ namespace Infrastructure.Queries;
 // never touched the account, read as paid with no backfill.
 internal static class VendorPaymentReads
 {
-    // A expense absent from the map owes 0 (already paid, or never accrued).
+    // An expense absent from the map owes 0 (already paid, or never accrued).
     public static async Task<Dictionary<Guid, decimal>> GetOwedToVendorByExpenseAsync(
         FinanceDbContext db, IReadOnlyCollection<Guid> expenseIds, CancellationToken ct)
     {

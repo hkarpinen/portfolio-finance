@@ -22,7 +22,7 @@ public interface IRecurringExpenseManager
     /// Writes the expense for one occurrence if it is not already there, and returns it either way.
     ///
     /// This is the generation step, and it is deliberately driven by somebody DOING something —
-    /// paying a share, marking the vendor paid — rather than by a clock. Nothing needs a expense to
+    /// paying a share, marking the vendor paid — rather than by a clock. Nothing needs an expense to
     /// exist until then, and generating ahead of time would put a cost in the books that has not
     /// happened.
     /// </summary>
@@ -32,7 +32,7 @@ public interface IRecurringExpenseManager
     /// Writes every occurrence that has come due and is not on the books yet, for one house or one
     /// person, and returns how many that was.
     ///
-    /// This is how a period passing turns into a expense without a clock: nobody needs the bill to
+    /// This is how a period passing turns into an expense without a clock: nobody needs the bill to
     /// exist until somebody looks at the money, and by the time they do, it does. Never writes
     /// past <paramref name="asOf"/> — a cost that has not happened does not belong in the books.
     /// </summary>

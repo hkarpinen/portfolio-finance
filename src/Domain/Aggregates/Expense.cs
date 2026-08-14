@@ -14,7 +14,7 @@ namespace Finance.Domain.Aggregates;
 /// are two different facts, and they used to be three fields saying them: a UserId that meant the
 /// owner on a personal expense and the author on a shared one, a nullable GroupId doubling as the
 /// discriminator, and a CreatedBy that repeated the UserId. There is no such thing as a "group
-/// expense"; there is a expense, and an entity whose books it lands in.
+/// expense"; there is an expense, and an entity whose books it lands in.
 /// </summary>
 public class Expense : IAggregateRoot
 {
@@ -25,7 +25,7 @@ public class Expense : IAggregateRoot
     /// <summary>Whose books this lands in.</summary>
     public AccountingEntity Owner { get; private set; }
 
-    /// <summary>The person who wrote it down. On a expense somebody keeps for themselves this is
+    /// <summary>The person who wrote it down. On an expense somebody keeps for themselves this is
     /// also the owner; on a household's it is whoever entered it for the house.</summary>
     public UserId EnteredBy { get; private set; }
 
@@ -80,7 +80,7 @@ public class Expense : IAggregateRoot
     public bool IsManagedBy(Guid userId) => EnteredBy.Value == userId;
 
     /// <summary>
-    /// A expense this person keeps for themselves. A household's is never "own" — it is reached
+    /// An expense this person keeps for themselves. A household's is never "own" — it is reached
     /// through membership, which is a different question with a different answer.
     /// </summary>
     public bool IsOwnedBy(Guid userId) => Owner.Is(userId);
@@ -141,7 +141,7 @@ public class Expense : IAggregateRoot
         if (amount.Amount < 0)
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
         if (owner.IsPerson && !owner.Is(enteredBy.Value))
-            throw new InvalidOperationException("Nobody enters a expense into somebody else's own book.");
+            throw new InvalidOperationException("Nobody enters an expense into somebody else's own book.");
 
         var expense = new Expense
         {
@@ -193,7 +193,7 @@ public class Expense : IAggregateRoot
     /// The amount is the one in force ON THAT DATE, not today's, so a month recorded late still
     /// bills what was agreed at the time.
     ///
-    /// Refuses a date the schedule does not actually place a expense on, so a caller cannot invent
+    /// Refuses a date the schedule does not actually place an expense on, so a caller cannot invent
     /// an occurrence the agreement never described.
     /// </summary>
     public static Expense GenerateFrom(RecurringExpense schedule, DateTime occurrenceDate)

@@ -9,8 +9,8 @@ namespace Finance.Domain.Engines;
 public interface IJournalizingEngine
 {
     /// <summary>
-    /// Journalize a expense. Postconditions: every returned draft is balanced
-    /// (Σ debits == Σ credits); after journalLine, the payer's member account nets to what
+    /// Journalize an expense. Postconditions: every returned draft is balanced
+    /// (Σ debits == Σ credits); after posting, the payer's member account nets to what
     /// the group owes them (fronted − borne) and each other member to what they owe.
     /// </summary>
     IReadOnlyList<JournalEntryDraft> JournalizeExpense(ExpenseShareContext context);

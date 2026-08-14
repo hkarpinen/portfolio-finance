@@ -157,7 +157,7 @@ internal sealed class LedgerJournalLineConsumer :
 
 // One queue, one message at a time: every ledger journalLine serializes through this endpoint, so
 // reverse-then-repost sequences from different events can never interleave into duplicate or
-// missing journal_lines. Throughput is bounded by ledger volume, which is human-scale here.
+// missing lines. Throughput is bounded by ledger volume, which is human-scale here.
 internal sealed class LedgerJournalLineConsumerDefinition : ConsumerDefinition<LedgerJournalLineConsumer>
 {
     public LedgerJournalLineConsumerDefinition()

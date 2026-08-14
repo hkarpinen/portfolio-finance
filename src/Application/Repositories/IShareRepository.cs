@@ -12,7 +12,7 @@ public interface IShareRepository
     Task<Share?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Share>> ListByExpenseAsync(ExpenseId expenseId, CancellationToken cancellationToken = default);
 
-    /// <summary>What a expense is already split by, optionally ignoring one share — the shape
+    /// <summary>What an expense is already split by, optionally ignoring one share — the shape
     /// an upsert needs, so it can ask "does mine still fit alongside the others".</summary>
     Task<decimal> SumForExpenseAsync(ExpenseId expenseId, ShareId? excluding = null, CancellationToken cancellationToken = default);
     Task CommitAsync(CancellationToken cancellationToken = default);

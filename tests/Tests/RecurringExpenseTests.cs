@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Tests;
 
 /// <summary>
-/// The schedule says which expenses should exist; a expense is one of them, frozen. Everything
+/// The schedule says which expenses should exist; an expense is one of them, frozen. Everything
 /// here is really one claim: a month already recorded does not move.
 /// </summary>
 public class RecurringExpenseTests

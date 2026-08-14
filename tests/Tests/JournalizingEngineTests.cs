@@ -43,15 +43,15 @@ public class JournalizingEngineTests
             new[] { new MemberShare(Hank, Usd(700)), new MemberShare(Bob, Usd(300)) },
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123");
 
-        var journal_lines = Post(L, _engine.JournalizeExpense(ctx));
+        var lines = Post(L, _engine.JournalizeExpense(ctx));
 
         // Member equity is credit-normal. Hank fronted 1000, bore 700 → +300 (group owes Hank).
-        Assert.Equal(300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Hank)));
+        Assert.Equal(300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Hank)));
         // Bob bore 300, fronted 0 → −300 (Bob owes).
-        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Bob)));
+        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Bob)));
         // Nominal expense account is recorded then allocated → nets to 0 (cash-basis, no period accrual).
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Expense)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Expense)));
+        Assert.True(LedgerMath.IsBalanced(lines));
     }
 
     [Fact]
@@ -63,11 +63,11 @@ public class JournalizingEngineTests
             new[] { new MemberShare(Bob, Usd(300)) },
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123");
 
-        var journal_lines = Post(L, _engine.JournalizeExpense(ctx));
+        var lines = Post(L, _engine.JournalizeExpense(ctx));
 
-        Assert.Equal(300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Hank)));
-        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Bob)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Hank)));
+        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Bob)));
+        Assert.True(LedgerMath.IsBalanced(lines));
     }
 
     [Fact]
@@ -75,17 +75,17 @@ public class JournalizingEngineTests
     {
         // SAME engine, funding account = Cash (a shared pool, not a member). All members'
         // shares sum to the total — there is no funder-member, so no remainder line.
-        var journal_lines = Post(L, _engine.JournalizeExpense(new ExpenseShareContext(
+        var lines = Post(L, _engine.JournalizeExpense(new ExpenseShareContext(
             Expense, FundingAccount: Cash,
             new[] { new MemberShare(Hank, Usd(700)), new MemberShare(Bob, Usd(300)) },
             Usd(1000), DateTime.UtcNow, "Rent", "expense:pool")));
 
         // The pool fronted the whole bill (asset down 1000); each member owes their share.
-        Assert.Equal(-1000m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Cash)));
-        Assert.Equal(-700m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Hank)));
-        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Bob)));
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Expense)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(-1000m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Cash)));
+        Assert.Equal(-700m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Hank)));
+        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Bob)));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Expense)));
+        Assert.True(LedgerMath.IsBalanced(lines));
 
         // Both members contribute their share INTO the pool (collect-first) — drains Cash to 0.
         // A contribution debits Cash (pool fills) and credits the member (their debt clears).
@@ -96,7 +96,7 @@ public class JournalizingEngineTests
             DebitAccount: Cash, CreditAccount: Bob, Amount: Usd(300),
             ValueDate: DateTime.UtcNow, Description: "Bob contributes", Source: "c:b"));
 
-        var all = journal_lines
+        var all = lines
             .Concat(JournalEntry.Post(L, contribHank.Date, contribHank.Description, contribHank.Lines, contribHank.Source).JournalLines)
             .Concat(JournalEntry.Post(L, contribBob.Date, contribBob.Description, contribBob.Lines, contribBob.Source).JournalLines)
             .ToList();
@@ -111,7 +111,7 @@ public class JournalizingEngineTests
     public void JournalizeReimbursement_SettlesBothMembers()
     {
         // Start from the owed position, then Bob reimburses Hank $300.
-        var expenseJournalLines = Post(L, _engine.JournalizeExpense(new ExpenseShareContext(
+        var expenseLines = Post(L, _engine.JournalizeExpense(new ExpenseShareContext(
             Expense, Hank,
             new[] { new MemberShare(Hank, Usd(700)), new MemberShare(Bob, Usd(300)) },
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123")));
@@ -124,7 +124,7 @@ public class JournalizingEngineTests
 
         Assert.True(LedgerMath.IsBalanced(reimbJournalLines));
 
-        var all = expenseJournalLines.Concat(reimbJournalLines).ToList();
+        var all = expenseLines.Concat(reimbJournalLines).ToList();
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == Hank)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == Bob)));
     }
@@ -140,16 +140,16 @@ public class JournalizingEngineTests
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123"));
 
         Assert.Equal(2, drafts.Count);
-        var journal_lines = Post(L, drafts);
+        var lines = Post(L, drafts);
 
         // We owe the vendor the full total (Vendor Payable is credit-normal).
-        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == VendorPayable)));
+        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == VendorPayable)));
         // Each member bears their share (credit-normal equity goes negative).
-        Assert.Equal(-700m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Hank)));
-        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Bob)));
+        Assert.Equal(-700m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Hank)));
+        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Bob)));
         // Fully allocated → the nominal expense nets to 0.
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Expense)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Expense)));
+        Assert.True(LedgerMath.IsBalanced(lines));
     }
 
     [Fact]
@@ -162,30 +162,30 @@ public class JournalizingEngineTests
             Array.Empty<MemberShare>(),
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123"));
 
-        var journal_lines = Post(L, drafts);
+        var lines = Post(L, drafts);
 
         Assert.Single(drafts);
-        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == VendorPayable)));
-        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Expense)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == VendorPayable)));
+        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Expense)));
+        Assert.True(LedgerMath.IsBalanced(lines));
     }
 
     [Fact]
     public void JournalizeAccrual_UnallocatedRemainder_StaysOnExpense_NotOnAnyMember()
     {
         // Only Bob has an explicit $300 share of a $1,000 bill — the rest is unallocated.
-        var journal_lines = Post(L, _engine.JournalizeAccrual(new AccrualContext(
+        var lines = Post(L, _engine.JournalizeAccrual(new AccrualContext(
             Expense, VendorPayable,
             new[] { new MemberShare(Bob, Usd(300)) },
             Usd(1000), DateTime.UtcNow, "Rent", "expense:123")));
 
-        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == VendorPayable)));
-        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Bob)));
+        Assert.Equal(1000m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == VendorPayable)));
+        Assert.Equal(-300m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Bob)));
         // No funding account exists at accrual time → the remainder stays on Expense (household-borne);
         // crucially no member is over-debited (Hank, who has no share, stays at 0).
-        Assert.Equal(700m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines.Where(p => p.AccountId == Expense)));
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines.Where(p => p.AccountId == Hank)));
-        Assert.True(LedgerMath.IsBalanced(journal_lines));
+        Assert.Equal(700m, LedgerMath.AccountBalance(NormalBalance.Debit, lines.Where(p => p.AccountId == Expense)));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, lines.Where(p => p.AccountId == Hank)));
+        Assert.True(LedgerMath.IsBalanced(lines));
     }
 
     [Fact]
@@ -305,7 +305,7 @@ public class JournalizingEngineTests
     [Fact]
     public void JournalizeExpense_Refuses_WhenSharesExceedTheTotal()
     {
-        // Reachable by editing a expense DOWN after it has been split: the shares are
+        // Reachable by editing an expense DOWN after it has been split: the shares are
         // untouched, so the next journalization sees shares above the total.
         var context = new ExpenseShareContext(
             Expense, Cash,
@@ -327,9 +327,9 @@ public class JournalizingEngineTests
             new[] { new MemberShare(Hank, Usd(30)), new MemberShare(Bob, Usd(30)) },
             Usd(60), DateTime.UtcNow, "Groceries", "expense:1");
 
-        var journal_lines = Post(L, _engine.JournalizeExpense(context));
+        var lines = Post(L, _engine.JournalizeExpense(context));
 
-        Assert.Equal(0m, journal_lines.Sum(p => p.SignedAmount));
+        Assert.Equal(0m, lines.Sum(p => p.SignedAmount));
     }
 
     [Fact]

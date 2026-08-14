@@ -109,7 +109,7 @@ public interface IBookkeepingManager
 {
     /// <summary>Dr Expense / Cr Vendor Payable. Posts when missing, reverses and re-posts on a
     /// changed amount, category, title or date, no-ops when the books already match. Returns true
-    /// when it re-journaled, which invalidates the share journal_lines. Idempotent.</summary>
+    /// when it re-journaled, which invalidates the share lines. Idempotent.</summary>
     Task<bool> SyncExpenseAccrualAsync(PostExpenseToLedgerCommand command, CancellationToken ct = default);
 
     /// <summary>Dr Member / Cr Expense, keyed per share so a share added after creation
@@ -143,7 +143,7 @@ public interface IBookkeepingManager
 
     /// <summary>
     /// Posts every personal expense whose day has arrived and which is not on the books yet, and
-    /// returns how many that was. The other half of "a passing period becomes a expense": a bill
+    /// returns how many that was. The other half of "a passing period becomes an expense": a bill
     /// entered ahead of time waits here until the date it belongs to.
     /// </summary>
     Task<int> PostDuePersonalExpensesAsync(Guid userId, DateTime asOf, CancellationToken ct = default);
@@ -175,12 +175,12 @@ public interface IBookkeepingManager
     /// single expense. Idempotent on <paramref name="source"/>.</summary>
     Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default);
 
-    /// <summary>Unwinds a expense from the books — reverses every active journal entry tagged with it
+    /// <summary>Unwinds an expense from the books — reverses every active journal entry tagged with it
     /// (accrual, vendor payment, settlements) so a deactivated/deleted bill leaves no orphan Vendor
     /// Payable or member balances. Idempotent: nothing to do if already unwound.</summary>
     Task ReverseExpenseAsync(Guid groupId, Guid expenseId, CancellationToken ct = default);
 
-    // These CONVERGE the books from current DB state for a expense/share/settlement/vendor event:
+    // These CONVERGE the books from current DB state for an expense/share/settlement/vendor event:
     // they re-read the aggregate (the manager owns this orchestration, not the message consumer) and
     // sync the books to it, so the consumer stays a thin dedup-and-dispatch adapter with no domain I/O.
 

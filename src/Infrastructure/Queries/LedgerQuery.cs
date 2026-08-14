@@ -22,13 +22,13 @@ internal sealed class LedgerQuery : ILedgerQuery
             .Where(a => a.LedgerId == ledger.Id)
             .ToListAsync(ct);
 
-        var journal_lines = await (
+        var lines = await (
             from p in _db.JournalLines.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
             where e.LedgerId == ledger.Id
             select p).ToListAsync(ct);
 
-        var byAccount = journal_lines.ToLookup(p => p.AccountId);
+        var byAccount = lines.ToLookup(p => p.AccountId);
 
         var accountDtos = accounts
             .Select(a => new AccountBalanceDto(
@@ -38,7 +38,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .OrderBy(a => a.Code)
             .ToList();
 
-        var (debits, credits) = LedgerMath.TrialBalance(journal_lines);
+        var (debits, credits) = LedgerMath.TrialBalance(lines);
         return new LedgerViewDto(ledger.Id.Value, ledger.Currency, accountDtos, debits, credits, debits == credits);
     }
 

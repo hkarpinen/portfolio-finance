@@ -17,7 +17,7 @@ public sealed record CreateExpenseCommand(
     /// which is the honest default for somebody who has told us about no accounts.</summary>
     Guid? FundingAccountId = null);
 
-// CallerUserId is WHO IS ASKING, on every command that changes something. A expense id on its own
+// CallerUserId is WHO IS ASKING, on every command that changes something. An expense id on its own
 // must never authorise an update, a delete or a re-split — the aggregate decides, via
 // Expense.IsManagedBy.
 //
