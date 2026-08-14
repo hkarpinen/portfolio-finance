@@ -169,26 +169,19 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var paidShareIds = await GetPaidShareIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
         var payerGuid = expense.PayerUserId;
 
-        var splitUserIdSet = splits.Select(s => s.UserId).ToHashSet();
-        var projections2 = (await _db.UserProjections.AsNoTracking()
-            .ToListAsync(cancellationToken))
-            .Where(p => splitUserIdSet.Contains(p.UserId.Value))
-            .ToDictionary(p => p.UserId.Value);
+        var names = await PeopleReads.NamesAsync(
+            _db, splits.Select(s => s.UserId).Distinct().ToList(), cancellationToken);
 
-        // "Member" is the fallback for rows predating the membership projection.
         var roles = expense.Scope == ExpenseScope.Group
-            ? await _db.GroupMemberProjections.AsNoTracking()
-                .Where(m => m.GroupId == expense.OwnerId)
-                .ToDictionaryAsync(m => m.UserId, m => m.Role, cancellationToken)
-            : new Dictionary<Guid, string>();
+            ? await PeopleReads.RolesAsync(_db, expense.OwnerId, cancellationToken)
+            : [];
 
         var enrichedShares = splits.Select(s =>
         {
-            projections2.TryGetValue(s.UserId, out var proj);
             return new ShareDetailDto(
                 s.ShareId,
                 s.UserId,
-                proj?.GetFullName(),
+                names.GetValueOrDefault(s.UserId),
                 null,
                 roles.GetValueOrDefault(s.UserId, "Member"),
                 s.Amount,
@@ -215,22 +208,19 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var occurrenceDate = expense.OccurrenceDate;
         var paidShareIds = await GetPaidShareIdsForExpenseAsync(split.ExpenseId.Value, occurrenceDate, cancellationToken);
 
-        var projection = await _db.UserProjections
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.UserId == split.UserId, cancellationToken);
+        var profiles = await PeopleReads.ProfilesAsync(_db, [split.UserId.Value], cancellationToken);
+        profiles.TryGetValue(split.UserId.Value, out var profile);
 
         var membershipRole = expense.Owner.IsHousehold
-            ? await _db.GroupMemberProjections.AsNoTracking()
-                .Where(m => m.GroupId == expense.Owner.Id && m.UserId == split.UserId.Value)
-                .Select(m => m.Role)
-                .FirstOrDefaultAsync(cancellationToken)
+            ? (await PeopleReads.RolesAsync(_db, expense.Owner.Id, cancellationToken))
+                .GetValueOrDefault(split.UserId.Value)
             : null;
 
         return new ShareDetailDto(
             split.Id.Value,
             split.UserId.Value,
-            projection?.GetFullName(),
-            projection?.AvatarUrl,
+            profile.Name,
+            profile.AvatarUrl,
             membershipRole ?? "Member",
             split.Amount.Amount,
             split.Amount.Currency,
@@ -266,14 +256,8 @@ internal sealed class ExpenseQuery : IExpenseQuery
         if (splits.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
 
         var expenseById = relevantExpenses.ToDictionary(b => b.Id);
-        var splitUserIds = splits.Select(s => s.UserId).Distinct().ToList();
-
-        var userProjections = await _db.UserProjections
-            .AsNoTracking()
-            .Where(p => splitUserIds.Contains(p.UserId))
-            .ToListAsync(cancellationToken);
-
-        var nameById = userProjections.ToDictionary(p => p.UserId.Value, p => p.GetFullName());
+        var nameById = await PeopleReads.NamesAsync(
+            _db, splits.Select(s => s.UserId.Value).Distinct().ToList(), cancellationToken);
 
         var splitIds = splits.Select(s => s.Id.Value).ToList();
 
@@ -458,11 +442,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         if (membersById.Count == 0)
             return new MemberBalanceListDto([], 0);
 
-        var userIds = membersById.Keys.Select(g => new UserId(g)).ToList();
-        var projections = await _db.UserProjections
-            .AsNoTracking()
-            .Where(p => userIds.Contains(p.UserId))
-            .ToDictionaryAsync(p => p.UserId.Value, p => p.GetFullName(), cancellationToken);
+        var projections = await PeopleReads.NamesAsync(_db, membersById.Keys.ToList(), cancellationToken);
 
         var items = membersById
             .Select(kvp =>

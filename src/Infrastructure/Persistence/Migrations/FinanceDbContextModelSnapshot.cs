@@ -192,6 +192,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.Expense.Amount#Money", b1 =>
                         {
                             b1.Property<decimal>("Amount")
@@ -1367,7 +1372,7 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Finance.Domain.Aggregates.JournalLine", b =>
                 {
                     b.HasOne("Finance.Domain.Aggregates.JournalEntry", null)
-                        .WithMany("_journalLines")
+                        .WithMany("_lines")
                         .HasForeignKey("EntryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
@@ -1468,7 +1473,7 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Finance.Domain.Aggregates.JournalEntry", b =>
                 {
-                    b.Navigation("_journalLines");
+                    b.Navigation("_lines");
                 });
 #pragma warning restore 612, 618
         }

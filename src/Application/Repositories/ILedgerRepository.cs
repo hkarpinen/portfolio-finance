@@ -46,7 +46,12 @@ public interface ILedgerRepository
     /// Returns whether anything was written: false means the books already agreed, which is the
     /// common case for a redelivered message or an edit that changed nothing.
     /// </summary>
-    Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default);
+    /// <param name="postOnce">
+    /// True for a fact rather than a statement — money changing hands. Converging one would CORRECT
+    /// it if the figure upstream had moved, and a payment that happened is reversed, not restated.
+    /// So anything already in effect under the source wins and nothing is written.
+    /// </param>
+    Task<bool> ConvergeAsync(JournalEntry candidate, bool postOnce = false, CancellationToken ct = default);
     // Returns BOTH originals and any reversals, which is what makes a journalLine idempotent to redo and
     // possible to unwind.
     Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default);

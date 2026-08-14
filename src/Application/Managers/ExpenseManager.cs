@@ -37,8 +37,7 @@ internal sealed class ExpenseManager : IExpenseManager
 
     public async Task<ExpenseResponseDto> CreateAsync(CreateExpenseCommand request, CancellationToken cancellationToken = default)
     {
-        if (!Enum.TryParse<ExpenseCategory>(request.Category, ignoreCase: true, out var category))
-            category = ExpenseCategory.Other;
+        var category = ExpenseCategories.Parse(request.Category);
 
         var recurrence = RecurrenceSchedule.ParseOrNone(
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
@@ -86,8 +85,7 @@ internal sealed class ExpenseManager : IExpenseManager
         // Owner check. Null (→ 404), never 403, so ids stay unprobeable.
         if (!expense.IsOwnedBy(request.CallerUserId)) return null;
 
-        if (!Enum.TryParse<ExpenseCategory>(request.Category, ignoreCase: true, out var category))
-            category = ExpenseCategory.Other;
+        var category = ExpenseCategories.Parse(request.Category);
 
         expense.Update(
             request.Title,
@@ -251,6 +249,10 @@ internal sealed class ExpenseManager : IExpenseManager
 
                 existing.Update(expense, money);
                 await _splitRepository.UpdateAsync(existing, cancellationToken);
+                // Touches the expense so this write goes through its version check — the reason
+                // two people setting a share at once cannot both fit under the same total.
+                expense.RecordShareChange();
+                await _repository.UpdateAsync(expense, cancellationToken);
                 await _splitRepository.CommitAsync(cancellationToken);
                 return ExpenseMapper.ToShareResponse(existing);
             }
@@ -274,6 +276,8 @@ internal sealed class ExpenseManager : IExpenseManager
         var split = Share.Create(expense, UserId.Create(request.MemberUserId), money);
 
         await _splitRepository.AddAsync(split, cancellationToken);
+        expense.RecordShareChange();
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToShareResponse(split);
     }
@@ -288,6 +292,8 @@ internal sealed class ExpenseManager : IExpenseManager
 
         split.Remove(expense);
         await _splitRepository.RemoveAsync(split, cancellationToken);
+        expense.RecordShareChange();
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToShareResponse(split);
     }
@@ -323,6 +329,8 @@ internal sealed class ExpenseManager : IExpenseManager
                 await _splitRepository.AddAsync(split, cancellationToken);
             }
         }
+        expense.RecordShareChange();
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
     }
 
@@ -363,6 +371,8 @@ internal sealed class ExpenseManager : IExpenseManager
             result = Share.Create(expense, uid, money);
             await _splitRepository.AddAsync(result, cancellationToken);
         }
+        expense.RecordShareChange();
+        await _repository.UpdateAsync(expense, cancellationToken);
         await _splitRepository.CommitAsync(cancellationToken);
         // The committed event drives the share journalLine (Dr Member / Cr Expense).
         return ExpenseMapper.ToShareResponse(result);

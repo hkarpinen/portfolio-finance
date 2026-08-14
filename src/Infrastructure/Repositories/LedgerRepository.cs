@@ -71,9 +71,11 @@ internal sealed class LedgerRepository : ILedgerRepository
     public async Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default)
         => await _db.JournalEntries.AddAsync(entry, ct);
 
-    public async Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default)
+    public async Task<bool> ConvergeAsync(JournalEntry candidate, bool postOnce = false, CancellationToken ct = default)
     {
         var inEffect = (await GetEntriesBySourceAsync(candidate.LedgerId, candidate.Source!, ct)).InEffect();
+        if (postOnce && inEffect.Count > 0) return false;
+
         var plan = ConvergencePlan.For(candidate, inEffect);
         if (plan.AlreadyThere) return false;
 

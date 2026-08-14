@@ -196,6 +196,8 @@ public sealed class ExpensesController : ControllerBase
     public async Task<IActionResult> SettleUpTransfer(Guid groupId, [FromBody] SettleUpTransferBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
+        // Turned into a 400 here; the rule itself lives on RecordMemberTransferAsync, which refuses
+        // both regardless of who calls it.
         if (body.ToUserId == userId.Value) return BadRequest(new { error = "Can't settle up with yourself." });
         if (body.Amount <= 0) return BadRequest(new { error = "Amount must be positive." });
 

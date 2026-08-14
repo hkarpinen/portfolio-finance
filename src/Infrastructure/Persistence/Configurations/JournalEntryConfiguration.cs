@@ -34,17 +34,17 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
 
         // JournalLines live in their own table but belong to the JournalEntry aggregate — they can only be
         // created via JournalEntry.Post, so the mapping goes through the private backing field.
-        builder.HasMany(typeof(JournalLine), "_journalLines")
+        builder.HasMany(typeof(JournalLine), "_lines")
             .WithOne()
             .HasForeignKey(nameof(JournalLine.EntryId))
             .OnDelete(DeleteBehavior.Cascade);
-        builder.Navigation("_journalLines")
+        builder.Navigation("_lines")
             .UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Ignore(e => e.JournalLines);
 
         builder.HasIndex(e => new { e.LedgerId, e.Date });
 
-        // The settled-state read keys on (share, occurrence); expense journal_lines are looked up by expense.
+        // The settled-state read keys on (share, occurrence); expense entries are looked up by expense.
         builder.HasIndex(e => new { e.SourceShareId, e.SourceOccurrence });
         builder.HasIndex(e => e.SourceExpenseId);
 

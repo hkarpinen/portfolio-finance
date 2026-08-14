@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    [Migration("20260814173310_RenameToAccountingLanguage")]
-    partial class RenameToAccountingLanguage
+    [Migration("20260814191934_InitialSchema")]
+    partial class InitialSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -194,6 +194,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
                     b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.Expense.Amount#Money", b1 =>
                         {
@@ -1370,7 +1375,7 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Finance.Domain.Aggregates.JournalLine", b =>
                 {
                     b.HasOne("Finance.Domain.Aggregates.JournalEntry", null)
-                        .WithMany("_journalLines")
+                        .WithMany("_lines")
                         .HasForeignKey("EntryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
@@ -1471,7 +1476,7 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Finance.Domain.Aggregates.JournalEntry", b =>
                 {
-                    b.Navigation("_journalLines");
+                    b.Navigation("_lines");
                 });
 #pragma warning restore 612, 618
         }

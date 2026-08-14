@@ -237,7 +237,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         return await _ledgers.ConvergeAsync(Journalize.ExpenseIncurred(
             ledger.Id, expenseAccount.Id, vendorPayable.Id,
             Money.Create(cmd.Total, cmd.Currency), cmd.Date, cmd.Title, source,
-            cmd.ExpenseId, cmd.PostedByUserId), ct);
+            cmd.ExpenseId, cmd.PostedByUserId), ct: ct);
     }
 
     public async Task SyncShareAsync(
@@ -253,18 +253,12 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.ConvergeAsync(Journalize.ShareBorne(
             ledger.Id, member.Id, expenseAccount.Id,
             Money.Create(amount, currency), DateTime.UtcNow.Date, source,
-            expenseId, userId), ct);
+            expenseId, userId), ct: ct);
     }
 
     public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
     {
         var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
-
-        // Post-once, deliberately: a vendor payment that is on the books stays as posted. Converging
-        // would CORRECT it if the figure upstream had moved, and money leaving is a fact rather than
-        // a restatement — undoing one is its own event, not an amendment.
-        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
-        if (existing.Count > 0) return;
 
         var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
         // The funding account is whoever actually paid the vendor — the payer's own Member account
@@ -275,18 +269,12 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.ConvergeAsync(Journalize.VendorPaid(
             ledger.Id, vendorPayable.Id, funding.Id,
             Money.Create(cmd.Total, cmd.Currency), cmd.ValueDate, "Vendor payment", cmd.Source,
-            cmd.ExpenseId, cmd.Occurrence, cmd.PaidByUserId), ct);
+            cmd.ExpenseId, cmd.Occurrence, cmd.PaidByUserId), postOnce: true, ct: ct);
     }
 
     public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
     {
         var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
-
-        // Post-once for the same reason as a vendor payment: somebody handing over money happened,
-        // and it is reversed rather than restated. The ledger is the single source of truth — no
-        // dual write.
-        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
-        if (existing.Count > 0) return;
 
         var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, cmd.FromUserId), ct);
         // The debtor settles INTO the funding account that paid the vendor — the payer's Member
@@ -302,7 +290,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.ConvergeAsync(Journalize.Settlement(
             ledger.Id, funding.Id, from.Id,
             Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, cmd.Source,
-            cmd.ExpenseId, cmd.ShareId, cmd.Occurrence, cmd.FromUserId), ct);
+            cmd.ExpenseId, cmd.ShareId, cmd.Occurrence, cmd.FromUserId), postOnce: true, ct: ct);
     }
 
     public async Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default)
@@ -322,11 +310,15 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordMemberTransferAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, string source, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
+        // Both rules were enforced only in the controller, so anything reaching this from a
+        // consumer or a test could post a settle-up with itself — two legs on ONE member account,
+        // which nets to nothing and passes every check the journal makes.
+        if (fromUserId == toUserId)
+            throw new InvalidOperationException("Nobody settles up with themselves.");
+        if (amount <= 0m)
+            throw new ArgumentException("A settle-up moves a positive amount.", nameof(amount));
 
-        // Post-once on source — re-delivering the same settle-up is a no-op.
-        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
-        if (existing.Count > 0) return;
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
 
         var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, fromUserId), ct);
         var to = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, toUserId), ct);
@@ -335,7 +327,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // moving both toward zero. The cash changed hands directly between the two — no pot involved.
         await _ledgers.ConvergeAsync(Journalize.SettleUp(
             ledger.Id, to.Id, from.Id,
-            Money.Create(amount, currency), DateTime.UtcNow.Date, source, fromUserId), ct);
+            Money.Create(amount, currency), DateTime.UtcNow.Date, source, fromUserId), postOnce: true, ct: ct);
     }
 
     public async Task ReverseExpenseAsync(Guid groupId, Guid expenseId, CancellationToken ct = default)
@@ -483,7 +475,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.ConvergeAsync(Journalize.ExpenseIncurred(
             ledger.Id, expenseAccount.Id, payable.Id,
             expense.Amount, date, expense.Title, source,
-            expenseId, expense.EnteredBy.Value), ct);
+            expenseId, expense.EnteredBy.Value), ct: ct);
     }
 
     public async Task RecordPersonalPaymentAsync(
@@ -505,13 +497,11 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             : await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Cash(ledger.Id), ct);
 
         var source = LedgerSources.VendorPayment(expenseId, expense.OccurrenceDate);
-        var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
-        if (existing.Count > 0) return;
 
         await _ledgers.ConvergeAsync(Journalize.VendorPaid(
             ledger.Id, payable.Id, funding.Id,
             expense.Amount, valueDate, $"{expense.Title} — paid", source,
-            expenseId, expense.OccurrenceDate, expense.EnteredBy.Value), ct);
+            expenseId, expense.OccurrenceDate, expense.EnteredBy.Value), postOnce: true, ct: ct);
     }
 
     public async Task ReversePersonalPaymentAsync(Guid expenseId, CancellationToken ct = default)

@@ -1,12 +1,14 @@
 using Client.Validators;
 using Finance.Application.Commands;
+using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
 /// <summary>
-/// The personal-expense Category stays a free string on the wire (API compatibility) but must name a
-/// real ExpenseCategory (case-insensitive) — the manager already coerces unknowns to Other, so this
-/// only rejects genuinely bogus input rather than silently swallowing it.
+/// The Category stays a free string on the wire (API compatibility) but must name a real
+/// ExpenseCategory, case-insensitively. The validator and the manager used to disagree about what
+/// an unknown one means — the validator rejected, the manager quietly filed it under Other, which
+/// loses what the person meant. One parser now, and rejection is the answer.
 /// </summary>
 public class ExpenseCategoryValidationTests
 {
@@ -26,4 +28,26 @@ public class ExpenseCategoryValidationTests
     [InlineData("")]
     public void BogusOrEmptyCategory_Fails(string category) =>
         Assert.False(new CreateExpenseRequestValidator().Validate(Cmd(category)).IsValid);
+
+    // Both readings of a category go through ExpenseCategories now: the validator asks IsKnown at
+    // the edge, and Parse throws beyond it, so an unknown one can never be silently re-filed.
+    [Theory]
+    [InlineData("Groceries", ExpenseCategory.Groceries)]
+    [InlineData("groceries", ExpenseCategory.Groceries)]
+    [InlineData("RENT", ExpenseCategory.Rent)]
+    public void AKnownCategory_ParsesWhateverItsCasing(string input, ExpenseCategory expected)
+    {
+        Assert.True(ExpenseCategories.IsKnown(input));
+        Assert.Equal(expected, ExpenseCategories.Parse(input));
+    }
+
+    [Theory]
+    [InlineData("Groceriez")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void AnUnknownCategory_IsRefusedRatherThanFiledUnderOther(string? input)
+    {
+        Assert.False(ExpenseCategories.IsKnown(input));
+        Assert.Throws<ArgumentException>(() => ExpenseCategories.Parse(input));
+    }
 }

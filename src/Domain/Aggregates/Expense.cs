@@ -68,6 +68,31 @@ public class Expense : IAggregateRoot
     public DateTime DueDate { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
+
+    /// <summary>Moves on every change that affects how this expense may be split. Checked on write,
+    /// so two people re-cutting the same bill at once cannot both succeed.</summary>
+    public uint Version { get; private set; }
+
+    /// <summary>
+    /// Marks the expense touched because one of its shares changed.
+    ///
+    /// Shares are their own rows, so "the shares must not exceed the total" is checked by reading
+    /// them and then writing — and two people setting a share at once both read the same total and
+    /// both fit. On a £90 bill already split 60, each writes 45 and it lands at 105. The engine
+    /// then refuses to journalize it, inside a consumer, where nobody is listening.
+    ///
+    /// Bumping the version puts the write behind a concurrency check, so the second one fails
+    /// instead of over-allocating. It cannot be an invariant of the aggregate proper: EF cannot
+    /// query an owned collection on its own, and both the read side and the share consumer look a
+    /// share up by id without knowing its expense.
+    ///
+    /// Raises no event — the share raises its own.
+    /// </summary>
+    public void RecordShareChange()
+    {
+        Version++;
+        UpdatedAt = DateTime.UtcNow;
+    }
     public bool IsActive { get; private set; }
 
     /// <summary>
@@ -247,6 +272,7 @@ public class Expense : IAggregateRoot
         Title = title;
         Amount = amount;
         Category = category;
+        Version++;
         DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc);
         // OccurrenceDate deliberately does NOT follow. It is which period this expense belongs to,
         // and moving that would restate a month that has already been reported.

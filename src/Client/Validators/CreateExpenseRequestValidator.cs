@@ -23,8 +23,7 @@ public sealed class CreateExpenseRequestValidator : AbstractValidator<CreateExpe
             .When(x => x.RecurrenceStartDate.HasValue && x.RecurrenceEndDate.HasValue);
     }
 
-    internal static bool BeAExpenseCategory(string? category) =>
-        Enum.TryParse<ExpenseCategory>(category, ignoreCase: true, out _);
+    internal static bool BeAExpenseCategory(string? category) => ExpenseCategories.IsKnown(category);
 }
 
 public sealed class UpdateExpenseRequestValidator : AbstractValidator<UpdateExpenseCommand>

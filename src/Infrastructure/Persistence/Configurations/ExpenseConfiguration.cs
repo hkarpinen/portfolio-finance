@@ -55,6 +55,11 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(b => b.DueDate).IsRequired();
         builder.Property(b => b.CreatedAt).IsRequired();
         builder.Property(b => b.UpdatedAt).IsRequired();
+
+        // Lands in the WHERE clause of every update, which is what serialises concurrent share
+        // writes against their expense. An explicit column rather than Postgres' xmin: xmin is a
+        // system column that already exists, and the provider tries to CREATE it.
+        builder.Property(b => b.Version).IsConcurrencyToken().IsRequired();
         builder.Property(b => b.IsActive).IsRequired();
 
         builder.ComplexProperty(b => b.Amount, money =>
