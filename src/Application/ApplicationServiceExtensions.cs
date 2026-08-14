@@ -10,8 +10,8 @@ public static class ApplicationServiceExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<IIncomeManager, IncomeManager>();
-        services.AddScoped<IChargeManager, ChargeManager>();
-        services.AddScoped<IChargeScheduleManager, ChargeScheduleManager>();
+        services.AddScoped<IExpenseManager, ExpenseManager>();
+        services.AddScoped<IRecurringExpenseManager, RecurringExpenseManager>();
         services.AddScoped<IFinancialConnectionManager, FinancialConnectionManager>();
         services.AddScoped<IBankSyncManager, BankSyncManager>();
         services.AddScoped<IContributionCalculator, ContributionCalculator>();

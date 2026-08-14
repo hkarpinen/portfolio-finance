@@ -451,7 +451,7 @@ public static class TaxCalculator
             ? [(6_000m, 0.05m), (1_000m, 0.04m), (0m, 0.02m)]   // 5 % / 4 % / 2 %
             : [(3_000m, 0.05m), (  500m, 0.04m), (0m, 0.02m)];  // thresholds halved for single
 
-    // California (CA) — 9 brackets + 1 % mental health surcharge above $1 M (not modelled)
+    // California (CA) — 9 brackets + 1 % mental health surexpense above $1 M (not modelled)
     // Source: CA FTB 2024 Schedule X (single) / Y (MFJ)
     private static (decimal Threshold, decimal Rate)[] CaBrackets(FilingStatus filingStatus)
     {

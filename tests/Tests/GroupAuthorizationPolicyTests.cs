@@ -63,6 +63,6 @@ public class GroupAuthorizationPolicyTests
         var scoped = Controllers.Where(IsGroupScoped).Select(c => c.Name).ToList();
 
         Assert.Contains("LedgerController", scoped);
-        Assert.Contains("ChargesController", scoped);
+        Assert.Contains("ExpensesController", scoped);
     }
 }

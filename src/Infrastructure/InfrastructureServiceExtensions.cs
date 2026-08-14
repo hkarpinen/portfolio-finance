@@ -40,10 +40,10 @@ public static class InfrastructureServiceExtensions
             x.AddConsumer<DemoUserCreatedConsumer>();
             x.AddConsumer<DemoHouseholdSeededConsumer>();
             x.AddConsumer<DemoUserExpiredConsumer>();
-            x.AddConsumer<GroupAllocationAssignedConsumer>();
+            x.AddConsumer<GroupShareAssignedConsumer>();
             x.AddConsumer<HouseholdMembershipConsumer>();
             x.AddConsumer<HouseholdDeletedConsumer>();
-            x.AddConsumer<LedgerPostingConsumer, LedgerPostingConsumerDefinition>();
+            x.AddConsumer<LedgerJournalLineConsumer, LedgerJournalLineConsumerDefinition>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -73,17 +73,17 @@ public static class InfrastructureServiceExtensions
         });
 
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
-        services.AddScoped<IChargeRepository, ChargeRepository>();
-        services.AddScoped<IAllocationRepository, AllocationRepository>();
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
+        services.AddScoped<IShareRepository, ShareRepository>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
 
         services.AddScoped<IIncomeQuery, IncomeQuery>();
-        services.AddScoped<IChargeQuery, ChargeQuery>();
+        services.AddScoped<IExpenseQuery, ExpenseQuery>();
         services.AddScoped<ILedgerQuery, LedgerQuery>();
         // Backs the global group-membership filter — without it every group-scoped route is
         // authenticated but not authorised.
         services.AddScoped<IGroupQuery, GroupQuery>();
-        services.AddScoped<IChargeScheduleRepository, ChargeScheduleRepository>();
+        services.AddScoped<IRecurringExpenseRepository, RecurringExpenseRepository>();
         services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
 
         services.AddHostedService<OutboxPublisher>();

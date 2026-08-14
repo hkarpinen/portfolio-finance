@@ -17,7 +17,7 @@ public static class UserBudgetCalculator
         AnnualAmount(amount, amountFrequency) / paymentFrequency.PeriodsPerYear();
 
     public static decimal MonthlyObligationsForUser(
-        IEnumerable<(Allocation Allocation, Charge Charge)> splits,
+        IEnumerable<(Share Share, Expense Expense)> splits,
         int year, int month)
     {
         var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -26,10 +26,10 @@ public static class UserBudgetCalculator
         decimal total = 0m;
         foreach (var s in splits)
         {
-            // One charge IS one occurrence, so this counts rather than projects. A repeating bill
+            // One expense IS one occurrence, so this counts rather than projects. A repeating bill
             // reaches here as a row per month, generated when that month came round.
-            if (s.Charge.OccurrenceDate >= monthStart && s.Charge.OccurrenceDate < monthEndExclusive)
-                total += s.Allocation.Amount.Amount;
+            if (s.Expense.OccurrenceDate >= monthStart && s.Expense.OccurrenceDate < monthEndExclusive)
+                total += s.Share.Amount.Amount;
         }
         return total;
     }

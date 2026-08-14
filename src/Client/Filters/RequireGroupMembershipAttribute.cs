@@ -9,8 +9,8 @@ namespace Client.Filters;
 /// Restricts a controller's group-scoped routes to CURRENT members of that group.
 ///
 /// Membership alone is not enough, so there are two checks. When the route also
-/// carries an <c>{expenseId}</c>, that charge must really belong to the
-/// <c>{groupId}</c> — most such actions look the charge up by id alone, so without
+/// carries an <c>{expenseId}</c>, that expense must really belong to the
+/// <c>{groupId}</c> — most such actions look the expense up by id alone, so without
 /// it a member of their own household could reach another household's bill through
 /// their own group's URL.
 ///
@@ -32,7 +32,7 @@ public sealed class RequireGroupMembershipAttribute : Attribute, IFilterFactory
 internal sealed class GroupMembershipFilter : IAsyncAuthorizationFilter
 {
     private const string GroupKey = "groupId";
-    private const string ChargeKey = "expenseId";
+    private const string ExpenseKey = "expenseId";
 
     private readonly IGroupQuery _reader;
 
@@ -57,11 +57,11 @@ internal sealed class GroupMembershipFilter : IAsyncAuthorizationFilter
             return;
         }
 
-        if (context.RouteData.Values.TryGetValue(ChargeKey, out var rawCharge) &&
-            Guid.TryParse(rawCharge?.ToString(), out var chargeId) &&
-            !await _reader.ChargeBelongsToGroupAsync(groupId, chargeId, ct))
+        if (context.RouteData.Values.TryGetValue(ExpenseKey, out var rawExpense) &&
+            Guid.TryParse(rawExpense?.ToString(), out var expenseId) &&
+            !await _reader.ExpenseBelongsToGroupAsync(groupId, expenseId, ct))
         {
-            // Same answer as "no such charge" — neither confirms an id.
+            // Same answer as "no such expense" — neither confirms an id.
             context.Result = new NotFoundResult();
         }
     }

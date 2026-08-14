@@ -8,12 +8,12 @@
 namespace Household.Domain.Events;
 
 // UserId is authoritative — the publisher has already verified the caller may act for that
-// member, so finance upserts the allocation without re-checking roles. GroupId == the household id.
-public sealed record GroupAllocationAssigned(
+// member, so finance upserts the share without re-checking roles. GroupId == the household id.
+public sealed record GroupShareAssigned(
     Guid Id,
     DateTime OccurredAt,
     Guid GroupId,
-    Guid ChargeId,
+    Guid ExpenseId,
     Guid UserId,
     decimal Amount,
     string Currency);

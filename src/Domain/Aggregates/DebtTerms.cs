@@ -5,7 +5,7 @@ namespace Finance.Domain.Aggregates;
 /// <summary>
 /// The terms of a card or loan: what it costs, what it is capped at, when it is due.
 ///
-/// Deliberately NOT on <see cref="Account"/>. An account is a place postings land, and its
+/// Deliberately NOT on <see cref="Account"/>. An account is a place journal_lines land, and its
 /// balance is always derived from them — putting a rate or a limit there would mix a fact that
 /// changes by agreement in among facts that change by transaction. The balance is never here for
 /// the same reason: it is the ledger's answer, not a field.
@@ -93,7 +93,7 @@ public sealed class DebtTerms
     }
 
     /// <summary>
-    /// One month's rate. A card really charges a daily periodic rate against the average daily
+    /// One month's rate. A card really expenses a daily periodic rate against the average daily
     /// balance; this is the monthly approximation, which is why an accrual posted from it is an
     /// estimate until a statement says otherwise.
     /// </summary>

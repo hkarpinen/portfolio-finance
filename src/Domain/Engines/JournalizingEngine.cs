@@ -9,11 +9,11 @@ namespace Finance.Domain.Engines;
 public interface IJournalizingEngine
 {
     /// <summary>
-    /// Journalize a charge. Postconditions: every returned draft is balanced
-    /// (Σ debits == Σ credits); after posting, the payer's member account nets to what
+    /// Journalize a expense. Postconditions: every returned draft is balanced
+    /// (Σ debits == Σ credits); after journalLine, the payer's member account nets to what
     /// the group owes them (fronted − borne) and each other member to what they owe.
     /// </summary>
-    IReadOnlyList<JournalEntryDraft> JournalizeCharge(ChargeAllocationContext context);
+    IReadOnlyList<JournalEntryDraft> JournalizeExpense(ExpenseShareContext context);
 
     /// <summary>
     /// ACCRUAL basis: incurred and owed, but not yet funded. Postconditions — every draft
@@ -33,7 +33,7 @@ public interface IJournalizingEngine
 /// </summary>
 internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
 {
-    public IReadOnlyList<JournalEntryDraft> JournalizeCharge(ChargeAllocationContext c)
+    public IReadOnlyList<JournalEntryDraft> JournalizeExpense(ExpenseShareContext c)
     {
         var currency = c.Total.Currency;
 
@@ -44,8 +44,8 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
             c.Date, $"{c.Description} — incurred", c.Source,
             new[]
             {
-                PostingLine.Debit(c.ExpenseAccount, c.Total),
-                PostingLine.Credit(c.FundingAccount, c.Total),
+                JournalLineDraft.Debit(c.ExpenseAccount, c.Total),
+                JournalLineDraft.Credit(c.FundingAccount, c.Total),
             });
 
         // Entry 2 — cost borne by members per share; the funding account absorbs any
@@ -62,15 +62,15 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
         // thing, raised deep in a consumer where nobody can act on it.
         if (remainder < 0m)
             throw new InvalidOperationException(
-                $"Allocations of {sharesTotal:0.##} exceed the charge total of {c.Total.Amount:0.##}; " +
-                "the charge cannot be journalized until they agree.");
+                $"Shares of {sharesTotal:0.##} exceed the expense total of {c.Total.Amount:0.##}; " +
+                "the expense cannot be journalized until they agree.");
 
-        var lines = new List<PostingLine>(c.Shares.Count + 2);
+        var lines = new List<JournalLineDraft>(c.Shares.Count + 2);
         foreach (var s in c.Shares)
-            lines.Add(PostingLine.Debit(s.MemberAccount, s.Amount));
+            lines.Add(JournalLineDraft.Debit(s.MemberAccount, s.Amount));
         if (remainder > 0m)
-            lines.Add(PostingLine.Debit(c.FundingAccount, Money.Create(remainder, currency)));
-        lines.Add(PostingLine.Credit(c.ExpenseAccount, c.Total));
+            lines.Add(JournalLineDraft.Debit(c.FundingAccount, Money.Create(remainder, currency)));
+        lines.Add(JournalLineDraft.Credit(c.ExpenseAccount, c.Total));
 
         var allocated = new JournalEntryDraft(
             c.Date, $"{c.Description} — allocated", c.Source, lines);
@@ -88,22 +88,22 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
             c.Date, $"{c.Description} — incurred", c.Source,
             new[]
             {
-                PostingLine.Debit(c.ExpenseAccount, c.Total),
-                PostingLine.Credit(c.VendorPayableAccount, c.Total),
+                JournalLineDraft.Debit(c.ExpenseAccount, c.Total),
+                JournalLineDraft.Credit(c.VendorPayableAccount, c.Total),
             });
 
         // Entry 2 — cost borne by members per share. There is no funding account at accrual time,
         // so the cash-basis remainder-to-funding line is deliberately omitted: any unallocated
         // remainder (Total − Σ shares) simply stays debited on the Expense account (household-borne).
-        // No shares yet → no allocation entry at all (a zero-amount credit would not validate).
+        // No shares yet → no share entry at all (a zero-amount credit would not validate).
         var sharesTotal = c.Shares.Aggregate(0m, (sum, s) => sum + s.Amount.Amount);
         if (sharesTotal == 0m)
             return new[] { incurred };
 
-        var lines = new List<PostingLine>(c.Shares.Count + 1);
+        var lines = new List<JournalLineDraft>(c.Shares.Count + 1);
         foreach (var s in c.Shares)
-            lines.Add(PostingLine.Debit(s.MemberAccount, s.Amount));
-        lines.Add(PostingLine.Credit(c.ExpenseAccount, Money.Create(sharesTotal, currency)));
+            lines.Add(JournalLineDraft.Debit(s.MemberAccount, s.Amount));
+        lines.Add(JournalLineDraft.Credit(c.ExpenseAccount, Money.Create(sharesTotal, currency)));
 
         var allocated = new JournalEntryDraft(
             c.Date, $"{c.Description} — allocated", c.Source, lines);
@@ -123,8 +123,8 @@ internal sealed class CashBasisJournalizingEngine : IJournalizingEngine
             c.ValueDate, c.Description, c.Source,
             new[]
             {
-                PostingLine.Debit(c.DebitAccount, c.Amount),
-                PostingLine.Credit(c.CreditAccount, c.Amount),
+                JournalLineDraft.Debit(c.DebitAccount, c.Amount),
+                JournalLineDraft.Credit(c.CreditAccount, c.Amount),
             });
     }
 }

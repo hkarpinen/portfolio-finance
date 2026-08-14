@@ -32,23 +32,23 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
 
         builder.Property(e => e.ReversedByEntryId);
 
-        // Postings live in their own table but belong to the JournalEntry aggregate — they can only be
+        // JournalLines live in their own table but belong to the JournalEntry aggregate — they can only be
         // created via JournalEntry.Post, so the mapping goes through the private backing field.
-        builder.HasMany(typeof(Posting), "_postings")
+        builder.HasMany(typeof(JournalLine), "_journalLines")
             .WithOne()
-            .HasForeignKey(nameof(Posting.EntryId))
+            .HasForeignKey(nameof(JournalLine.EntryId))
             .OnDelete(DeleteBehavior.Cascade);
-        builder.Navigation("_postings")
+        builder.Navigation("_journalLines")
             .UsePropertyAccessMode(PropertyAccessMode.Field);
-        builder.Ignore(e => e.Postings);
+        builder.Ignore(e => e.JournalLines);
 
         builder.HasIndex(e => new { e.LedgerId, e.Date });
 
-        // The settled-state read keys on (allocation, occurrence); charge postings are looked up by charge.
-        builder.HasIndex(e => new { e.SourceAllocationId, e.SourceOccurrence });
-        builder.HasIndex(e => e.SourceChargeId);
+        // The settled-state read keys on (share, occurrence); expense journal_lines are looked up by expense.
+        builder.HasIndex(e => new { e.SourceShareId, e.SourceOccurrence });
+        builder.HasIndex(e => e.SourceExpenseId);
 
-        // DB-level backstop against a duplicate ACTIVE posting under one source: at most one entry
+        // DB-level backstop against a duplicate ACTIVE journalLine under one source: at most one entry
         // per (ledger, source) may be neither a reversal nor itself reversed. A reverse+repost is
         // still allowed — the reversed original has reversed_by_entry_id set, so it drops out of the
         // filter. NOTE: HasFilter strings are NOT translated by the snake_case convention — column
@@ -59,15 +59,15 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
     }
 }
 
-internal sealed class PostingConfiguration : IEntityTypeConfiguration<Posting>
+internal sealed class JournalLineConfiguration : IEntityTypeConfiguration<JournalLine>
 {
-    public void Configure(EntityTypeBuilder<Posting> builder)
+    public void Configure(EntityTypeBuilder<JournalLine> builder)
     {
-        builder.ToTable("postings");
+        builder.ToTable("journal_lines");
 
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Id)
-            .HasConversion(id => id.Value, v => new PostingId(v));
+            .HasConversion(id => id.Value, v => new JournalLineId(v));
 
         builder.Property(p => p.EntryId)
             .HasConversion(id => id.Value, v => new JournalEntryId(v))

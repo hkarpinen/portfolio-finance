@@ -4,17 +4,17 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Aggregates;
 
 /// <summary>The DIRECTION carries the sign; the amount is always positive.</summary>
-public sealed class Posting
+public sealed class JournalLine
 {
-    public PostingId Id { get; private set; }
+    public JournalLineId Id { get; private set; }
     public JournalEntryId EntryId { get; private set; }
     public AccountId AccountId { get; private set; }
     public EntryDirection Direction { get; private set; }
     public Money Amount { get; private set; }
 
-    private Posting() { }
+    private JournalLine() { }
 
-    internal Posting(PostingId id, JournalEntryId entryId, AccountId accountId, EntryDirection direction, Money amount)
+    internal JournalLine(JournalLineId id, JournalEntryId entryId, AccountId accountId, EntryDirection direction, Money amount)
     {
         Id = id;
         EntryId = entryId;
@@ -33,7 +33,7 @@ public sealed class Posting
 /// </summary>
 public sealed class JournalEntry : IAggregateRoot
 {
-    private readonly List<Posting> _postings = new();
+    private readonly List<JournalLine> _journalLines = new();
     private readonly List<DomainEvent> _domainEvents = new();
 
     public JournalEntryId Id { get; private set; }
@@ -52,18 +52,18 @@ public sealed class JournalEntry : IAggregateRoot
     public JournalEntryId? ReversalOfEntryId { get; private set; }
 
     // Makes "active" a DECLARED state — in effect iff neither a reversal nor itself
-    // reversed — so a partial unique index can forbid a second active posting per source.
+    // reversed — so a partial unique index can forbid a second active journalLine per source.
     public Guid? ReversedByEntryId { get; private set; }
 
     // Opaque to the ledger. Lets a read model attribute an entry by column instead of
-    // parsing the free-text Source. Settlement entries set all of these; charge postings
-    // carry only SourceChargeId.
-    public Guid? SourceChargeId { get; private set; }
-    public Guid? SourceAllocationId { get; private set; }
+    // parsing the free-text Source. Settlement entries set all of these; expense journal_lines
+    // carry only SourceExpenseId.
+    public Guid? SourceExpenseId { get; private set; }
+    public Guid? SourceShareId { get; private set; }
     public DateTime? SourceOccurrence { get; private set; }
     public Guid? SourceMemberId { get; private set; }
 
-    public IReadOnlyList<Posting> Postings => _postings.AsReadOnly();
+    public IReadOnlyList<JournalLine> JournalLines => _journalLines.AsReadOnly();
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 
@@ -71,16 +71,16 @@ public sealed class JournalEntry : IAggregateRoot
 
     /// <summary>
     /// Post a balanced journal entry. Throws unless the lines satisfy double-entry:
-    /// ≥2 postings, all positive, single currency (P10), and Σ debits == Σ credits (P2).
+    /// ≥2 journal_lines, all positive, single currency (P10), and Σ debits == Σ credits (P2).
     /// </summary>
     public static JournalEntry Post(
         LedgerId ledgerId,
         DateTime date,
         string description,
-        IReadOnlyList<PostingLine> lines,
+        IReadOnlyList<JournalLineDraft> lines,
         string? source = null,
-        Guid? sourceChargeId = null,
-        Guid? sourceAllocationId = null,
+        Guid? sourceExpenseId = null,
+        Guid? sourceShareId = null,
         DateTime? sourceOccurrence = null,
         Guid? sourceMemberId = null,
         Guid? postedByUserId = null)
@@ -95,15 +95,15 @@ public sealed class JournalEntry : IAggregateRoot
             Description = description,
             Source = source,
             RecordedAt = DateTime.UtcNow,
-            SourceChargeId = sourceChargeId,
-            SourceAllocationId = sourceAllocationId,
+            SourceExpenseId = sourceExpenseId,
+            SourceShareId = sourceShareId,
             SourceOccurrence = sourceOccurrence is null
                 ? null : DateTime.SpecifyKind(sourceOccurrence.Value.Date, DateTimeKind.Utc),
             SourceMemberId = sourceMemberId,
             PostedByUserId = postedByUserId,
         };
         foreach (var l in lines)
-            entry._postings.Add(new Posting(PostingId.New(), entry.Id, l.AccountId, l.Direction, l.Amount));
+            entry._journalLines.Add(new JournalLine(JournalLineId.New(), entry.Id, l.AccountId, l.Direction, l.Amount));
 
         entry._domainEvents.Add(new JournalEntryPosted(entry.Id, ledgerId, entry.Date, description));
         return entry;
@@ -121,8 +121,8 @@ public sealed class JournalEntry : IAggregateRoot
         if (ReversedByEntryId is not null)
             throw new InvalidOperationException("Entry has already been reversed.");
 
-        var mirrored = _postings
-            .Select(p => new PostingLine(p.AccountId, Flip(p.Direction), p.Amount))
+        var mirrored = _journalLines
+            .Select(p => new JournalLineDraft(p.AccountId, Flip(p.Direction), p.Amount))
             .ToList();
 
         var reversal = new JournalEntry
@@ -136,15 +136,15 @@ public sealed class JournalEntry : IAggregateRoot
             ReversalOfEntryId = Id,
             // Carry the provenance so a reversal is attributable to the same origin and the
             // read-side signed-sum nets the pair to zero.
-            SourceChargeId = SourceChargeId,
-            SourceAllocationId = SourceAllocationId,
+            SourceExpenseId = SourceExpenseId,
+            SourceShareId = SourceShareId,
             SourceOccurrence = SourceOccurrence,
             SourceMemberId = SourceMemberId,
             // The reversal is a NEW act by whoever caused it, not a copy of the original's author.
             PostedByUserId = reversedByUserId,
         };
         foreach (var l in mirrored)
-            reversal._postings.Add(new Posting(PostingId.New(), reversal.Id, l.AccountId, l.Direction, l.Amount));
+            reversal._journalLines.Add(new JournalLine(JournalLineId.New(), reversal.Id, l.AccountId, l.Direction, l.Amount));
 
         reversal._domainEvents.Add(new JournalEntryReversed(reversal.Id, Id, LedgerId));
 
@@ -162,12 +162,12 @@ public sealed class JournalEntry : IAggregateRoot
 
     /// <summary>
     /// Already says what a fresh accrual would say — same expense account, amount, currency,
-    /// description and value date. What makes posting convergent: an entry that matches is left
+    /// description and value date. What makes journalLine convergent: an entry that matches is left
     /// alone rather than reversed and rewritten identically.
     /// </summary>
     public bool SaysAccrual(AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
     {
-        var debit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var debit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
         return debit is not null
             && debit.AccountId == expenseAccount
             && debit.Amount.Amount == total
@@ -179,8 +179,8 @@ public sealed class JournalEntry : IAggregateRoot
     /// <summary>Already says the same 1↔1 move — same two accounts, same amount.</summary>
     public bool SaysTransfer(AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
     {
-        var debit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        var credit = _postings.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
+        var debit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
+        var credit = _journalLines.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
         return debit is not null && credit is not null
             && debit.AccountId == debitAccount
             && credit.AccountId == creditAccount
@@ -191,16 +191,16 @@ public sealed class JournalEntry : IAggregateRoot
     private static EntryDirection Flip(EntryDirection d) =>
         d == EntryDirection.Debit ? EntryDirection.Credit : EntryDirection.Debit;
 
-    private static void Validate(IReadOnlyList<PostingLine> lines)
+    private static void Validate(IReadOnlyList<JournalLineDraft> lines)
     {
         if (lines.Count < 2)
-            throw new ArgumentException("A journal entry needs at least two postings (double-entry).", nameof(lines));
+            throw new ArgumentException("A journal entry needs at least two journal_lines (double-entry).", nameof(lines));
         if (lines.Any(l => l.Amount.Amount <= 0))
-            throw new ArgumentException("Posting amounts must be positive — the direction carries the sign.", nameof(lines));
+            throw new ArgumentException("JournalLine amounts must be positive — the direction carries the sign.", nameof(lines));
 
         var currency = lines[0].Amount.Currency;
         if (lines.Any(l => l.Amount.Currency != currency))
-            throw new InvalidOperationException("All postings in an entry must share one currency (P10).");
+            throw new InvalidOperationException("All journal_lines in an entry must share one currency (P10).");
 
         var debits = lines.Where(l => l.Direction == EntryDirection.Debit).Sum(l => l.Amount.Amount);
         var credits = lines.Where(l => l.Direction == EntryDirection.Credit).Sum(l => l.Amount.Amount);

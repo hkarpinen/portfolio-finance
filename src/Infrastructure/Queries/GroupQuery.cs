@@ -16,10 +16,10 @@ internal sealed class GroupQuery : IGroupQuery
             .AsNoTracking()
             .AnyAsync(p => p.GroupId == groupId && p.UserId == userId && p.IsActive, cancellationToken);
 
-    public Task<bool> ChargeBelongsToGroupAsync(Guid groupId, Guid chargeId, CancellationToken cancellationToken = default)
+    public Task<bool> ExpenseBelongsToGroupAsync(Guid groupId, Guid expenseId, CancellationToken cancellationToken = default)
     {
-        var id = ChargeId.Create(chargeId);
+        var id = ExpenseId.Create(expenseId);
         var gid = GroupId.Create(groupId);
-        return _db.Charges.AsNoTracking().AnyAsync(c => c.Id == id && c.GroupId == gid, cancellationToken);
+        return _db.Expenses.AsNoTracking().AnyAsync(c => c.Id == id && c.GroupId == gid, cancellationToken);
     }
 }

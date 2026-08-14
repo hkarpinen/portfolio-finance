@@ -5,8 +5,8 @@ namespace Finance.Domain.Aggregates;
 
 // NormalBalance is derived from AccountType, never stored, so increases/decreases always map to
 // debit/credit correctly. ParentAccountId makes accounts hierarchical for rollups: a parent's
-// balance is its own postings plus its children's. Balances are never stored on the account —
-// always derived from postings, so an account cannot drift out of sync with the journal.
+// balance is its own journal_lines plus its children's. Balances are never stored on the account —
+// always derived from journal_lines, so an account cannot drift out of sync with the journal.
 public sealed class Account : IAggregateRoot
 {
     private readonly List<DomainEvent> _domainEvents = new();

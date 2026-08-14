@@ -72,23 +72,23 @@ internal sealed class LedgerRepository : ILedgerRepository
 
     public async Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default)
         => await _db.JournalEntries
-            .Include("_postings")
+            .Include("_journalLines")
             .Where(e => e.LedgerId == ledgerId && e.Source == source)
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<JournalEntry>> GetEntriesByChargeAsync(LedgerId ledgerId, Guid chargeId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<JournalEntry>> GetEntriesByExpenseAsync(LedgerId ledgerId, Guid expenseId, CancellationToken ct = default)
         => await _db.JournalEntries
-            .Include("_postings")
-            .Where(e => e.LedgerId == ledgerId && e.SourceChargeId == chargeId)
+            .Include("_journalLines")
+            .Where(e => e.LedgerId == ledgerId && e.SourceExpenseId == expenseId)
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<Posting>> GetPostingsByAccountAsync(AccountId accountId, CancellationToken ct = default)
-        => await _db.Postings.AsNoTracking().Where(p => p.AccountId == accountId).ToListAsync(ct);
+    public async Task<IReadOnlyList<JournalLine>> GetJournalLinesByAccountAsync(AccountId accountId, CancellationToken ct = default)
+        => await _db.JournalLines.AsNoTracking().Where(p => p.AccountId == accountId).ToListAsync(ct);
 
-    public async Task<IReadOnlyList<Posting>> GetPostingsByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<JournalLine>> GetJournalLinesByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
     {
         var query =
-            from p in _db.Postings.AsNoTracking()
+            from p in _db.JournalLines.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
             where e.LedgerId == ledgerId
             select p;

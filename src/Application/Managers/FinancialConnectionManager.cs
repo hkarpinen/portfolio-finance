@@ -17,7 +17,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
     private readonly IFinancialConnectionRepository _repo;
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
-    private readonly IChargeRepository _expenseRepository;
+    private readonly IExpenseRepository _expenseRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
     private readonly IBankSyncManager _syncService;
     private readonly ILogger<FinancialConnectionManager> _logger;
@@ -27,7 +27,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         IFinancialConnectionRepository repo,
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
-        IChargeRepository expenseRepository,
+        IExpenseRepository expenseRepository,
         IIncomeSourceRepository incomeRepository,
         IBankSyncManager syncService,
         ILogger<FinancialConnectionManager> logger)
@@ -62,15 +62,15 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
 
         if (existing is not null)
         {
-            // Auto-created charges/income must go BEFORE the connection does, since they are found through
+            // Auto-created expenses/income must go BEFORE the connection does, since they are found through
             // its suggestions.
             var oldSuggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(existing.Id, cancellationToken);
             foreach (var suggestion in oldSuggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
             {
-                if (suggestion.LinkedEntityType == LinkedEntityType.Charge)
+                if (suggestion.LinkedEntityType == LinkedEntityType.Expense)
                 {
                     var expense = await _expenseRepository.GetByIdAsync(
-                        ChargeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
+                        ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
                     if (expense is not null) await _expenseRepository.RemoveAsync(expense, cancellationToken);
                 }
                 else if (suggestion.LinkedEntityType == LinkedEntityType.IncomeSource)
@@ -152,10 +152,10 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         var suggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(connection.Id, cancellationToken);
         foreach (var suggestion in suggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
         {
-            if (suggestion.LinkedEntityType == LinkedEntityType.Charge)
+            if (suggestion.LinkedEntityType == LinkedEntityType.Expense)
             {
                 var expense = await _expenseRepository.GetByIdAsync(
-                    ChargeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
+                    ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
                 if (expense is not null)
                     await _expenseRepository.RemoveAsync(expense, cancellationToken);
             }
@@ -253,14 +253,14 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (nextDue < DateTime.UtcNow.Date)
                 nextDue = DateTime.UtcNow.Date.AddDays(1);
 
-            var expense = Charge.CreateOwn(
+            var expense = Expense.CreateOwn(
                 UserId.Create(userId), sourceName, suggestion.AverageAmount,
-                ChargeCategory.Other, nextDue);
+                ExpenseCategory.Other, nextDue);
             await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
+            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
             await _repo.SaveSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Expense);
         }
     }
 
@@ -300,29 +300,29 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
             if (nextDue < DateTime.UtcNow.Date)
                 nextDue = DateTime.UtcNow.Date.AddDays(1);
 
-            Charge expense;
+            Expense expense;
             if (request.GroupId.HasValue)
             {
-                expense = Charge.Create(
+                expense = Expense.Create(
                     AccountingEntity.Household(request.GroupId.Value),
                     UserId.Create(userId),
-                    displayName, amount, ChargeCategory.Other, nextDue);
+                    displayName, amount, ExpenseCategory.Other, nextDue);
                 expense.Activate();
             }
             else
             {
-                expense = Charge.CreateOwn(
+                expense = Expense.CreateOwn(
                     UserId.Create(userId), displayName, amount,
-                    ChargeCategory.Other, nextDue);
+                    ExpenseCategory.Other, nextDue);
             }
 
-            // No separate payment row: the charge posts on the day it belongs to, so accepting a
+            // No separate payment row: the expense posts on the day it belongs to, so accepting a
             // suggestion for a transaction that already happened is on the books by that alone.
             await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Charge);
+            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
             await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
             await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Charge);
+            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Expense);
         }
     }
 

@@ -9,7 +9,7 @@ namespace Infrastructure.Messaging.Consumers;
 
 // The projection is read-side only: a departing member's ledger accounts and balances stay on the
 // books (debt does not vanish with departure); this just lets queries tell current members from
-// departed ones and label allocations with real roles. These events carry no event id, so dedup
+// departed ones and label shares with real roles. These events carry no event id, so dedup
 // rides the transport MessageId — and every handler is a state upsert, so redelivery is harmless
 // either way.
 internal sealed class HouseholdMembershipConsumer :

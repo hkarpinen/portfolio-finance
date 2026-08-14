@@ -3,36 +3,36 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Queries;
 
-// Derives "settled per (allocation, occurrence)" from settlement journal entries — the ledger is
+// Derives "settled per (share, occurrence)" from settlement journal entries — the ledger is
 // the single source of truth and there is no reimbursements table. A settlement entry carries its
-// SourceAllocationId/SourceOccurrence provenance and two equal postings; a reversal copies the
+// SourceShareId/SourceOccurrence provenance and two equal journal_lines; a reversal copies the
 // provenance and negates, so the signed sum nets a reversed pair to zero.
 internal static class SettlementReads
 {
-    public static async Task<Dictionary<(Guid AllocationId, DateTime Occurrence), (decimal Settled, DateTime LatestValueDate)>>
-        GetSettledByAllocationOccurrenceAsync(
-            FinanceDbContext db, IReadOnlyCollection<Guid> allocationIds, CancellationToken ct)
+    public static async Task<Dictionary<(Guid ShareId, DateTime Occurrence), (decimal Settled, DateTime LatestValueDate)>>
+        GetSettledByShareOccurrenceAsync(
+            FinanceDbContext db, IReadOnlyCollection<Guid> shareIds, CancellationToken ct)
     {
-        if (allocationIds.Count == 0) return new();
+        if (shareIds.Count == 0) return new();
 
         var rows = await db.JournalEntries
             .AsNoTracking()
-            .Where(e => e.SourceAllocationId != null
+            .Where(e => e.SourceShareId != null
                      && e.SourceOccurrence != null
-                     && allocationIds.Contains(e.SourceAllocationId.Value))
+                     && shareIds.Contains(e.SourceShareId.Value))
             .Select(e => new
             {
-                AllocationId = e.SourceAllocationId!.Value,
+                ShareId = e.SourceShareId!.Value,
                 Occurrence = e.SourceOccurrence!.Value,
                 ValueDate = e.Date,
                 IsReversal = e.ReversalOfEntryId != null,
-                // Both postings of a settlement carry the same amount; either one gives the value.
-                Amount = db.Postings.Where(p => p.EntryId == e.Id).Max(p => p.Amount.Amount),
+                // Both journal_lines of a settlement carry the same amount; either one gives the value.
+                Amount = db.JournalLines.Where(p => p.EntryId == e.Id).Max(p => p.Amount.Amount),
             })
             .ToListAsync(ct);
 
         return rows
-            .GroupBy(x => (x.AllocationId, x.Occurrence.Date))
+            .GroupBy(x => (x.ShareId, x.Occurrence.Date))
             .ToDictionary(
                 g => g.Key,
                 g => (Settled: g.Sum(x => x.IsReversal ? -x.Amount : x.Amount),

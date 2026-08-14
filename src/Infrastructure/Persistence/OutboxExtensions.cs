@@ -176,8 +176,8 @@ internal static class OutboxExtensions
     public static void AddToOutbox(this FinanceDbContext context, DomainEvent domainEvent)
     {
         // Not publishable, not outboxed. Ledger housekeeping lands here: those events fire on every
-        // posting, carry nothing a consumer needs, and outboxing them would echo every posting back
-        // onto the bus for the ledger-posting consumer to react to.
+        // journalLine, carry nothing a consumer needs, and outboxing them would echo every journalLine back
+        // onto the bus for the ledger-journalLine consumer to react to.
         if (!PublishedEvents.Includes(domainEvent.GetType())) return;
 
         var message = new OutboxMessage

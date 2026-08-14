@@ -15,9 +15,9 @@ internal sealed class BankSyncManager : IBankSyncManager
     private readonly IFinancialConnectionRepository _repo;
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
-    private readonly IChargeRepository _chargeRepository;
+    private readonly IExpenseRepository _expenseRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
-    private readonly IChargeQuery _chargeQuery;
+    private readonly IExpenseQuery _expenseQuery;
     private readonly IIncomeQuery _incomeQuery;
     private readonly IBankSyncMatchingEngine _matchingEngine;
     private readonly ILogger<BankSyncManager> _logger;
@@ -27,9 +27,9 @@ internal sealed class BankSyncManager : IBankSyncManager
         IFinancialConnectionRepository repo,
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
-        IChargeRepository chargeRepository,
+        IExpenseRepository expenseRepository,
         IIncomeSourceRepository incomeRepository,
-        IChargeQuery chargeQuery,
+        IExpenseQuery expenseQuery,
         IIncomeQuery incomeQuery,
         IBankSyncMatchingEngine matchingEngine,
         ILogger<BankSyncManager> logger)
@@ -38,9 +38,9 @@ internal sealed class BankSyncManager : IBankSyncManager
         _repo = repo;
         _connectionQuery = connectionQuery;
         _tokenProtector = tokenProtector;
-        _chargeRepository = chargeRepository;
+        _expenseRepository = expenseRepository;
         _incomeRepository = incomeRepository;
-        _chargeQuery = chargeQuery;
+        _expenseQuery = expenseQuery;
         _incomeQuery = incomeQuery;
         _matchingEngine = matchingEngine;
         _logger = logger;
@@ -158,7 +158,7 @@ internal sealed class BankSyncManager : IBankSyncManager
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Auto-pay matching failed for connection {ConnectionId}; charges can still be marked paid manually.",
+                    "Auto-pay matching failed for connection {ConnectionId}; expenses can still be marked paid manually.",
                     connection.ExternalId);
             }
         }
@@ -245,10 +245,10 @@ internal sealed class BankSyncManager : IBankSyncManager
         }
         else
         {
-            if (await _chargeQuery.ExistsForUserAsync(uid, sourceName, suggestion.AverageAmount.Amount, ct))
+            if (await _expenseQuery.ExistsForUserAsync(uid, sourceName, suggestion.AverageAmount.Amount, ct))
             {
                 _logger.LogDebug(
-                    "Skipping auto-link for outflow suggestion {SuggestionId} — matching Charge already exists.",
+                    "Skipping auto-link for outflow suggestion {SuggestionId} — matching Expense already exists.",
                     suggestion.Id);
                 return;
             }
@@ -256,13 +256,13 @@ internal sealed class BankSyncManager : IBankSyncManager
             var nextDue = SuggestionLinkPolicy.ResolveNextDue(
                 suggestion.PredictedNextDate, suggestion.LastDate, DateTime.UtcNow.Date);
 
-            var charge = Charge.CreateOwn(
-                uid, sourceName, suggestion.AverageAmount, ChargeCategory.Other, nextDue);
-            await _chargeRepository.AddAsync(charge, ct);
-            suggestion.MarkLinked(charge.Id.Value, LinkedEntityType.Charge);
+            var expense = Expense.CreateOwn(
+                uid, sourceName, suggestion.AverageAmount, ExpenseCategory.Other, nextDue);
+            await _expenseRepository.AddAsync(expense, ct);
+            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
             _logger.LogInformation(
-                "Auto-linked suggestion {SuggestionId} → Charge {ChargeId} ({Source})",
-                suggestion.Id, charge.Id.Value, sourceName);
+                "Auto-linked suggestion {SuggestionId} → Expense {ExpenseId} ({Source})",
+                suggestion.Id, expense.Id.Value, sourceName);
         }
     }
 

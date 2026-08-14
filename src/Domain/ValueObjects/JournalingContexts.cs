@@ -5,7 +5,7 @@ public sealed record MemberShare(AccountId MemberAccount, Money Amount);
 // FundingAccount is an ordinary account — a member's own account or a shared pool; "funding"
 // is the role it plays, not a distinct type. Any unallocated remainder (Total − Σ Shares) is
 // borne by the funding account: their own share when it is a member, a no-op when it is a pool.
-public sealed record ChargeAllocationContext(
+public sealed record ExpenseShareContext(
     AccountId ExpenseAccount,
     AccountId FundingAccount,
     IReadOnlyList<MemberShare> Shares,
@@ -37,4 +37,4 @@ public sealed record JournalEntryDraft(
     DateTime Date,
     string Description,
     string? Source,
-    IReadOnlyList<PostingLine> Lines);
+    IReadOnlyList<JournalLineDraft> Lines);

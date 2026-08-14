@@ -18,8 +18,8 @@ public readonly record struct JournalEntryId(Guid Value)
     public static JournalEntryId Create(Guid value) => new(value);
 }
 
-public readonly record struct PostingId(Guid Value)
+public readonly record struct JournalLineId(Guid Value)
 {
-    public static PostingId New() => new(Guid.NewGuid());
-    public static PostingId Create(Guid value) => new(value);
+    public static JournalLineId New() => new(Guid.NewGuid());
+    public static JournalLineId Create(Guid value) => new(value);
 }

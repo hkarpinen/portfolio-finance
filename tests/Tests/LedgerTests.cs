@@ -29,12 +29,12 @@ public class LedgerTests
     {
         var entry = JournalEntry.Post(L, DateTime.UtcNow, "Hank contributes $700", new[]
         {
-            PostingLine.Debit(Cash, Usd(700)),
-            PostingLine.Credit(MemberHank, Usd(700)),
+            JournalLineDraft.Debit(Cash, Usd(700)),
+            JournalLineDraft.Credit(MemberHank, Usd(700)),
         });
 
-        Assert.Equal(2, entry.Postings.Count);
-        Assert.True(LedgerMath.IsBalanced(entry.Postings));
+        Assert.Equal(2, entry.JournalLines.Count);
+        Assert.True(LedgerMath.IsBalanced(entry.JournalLines));
         Assert.IsType<JournalEntryPosted>(entry.GetDomainEvents()[0]);
     }
 
@@ -44,8 +44,8 @@ public class LedgerTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             JournalEntry.Post(L, DateTime.UtcNow, "lopsided", new[]
             {
-                PostingLine.Debit(Cash, Usd(700)),
-                PostingLine.Credit(MemberHank, Usd(300)),   // 700 ≠ 300
+                JournalLineDraft.Debit(Cash, Usd(700)),
+                JournalLineDraft.Credit(MemberHank, Usd(300)),   // 700 ≠ 300
             }));
         Assert.Contains("does not balance", ex.Message);
     }
@@ -54,18 +54,18 @@ public class LedgerTests
     public void Post_SingleLine_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            JournalEntry.Post(L, DateTime.UtcNow, "one-sided", new[] { PostingLine.Debit(Cash, Usd(700)) }));
+            JournalEntry.Post(L, DateTime.UtcNow, "one-sided", new[] { JournalLineDraft.Debit(Cash, Usd(700)) }));
     }
 
     [Fact]
     public void Post_NegativeAmount_Throws()
     {
-        // Money is signed, but a posting amount must be positive — the direction carries the sign.
+        // Money is signed, but a journalLine amount must be positive — the direction carries the sign.
         Assert.Throws<ArgumentException>(() =>
             JournalEntry.Post(L, DateTime.UtcNow, "neg", new[]
             {
-                PostingLine.Debit(Cash, Usd(-700)),
-                PostingLine.Credit(MemberHank, Usd(-700)),
+                JournalLineDraft.Debit(Cash, Usd(-700)),
+                JournalLineDraft.Credit(MemberHank, Usd(-700)),
             }));
     }
 
@@ -75,8 +75,8 @@ public class LedgerTests
         Assert.Throws<InvalidOperationException>(() =>
             JournalEntry.Post(L, DateTime.UtcNow, "fx", new[]
             {
-                PostingLine.Debit(Cash, Money.Create(700, "USD")),
-                PostingLine.Credit(MemberHank, Money.Create(700, "EUR")),
+                JournalLineDraft.Debit(Cash, Money.Create(700, "USD")),
+                JournalLineDraft.Credit(MemberHank, Money.Create(700, "EUR")),
             }));
     }
 
@@ -84,14 +84,14 @@ public class LedgerTests
     public void AccountBalance_DebitNormal_Asset()
     {
         // Cash: +700 +300 −1000 = 0 (asset, debit-normal)
-        var postings = new[]
+        var journal_lines = new[]
         {
-            JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { PostingLine.Debit(Cash, Usd(700)),  PostingLine.Credit(MemberHank, Usd(700)) }),
-            JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { PostingLine.Debit(Cash, Usd(300)),  PostingLine.Credit(MemberBob, Usd(300)) }),
-            JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { PostingLine.Debit(MemberHank, Usd(700)), PostingLine.Debit(MemberBob, Usd(300)), PostingLine.Credit(Cash, Usd(1000)) }),
-        }.SelectMany(e => e.Postings).Where(p => p.AccountId == Cash);
+            JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { JournalLineDraft.Debit(Cash, Usd(700)),  JournalLineDraft.Credit(MemberHank, Usd(700)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "in", new[]  { JournalLineDraft.Debit(Cash, Usd(300)),  JournalLineDraft.Credit(MemberBob, Usd(300)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { JournalLineDraft.Debit(MemberHank, Usd(700)), JournalLineDraft.Debit(MemberBob, Usd(300)), JournalLineDraft.Credit(Cash, Usd(1000)) }),
+        }.SelectMany(e => e.JournalLines).Where(p => p.AccountId == Cash);
 
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, postings));
+        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, journal_lines));
     }
 
     [Fact]
@@ -101,14 +101,14 @@ public class LedgerTests
         // one full cycle.
         var entries = new[]
         {
-            JournalEntry.Post(L, DateTime.UtcNow, "in",  new[] { PostingLine.Debit(Cash, Usd(700)), PostingLine.Credit(MemberHank, Usd(700)) }),
-            JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { PostingLine.Debit(MemberHank, Usd(700)), PostingLine.Credit(Cash, Usd(700)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "in",  new[] { JournalLineDraft.Debit(Cash, Usd(700)), JournalLineDraft.Credit(MemberHank, Usd(700)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { JournalLineDraft.Debit(MemberHank, Usd(700)), JournalLineDraft.Credit(Cash, Usd(700)) }),
         };
-        var hank = entries.SelectMany(e => e.Postings).Where(p => p.AccountId == MemberHank);
+        var hank = entries.SelectMany(e => e.JournalLines).Where(p => p.AccountId == MemberHank);
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, hank));
 
         // A member who only contributed shows a positive (credit) balance — the group owes them.
-        var contributedOnly = entries[0].Postings.Where(p => p.AccountId == MemberHank);
+        var contributedOnly = entries[0].JournalLines.Where(p => p.AccountId == MemberHank);
         Assert.Equal(700m, LedgerMath.AccountBalance(NormalBalance.Credit, contributedOnly));
     }
 
@@ -118,16 +118,16 @@ public class LedgerTests
         // Rent $1,000, Hank $700 / Bob $300; both contribute, pool pays.
         var entries = new[]
         {
-            JournalEntry.Post(L, DateTime.UtcNow, "Hank contributes", new[] { PostingLine.Debit(Cash, Usd(700)), PostingLine.Credit(MemberHank, Usd(700)) }),
-            JournalEntry.Post(L, DateTime.UtcNow, "Bob contributes",  new[] { PostingLine.Debit(Cash, Usd(300)), PostingLine.Credit(MemberBob, Usd(300)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "Hank contributes", new[] { JournalLineDraft.Debit(Cash, Usd(700)), JournalLineDraft.Credit(MemberHank, Usd(700)) }),
+            JournalEntry.Post(L, DateTime.UtcNow, "Bob contributes",  new[] { JournalLineDraft.Debit(Cash, Usd(300)), JournalLineDraft.Credit(MemberBob, Usd(300)) }),
             JournalEntry.Post(L, DateTime.UtcNow, "Pool pays vendor", new[]
             {
-                PostingLine.Debit(MemberHank, Usd(700)),
-                PostingLine.Debit(MemberBob, Usd(300)),
-                PostingLine.Credit(Cash, Usd(1000)),
+                JournalLineDraft.Debit(MemberHank, Usd(700)),
+                JournalLineDraft.Debit(MemberBob, Usd(300)),
+                JournalLineDraft.Credit(Cash, Usd(1000)),
             }),
         };
-        var all = entries.SelectMany(e => e.Postings).ToList();
+        var all = entries.SelectMany(e => e.JournalLines).ToList();
 
         var (debits, credits) = LedgerMath.TrialBalance(all);
         Assert.Equal(2000m, debits);
@@ -140,24 +140,24 @@ public class LedgerTests
     }
 
     [Fact]
-    public void Reverse_MirrorsPostings_AndNetsToZero()
+    public void Reverse_MirrorsJournalLines_AndNetsToZero()
     {
         var original = JournalEntry.Post(L, DateTime.UtcNow, "Bob reimburses Hank", new[]
         {
-            PostingLine.Debit(MemberBob, Usd(300)),
-            PostingLine.Credit(MemberHank, Usd(300)),
+            JournalLineDraft.Debit(MemberBob, Usd(300)),
+            JournalLineDraft.Credit(MemberHank, Usd(300)),
         });
 
         var reversal = original.Reverse(DateTime.UtcNow);
 
         Assert.Equal(original.Id, reversal.ReversalOfEntryId);
-        Assert.True(LedgerMath.IsBalanced(reversal.Postings));
+        Assert.True(LedgerMath.IsBalanced(reversal.JournalLines));
         Assert.IsType<JournalEntryReversed>(reversal.GetDomainEvents()[0]);
 
-        var revBob = reversal.Postings.Single(p => p.AccountId == MemberBob);
+        var revBob = reversal.JournalLines.Single(p => p.AccountId == MemberBob);
         Assert.Equal(EntryDirection.Credit, revBob.Direction);
 
-        var both = original.Postings.Concat(reversal.Postings).ToList();
+        var both = original.JournalLines.Concat(reversal.JournalLines).ToList();
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberHank)));
         Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberBob)));
     }
@@ -167,8 +167,8 @@ public class LedgerTests
     {
         var original = JournalEntry.Post(L, DateTime.UtcNow, "x", new[]
         {
-            PostingLine.Debit(MemberBob, Usd(300)),
-            PostingLine.Credit(MemberHank, Usd(300)),
+            JournalLineDraft.Debit(MemberBob, Usd(300)),
+            JournalLineDraft.Credit(MemberHank, Usd(300)),
         });
         var reversal = original.Reverse(DateTime.UtcNow);
         Assert.Throws<InvalidOperationException>(() => reversal.Reverse(DateTime.UtcNow));
@@ -179,8 +179,8 @@ public class LedgerTests
     {
         var original = JournalEntry.Post(L, DateTime.UtcNow, "x", new[]
         {
-            PostingLine.Debit(MemberBob, Usd(300)),
-            PostingLine.Credit(MemberHank, Usd(300)),
+            JournalLineDraft.Debit(MemberBob, Usd(300)),
+            JournalLineDraft.Credit(MemberHank, Usd(300)),
         });
 
         Assert.Null(original.ReversedByEntryId);
@@ -195,13 +195,13 @@ public class LedgerTests
     {
         var original = JournalEntry.Post(L, DateTime.UtcNow, "x", new[]
         {
-            PostingLine.Debit(MemberBob, Usd(300)),
-            PostingLine.Credit(MemberHank, Usd(300)),
+            JournalLineDraft.Debit(MemberBob, Usd(300)),
+            JournalLineDraft.Credit(MemberHank, Usd(300)),
         });
         original.Reverse(DateTime.UtcNow);
 
         // The original now carries ReversedByEntryId — reversing it again must be rejected so the partial
-        // unique index can never see two active postings under one source.
+        // unique index can never see two active journal_lines under one source.
         Assert.Throws<InvalidOperationException>(() => original.Reverse(DateTime.UtcNow));
     }
 
@@ -212,8 +212,8 @@ public class LedgerTests
         var ledger = LedgerId.New();
         var lines = new[]
         {
-            PostingLine.Debit(AccountId.New(), Money.Create(10m, "USD")),
-            PostingLine.Credit(AccountId.New(), Money.Create(10m, "USD")),
+            JournalLineDraft.Debit(AccountId.New(), Money.Create(10m, "USD")),
+            JournalLineDraft.Credit(AccountId.New(), Money.Create(10m, "USD")),
         };
 
         var entry = JournalEntry.Post(
@@ -230,8 +230,8 @@ public class LedgerTests
         var ledger = LedgerId.New();
         var lines = new[]
         {
-            PostingLine.Debit(AccountId.New(), Money.Create(10m, "USD")),
-            PostingLine.Credit(AccountId.New(), Money.Create(10m, "USD")),
+            JournalLineDraft.Debit(AccountId.New(), Money.Create(10m, "USD")),
+            JournalLineDraft.Credit(AccountId.New(), Money.Create(10m, "USD")),
         };
         var original = JournalEntry.Post(ledger, DateTime.UtcNow, "Something", lines, postedByUserId: author);
 

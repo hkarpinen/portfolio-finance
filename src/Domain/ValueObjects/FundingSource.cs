@@ -1,8 +1,8 @@
 namespace Finance.Domain.ValueObjects;
 
-// Which account funds the vendor payment for a group charge. The journal structure is identical
+// Which account funds the vendor payment for a group expense. The journal structure is identical
 // either way — only the account credited as the funding account differs — so collect-first and
-// reimburse-after net to the same postings.
+// reimburse-after net to the same journal_lines.
 public enum FundingSource
 {
     // Front-and-reimburse: FundingAccount = Member:{payer}. The payer's own share is intrinsically

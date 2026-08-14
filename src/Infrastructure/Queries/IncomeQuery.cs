@@ -187,54 +187,54 @@ internal sealed class IncomeQuery : IIncomeQuery
             .OrderBy(i => i.Source)
             .ToListAsync(cancellationToken);
 
-        var personalCharges = await _db.Charges
+        var personalExpenses = await _db.Expenses
             .AsNoTracking()
             .Where(e => e.Owner.Kind == EntityKind.Person && e.Owner.Id == uid.Value && e.IsActive)
             .OrderBy(e => e.DueDate)
             .ToListAsync(cancellationToken);
 
-        var splits = await FetchAllocationsWithBillDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
-        var paidAllocations = await FetchPaidAllocationOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var splits = await FetchSharesWithBillDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var paidShares = await FetchPaidShareOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
         var paidPersonal = await FetchPaidPersonalBillOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
 
         return _contributionCalculator.BuildSummaries(
             now, monthCount, pastMonths,
-            incomeEntities, personalCharges,
-            splits, paidAllocations, paidPersonal);
+            incomeEntities, personalExpenses,
+            splits, paidShares, paidPersonal);
     }
 
-    private async Task<IReadOnlyList<(Allocation Allocation, Charge Charge)>> FetchAllocationsWithBillDetailsAsync(
+    private async Task<IReadOnlyList<(Share Share, Expense Expense)>> FetchSharesWithBillDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splits = await _db.Allocations
+        var splits = await _db.Shares
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
         if (splits.Count == 0) return [];
 
-        var expenseIds = splits.Select(s => s.ChargeId).Distinct().ToList();
+        var expenseIds = splits.Select(s => s.ExpenseId).Distinct().ToList();
 
-        // One charge is one occurrence, so the window is a plain date filter the database can run.
-        var relevantCharges = (await _db.Charges
+        // One expense is one occurrence, so the window is a plain date filter the database can run.
+        var relevantExpenses = (await _db.Expenses
             .AsNoTracking()
             .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.Owner.Kind == EntityKind.Household
                         && b.OccurrenceDate >= from && b.OccurrenceDate <= to)
             .ToListAsync(cancellationToken))
             .ToDictionary(b => b.Id);
 
-        if (relevantCharges.Count == 0) return [];
+        if (relevantExpenses.Count == 0) return [];
 
         return splits
-            .Where(s => relevantCharges.ContainsKey(s.ChargeId))
-            .Select(s => (s, relevantCharges[s.ChargeId]))
+            .Where(s => relevantExpenses.ContainsKey(s.ExpenseId))
+            .Select(s => (s, relevantExpenses[s.ExpenseId]))
             .ToList();
     }
 
-    private async Task<IReadOnlyDictionary<(Guid AllocationId, DateTime OccurrenceDate), DateTime>> FetchPaidAllocationOccurrencesAsync(
+    private async Task<IReadOnlyDictionary<(Guid ShareId, DateTime OccurrenceDate), DateTime>> FetchPaidShareOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splits = await _db.Allocations
+        var splits = await _db.Shares
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
@@ -242,24 +242,24 @@ internal sealed class IncomeQuery : IIncomeQuery
         if (splits.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
         var splitIds = splits.Select(s => s.Id.Value).ToList();
-        var shareByAllocation = splits.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
+        var shareByShare = splits.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
 
-        // An (allocation, occurrence) counts as paid when ledger settlements cover the share — a signed,
+        // An (share, occurrence) counts as paid when ledger settlements cover the share — a signed,
         // partial-aware sum. The representative timestamp is the latest value date, i.e. when the money
         // actually moved.
-        var settledMap = await SettlementReads.GetSettledByAllocationOccurrenceAsync(
+        var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(
             _db, splitIds, cancellationToken);
 
         return settledMap
             .Where(kv => kv.Key.Occurrence >= from && kv.Key.Occurrence <= to
-                      && kv.Value.Settled >= (shareByAllocation.TryGetValue(kv.Key.AllocationId, out var share) ? share : 0m))
+                      && kv.Value.Settled >= (shareByShare.TryGetValue(kv.Key.ShareId, out var share) ? share : 0m))
             .ToDictionary(kv => kv.Key, kv => kv.Value.LatestValueDate);
     }
 
-    private async Task<IReadOnlyDictionary<(Guid ChargeId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
+    private async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var expenseIds = await _db.Charges
+        var expenseIds = await _db.Expenses
             .AsNoTracking()
             .Where(b => b.Owner.Kind == EntityKind.Person && b.Owner.Id == userId.Value)
             .Select(b => b.Id)
@@ -267,21 +267,21 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         if (expenseIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
-        // When a personal charge was paid IS when it was booked: it posts on the day it belongs
+        // When a personal expense was paid IS when it was booked: it posts on the day it belongs
         // to, so the entry's own date answers this without a second record of the same fact.
         // Method syntax deliberately: `from` is a query-expression keyword and this method's
         // parameter is called `from`, which the query form cannot see past.
         var entries = await _db.JournalEntries.AsNoTracking()
             .Where(e => e.ReversalOfEntryId == null && e.ReversedByEntryId == null
-                        && e.Date >= from && e.Date <= to && e.SourceChargeId != null)
-            .Join(_db.Charges.AsNoTracking().Where(c => c.Owner.Kind == EntityKind.Person && c.Owner.Id == userId.Value),
-                  e => e.SourceChargeId!.Value,
+                        && e.Date >= from && e.Date <= to && e.SourceExpenseId != null)
+            .Join(_db.Expenses.AsNoTracking().Where(c => c.Owner.Kind == EntityKind.Person && c.Owner.Id == userId.Value),
+                  e => e.SourceExpenseId!.Value,
                   c => c.Id.Value,
-                  (e, c) => new { ChargeId = c.Id.Value, c.OccurrenceDate, e.RecordedAt })
+                  (e, c) => new { ExpenseId = c.Id.Value, c.OccurrenceDate, e.RecordedAt })
             .ToListAsync(cancellationToken);
 
         return entries
-            .GroupBy(e => (e.ChargeId, e.OccurrenceDate.Date))
+            .GroupBy(e => (e.ExpenseId, e.OccurrenceDate.Date))
             .ToDictionary(g => g.Key, g => g.Max(e => e.RecordedAt));
     }
 }

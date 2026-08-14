@@ -8,7 +8,7 @@ namespace Finance.Application.Utilities;
 // The window projects future months, whose occurrences are never posted, so the two halves of each
 // item come from different sources by design:
 //
-//   Amounts due are a recurrence-schedule projection over the charge/allocation rows. It is a
+//   Amounts due are a recurrence-schedule projection over the expense/share rows. It is a
 //   schedule projection, NOT a ledger read, and cannot be derived from the ledger.
 //
 //   Settled/paid status always comes from the ledger. The lone exception is the payer's own share,
@@ -27,40 +27,40 @@ internal sealed class ContributionCalculator : IContributionCalculator
         int monthCount,
         int pastMonths,
         IReadOnlyList<IncomeSource> incomeSources,
-        IReadOnlyList<Charge> personalCharges,
-        IReadOnlyList<(Allocation Allocation, Charge Charge)> splits,
-        IReadOnlyDictionary<(Guid AllocationId, DateTime OccurrenceDate), DateTime> paidAllocationOccurrences,
-        IReadOnlyDictionary<(Guid ChargeId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
+        IReadOnlyList<Expense> personalExpenses,
+        IReadOnlyList<(Share Share, Expense Expense)> splits,
+        IReadOnlyDictionary<(Guid ShareId, DateTime OccurrenceDate), DateTime> paidShareOccurrences,
+        IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
     {
         var windowStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-pastMonths);
         var windowEndExclusive = windowStart.AddMonths(monthCount);
 
         var activeSources = incomeSources.Where(s => s.IsActive).ToList();
-        var activePersonal = personalCharges.Where(e => e.IsActive).ToList();
+        var activePersonal = personalExpenses.Where(e => e.IsActive).ToList();
 
         var projected = new List<(DateTime OccurrenceDate, ContributionItemDto Item)>();
         foreach (var s in splits)
         {
-            // One charge, one occurrence. A repeating bill arrives here as a row per period,
+            // One expense, one occurrence. A repeating bill arrives here as a row per period,
             // generated when that period came round, so nothing is projected.
             IEnumerable<DateTime> occurrenceDates =
-                s.Charge.OccurrenceDate >= windowStart && s.Charge.OccurrenceDate < windowEndExclusive
-                    ? [s.Charge.OccurrenceDate]
+                s.Expense.OccurrenceDate >= windowStart && s.Expense.OccurrenceDate < windowEndExclusive
+                    ? [s.Expense.OccurrenceDate]
                     : [];
 
             // The payer's own share is covered by fronting the bill — they never reimburse themselves, so
             // there is no payment record and hence no PaidAt.
-            var isPayerOwnShare = s.Charge.PayerUserId == s.Allocation.UserId.Value;
+            var isPayerOwnShare = s.Expense.PayerUserId == s.Share.UserId.Value;
 
             foreach (var date in occurrenceDates)
             {
-                var hasPayment = paidAllocationOccurrences.TryGetValue((s.Allocation.Id.Value, date.Date), out var paidAt);
+                var hasPayment = paidShareOccurrences.TryGetValue((s.Share.Id.Value, date.Date), out var paidAt);
                 var isPaid = hasPayment || isPayerOwnShare;
                 projected.Add((date, new ContributionItemDto(
-                    s.Allocation.Id.Value, s.Charge.Id.Value, s.Charge.Title, s.Charge.Category.ToString(),
-                    s.Allocation.Amount.Amount, s.Allocation.Amount.Currency, date,
+                    s.Share.Id.Value, s.Expense.Id.Value, s.Expense.Title, s.Expense.Category.ToString(),
+                    s.Share.Amount.Amount, s.Share.Amount.Currency, date,
                     isPaid,
-                    s.Charge.GroupId!.Value.Value,
+                    s.Expense.GroupId!.Value.Value,
                     hasPayment ? paidAt : null)));
             }
         }
@@ -89,7 +89,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
             var mEndExclusive = mStart.AddMonths(1);
             var label = mStart.ToString("MMMM yyyy");
 
-            var monthAllocations = projected
+            var monthShares = projected
                 .Where(x => x.OccurrenceDate >= mStart && x.OccurrenceDate < mEndExclusive)
                 .Select(x => x.Item)
                 .OrderBy(i => i.DueDate)
@@ -101,8 +101,8 @@ internal sealed class ContributionCalculator : IContributionCalculator
                 .OrderBy(i => i.DueDate)
                 .ToList();
 
-            var totalDue = monthAllocations.Sum(s => s.Amount);
-            var totalPaid = monthAllocations.Where(s => s.IsPaid).Sum(s => s.Amount);
+            var totalDue = monthShares.Sum(s => s.Amount);
+            var totalPaid = monthShares.Where(s => s.IsPaid).Sum(s => s.Amount);
             var personalDue = monthPersonal.Sum(p => p.Amount);
             var personalPaid = monthPersonal.Where(p => p.IsPaid).Sum(p => p.Amount);
 
@@ -133,7 +133,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
             }
             else if (now >= mStart)
             {
-                var sharedDueToDate = monthAllocations.Where(s => s.DueDate < now).Sum(s => s.Amount);
+                var sharedDueToDate = monthShares.Where(s => s.DueDate < now).Sum(s => s.Amount);
                 var personalDueToDate = monthPersonal.Where(p => p.DueDate < now).Sum(p => p.Amount);
                 var incomeReceivedNet = ComputeNetReceivedByCutoff(activeSources, mStart, now);
                 disposableIncome = incomeReceivedNet - sharedDueToDate - personalDueToDate;
@@ -143,7 +143,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
             summaries.Add(new ContributionPeriodSummaryDto(
                 label, mStart, mEndExclusive.AddDays(-1),
                 totalDue, totalPaid, projectedIncome,
-                monthAllocations,
+                monthShares,
                 personalDue,
                 monthPersonal,
                 projectedNetIncome,

@@ -40,7 +40,7 @@ public static class FinancialConnectionMapper
         return new RecurringSuggestionListDto(items, items.Count);
     }
 
-    /// <summary>What a suggestion ended up linked to — a new income source, a new charge, or the
+    /// <summary>What a suggestion ended up linked to — a new income source, a new expense, or the
     /// one it was already attached to.</summary>
     public static AcceptSuggestionDto ToAccepted(Guid suggestionId, Guid entityId, string linkedEntityType) =>
         new(suggestionId, entityId, linkedEntityType);

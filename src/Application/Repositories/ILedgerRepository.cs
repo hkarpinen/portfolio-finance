@@ -34,13 +34,13 @@ public interface ILedgerRepository
     Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default);
 
     Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default);
-    // Returns BOTH originals and any reversals, which is what makes a posting idempotent to redo and
+    // Returns BOTH originals and any reversals, which is what makes a journalLine idempotent to redo and
     // possible to unwind.
     Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default);
     // Accrual, vendor payment and settlements alike.
-    Task<IReadOnlyList<JournalEntry>> GetEntriesByChargeAsync(LedgerId ledgerId, Guid chargeId, CancellationToken ct = default);
-    Task<IReadOnlyList<Posting>> GetPostingsByAccountAsync(AccountId accountId, CancellationToken ct = default);
-    Task<IReadOnlyList<Posting>> GetPostingsByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default);
+    Task<IReadOnlyList<JournalEntry>> GetEntriesByExpenseAsync(LedgerId ledgerId, Guid expenseId, CancellationToken ct = default);
+    Task<IReadOnlyList<JournalLine>> GetJournalLinesByAccountAsync(AccountId accountId, CancellationToken ct = default);
+    Task<IReadOnlyList<JournalLine>> GetJournalLinesByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default);
 
     Task CommitAsync(CancellationToken ct = default);
 }

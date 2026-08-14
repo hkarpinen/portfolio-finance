@@ -10,8 +10,8 @@ public interface IContributionCalculator
         int monthCount,
         int pastMonths,
         IReadOnlyList<IncomeSource> incomeSources,
-        IReadOnlyList<Charge> personalCharges,
-        IReadOnlyList<(Allocation Allocation, Charge Charge)> splits,
-        IReadOnlyDictionary<(Guid AllocationId, DateTime OccurrenceDate), DateTime> paidAllocationOccurrences,
-        IReadOnlyDictionary<(Guid ChargeId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences);
+        IReadOnlyList<Expense> personalExpenses,
+        IReadOnlyList<(Share Share, Expense Expense)> splits,
+        IReadOnlyDictionary<(Guid ShareId, DateTime OccurrenceDate), DateTime> paidShareOccurrences,
+        IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences);
 }

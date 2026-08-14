@@ -20,7 +20,7 @@ public record RecurrenceSchedule
 
     /// <summary>
     /// From an optional frequency — null, blank or unrecognised means "does not repeat", which is
-    /// a real answer rather than an error: a one-off charge is the common case.
+    /// a real answer rather than an error: a one-off expense is the common case.
     /// </summary>
     public static RecurrenceSchedule? CreateOrNone(RecurrenceFrequency? frequency, DateTime? startDate, DateTime? endDate = null)
         => frequency is null ? null : Create(frequency.Value, startDate ?? DateTime.UtcNow, endDate);

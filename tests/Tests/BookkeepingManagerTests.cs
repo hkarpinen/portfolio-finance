@@ -6,29 +6,29 @@ using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
-// A settlement (and a vendor payment) posts against the funding account the charge's FundingSource
+// A settlement (and a vendor payment) posts against the funding account the expense's FundingSource
 // dictates: PayerMember → the payer's Member account, GroupCash → the shared Cash pool.
 public class BookkeepingManagerTests
 {
     private static readonly Guid Group = Guid.NewGuid();
     private static readonly Guid Payer = Guid.NewGuid();
     private static readonly Guid Debtor = Guid.NewGuid();
-    private static readonly Guid Charge = Guid.NewGuid();
-    private static readonly Guid Allocation = Guid.NewGuid();
+    private static readonly Guid Expense = Guid.NewGuid();
+    private static readonly Guid Share = Guid.NewGuid();
 
     private static BookkeepingManager NewManager(out FakeLedgerRepository repo)
     {
         repo = new FakeLedgerRepository();
-        // The direct ledger-posting methods never touch the charge/allocation repos — only the convergence
+        // The direct ledger-journalLine methods never touch the expense/share repos — only the convergence
         // wrappers do — so the nulls below are never dereferenced.
         return new BookkeepingManager(repo, new CashBasisJournalizingEngine(), null!, null!);
     }
 
     private static RecordSettlementCommand Settlement(FundingSource funding) => new(
-        Group, Charge, Allocation, FromUserId: Debtor, ToUserId: Payer,
+        Group, Expense, Share, FromUserId: Debtor, ToUserId: Payer,
         Amount: 40m, Currency: "USD",
         Occurrence: DateTime.UtcNow.Date, ValueDate: DateTime.UtcNow.Date,
-        Source: LedgerSources.Settlement(Charge, DateTime.UtcNow.Date, Debtor),
+        Source: LedgerSources.Settlement(Expense, DateTime.UtcNow.Date, Debtor),
         FundingSource: funding);
 
     [Fact]
@@ -39,8 +39,8 @@ public class BookkeepingManagerTests
         await manager.RecordSettlementAsync(Settlement(FundingSource.PayerMember));
 
         var entry = Assert.Single(repo.JournalEntries);
-        var debit = entry.Postings.Single(p => p.Direction == EntryDirection.Debit);
-        var credit = entry.Postings.Single(p => p.Direction == EntryDirection.Credit);
+        var debit = entry.JournalLines.Single(p => p.Direction == EntryDirection.Debit);
+        var credit = entry.JournalLines.Single(p => p.Direction == EntryDirection.Credit);
 
         Assert.Equal(Chart.MemberCode(Payer), repo.CodeOf(debit.AccountId));
         Assert.Equal(Chart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
@@ -55,59 +55,59 @@ public class BookkeepingManagerTests
         await manager.RecordSettlementAsync(Settlement(FundingSource.GroupCash));
 
         var entry = Assert.Single(repo.JournalEntries);
-        var debit = entry.Postings.Single(p => p.Direction == EntryDirection.Debit);
-        var credit = entry.Postings.Single(p => p.Direction == EntryDirection.Credit);
+        var debit = entry.JournalLines.Single(p => p.Direction == EntryDirection.Debit);
+        var credit = entry.JournalLines.Single(p => p.Direction == EntryDirection.Credit);
 
         Assert.Equal(Chart.CashCode, repo.CodeOf(debit.AccountId));
         Assert.Equal(Chart.MemberCode(Debtor), repo.CodeOf(credit.AccountId));
     }
 
     [Fact]
-    public async Task RecordVendorPayment_MirrorsCharge_Funding()
+    public async Task RecordVendorPayment_MirrorsExpense_Funding()
     {
         var payerManager = NewManager(out var payerRepo);
         await payerManager.RecordVendorPaymentAsync(new RecordVendorPaymentCommand(
-            Group, Charge, Total: 100m, Currency: "USD",
+            Group, Expense, Total: 100m, Currency: "USD",
             FundingSource.PayerMember, PaidByUserId: Payer,
             Occurrence: DateTime.UtcNow.Date, ValueDate: DateTime.UtcNow.Date,
-            Source: LedgerSources.VendorPayment(Charge, DateTime.UtcNow.Date)));
+            Source: LedgerSources.VendorPayment(Expense, DateTime.UtcNow.Date)));
 
         var payerEntry = Assert.Single(payerRepo.JournalEntries);
         // Dr Vendor Payable / Cr Member:payer — the payer fronted it.
         Assert.Equal(Chart.PayableCode,
-            payerRepo.CodeOf(payerEntry.Postings.Single(p => p.Direction == EntryDirection.Debit).AccountId));
+            payerRepo.CodeOf(payerEntry.JournalLines.Single(p => p.Direction == EntryDirection.Debit).AccountId));
         Assert.Equal(Chart.MemberCode(Payer),
-            payerRepo.CodeOf(payerEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
+            payerRepo.CodeOf(payerEntry.JournalLines.Single(p => p.Direction == EntryDirection.Credit).AccountId));
 
         var poolManager = NewManager(out var poolRepo);
         await poolManager.RecordVendorPaymentAsync(new RecordVendorPaymentCommand(
-            Group, Charge, Total: 100m, Currency: "USD",
+            Group, Expense, Total: 100m, Currency: "USD",
             FundingSource.GroupCash, PaidByUserId: null,
             Occurrence: DateTime.UtcNow.Date, ValueDate: DateTime.UtcNow.Date,
-            Source: LedgerSources.VendorPayment(Charge, DateTime.UtcNow.Date)));
+            Source: LedgerSources.VendorPayment(Expense, DateTime.UtcNow.Date)));
 
         var poolEntry = Assert.Single(poolRepo.JournalEntries);
         // Dr Vendor Payable / Cr Cash — paid from the pot.
         Assert.Equal(Chart.CashCode,
-            poolRepo.CodeOf(poolEntry.Postings.Single(p => p.Direction == EntryDirection.Credit).AccountId));
+            poolRepo.CodeOf(poolEntry.JournalLines.Single(p => p.Direction == EntryDirection.Credit).AccountId));
     }
 
     [Fact]
-    public async Task SyncChargeAccrual_CorrectionReversesInThePeriodItCorrects()
+    public async Task SyncExpenseAccrual_CorrectionReversesInThePeriodItCorrects()
     {
         var manager = NewManager(out var repo);
         var july = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
-            Group, Charge, "Rent", "Housing", 1000m, "USD", july));
-        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
-            Group, Charge, "Rent", "Housing", 1100m, "USD", july));
+        await manager.SyncExpenseAccrualAsync(new PostExpenseToLedgerCommand(
+            Group, Expense, "Rent", "Housing", 1000m, "USD", july));
+        await manager.SyncExpenseAccrualAsync(new PostExpenseToLedgerCommand(
+            Group, Expense, "Rent", "Housing", 1100m, "USD", july));
 
         // Reversal dated August with a re-post dated July left July carrying 1,000 + 1,100 and a
         // balance sheet at 31 July reporting 2,100.
         var asAtJulyEnd = repo.JournalEntries
             .Where(e => e.Date <= new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc))
-            .SelectMany(e => e.Postings)
+            .SelectMany(e => e.JournalLines)
             .Sum(p => p.SignedAmount);
 
         Assert.Equal(0m, asAtJulyEnd);
@@ -115,21 +115,21 @@ public class BookkeepingManagerTests
     }
 
     [Fact]
-    public async Task SyncChargeAccrual_CorrectionLeavesTheRightAmountOnTheBooks()
+    public async Task SyncExpenseAccrual_CorrectionLeavesTheRightAmountOnTheBooks()
     {
         var manager = NewManager(out var repo);
         var july = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
-            Group, Charge, "Rent", "Housing", 1000m, "USD", july));
-        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
-            Group, Charge, "Rent", "Housing", 1100m, "USD", july));
+        await manager.SyncExpenseAccrualAsync(new PostExpenseToLedgerCommand(
+            Group, Expense, "Rent", "Housing", 1000m, "USD", july));
+        await manager.SyncExpenseAccrualAsync(new PostExpenseToLedgerCommand(
+            Group, Expense, "Rent", "Housing", 1100m, "USD", july));
 
         // Original + reversal + re-post: the payable nets to the corrected figure.
-        var postings = repo.JournalEntries.SelectMany(e => e.Postings)
+        var journal_lines = repo.JournalEntries.SelectMany(e => e.JournalLines)
             .Where(p => repo.CodeOf(p.AccountId) == Chart.PayableCode);
 
-        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, postings));
+        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, journal_lines));
     }
 
     [Fact]
@@ -140,18 +140,18 @@ public class BookkeepingManagerTests
         await manager.RecordSettlementAsync(Settlement(FundingSource.PayerMember));
 
         var entry = Assert.Single(repo.JournalEntries);
-        // The provenance columns say WHICH allocation; this says who acted on it.
+        // The provenance columns say WHICH share; this says who acted on it.
         Assert.Equal(Debtor, entry.PostedByUserId);
     }
 
     [Fact]
-    public async Task SyncChargeAccrual_AttributesTheEntryToWhoeverEnteredTheBill()
+    public async Task SyncExpenseAccrual_AttributesTheEntryToWhoeverEnteredTheBill()
     {
         var manager = NewManager(out var repo);
         var owner = Guid.NewGuid();
 
-        await manager.SyncChargeAccrualAsync(new PostChargeToLedgerCommand(
-            Group, Charge, "Rent", "Rent", 1000m, "USD",
+        await manager.SyncExpenseAccrualAsync(new PostExpenseToLedgerCommand(
+            Group, Expense, "Rent", "Rent", 1000m, "USD",
             new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc), PostedByUserId: owner));
 
         Assert.Equal(owner, Assert.Single(repo.JournalEntries).PostedByUserId);
@@ -217,14 +217,14 @@ public class BookkeepingManagerTests
         public Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<JournalEntry>>(JournalEntries.Where(e => e.LedgerId == ledgerId && e.Source == source).ToList());
 
-        public Task<IReadOnlyList<JournalEntry>> GetEntriesByChargeAsync(LedgerId ledgerId, Guid chargeId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<JournalEntry>>(JournalEntries.Where(e => e.LedgerId == ledgerId && e.SourceChargeId == chargeId).ToList());
+        public Task<IReadOnlyList<JournalEntry>> GetEntriesByExpenseAsync(LedgerId ledgerId, Guid expenseId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<JournalEntry>>(JournalEntries.Where(e => e.LedgerId == ledgerId && e.SourceExpenseId == expenseId).ToList());
 
-        public Task<IReadOnlyList<Posting>> GetPostingsByAccountAsync(AccountId accountId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<Posting>>(JournalEntries.SelectMany(e => e.Postings).Where(p => p.AccountId == accountId).ToList());
+        public Task<IReadOnlyList<JournalLine>> GetJournalLinesByAccountAsync(AccountId accountId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<JournalLine>>(JournalEntries.SelectMany(e => e.JournalLines).Where(p => p.AccountId == accountId).ToList());
 
-        public Task<IReadOnlyList<Posting>> GetPostingsByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<Posting>>(JournalEntries.Where(e => e.LedgerId == ledgerId).SelectMany(e => e.Postings).ToList());
+        public Task<IReadOnlyList<JournalLine>> GetJournalLinesByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<JournalLine>>(JournalEntries.Where(e => e.LedgerId == ledgerId).SelectMany(e => e.JournalLines).ToList());
 
         public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

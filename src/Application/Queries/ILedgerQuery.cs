@@ -51,15 +51,15 @@ public interface ILedgerQuery
 
     Task<AccountStatementDto?> GetAccountStatementAsync(Guid groupId, Guid accountId, CancellationToken ct = default);
 
-    // Groups where they have no postings are omitted rather than reported as net 0.
+    // Groups where they have no journal_lines are omitted rather than reported as net 0.
     Task<UserPositionDto> GetUserPositionAsync(Guid userId, CancellationToken ct = default);
 
-    // The ledger is the single source of truth for settlement, which lets the charge context keep
+    // The ledger is the single source of truth for settlement, which lets the expense context keep
     // settle/un-settle idempotent without holding settled-state of its own.
-    Task<bool> IsAllocationSettledAsync(Guid allocationId, DateTime occurrence, CancellationToken ct = default);
+    Task<bool> IsShareSettledAsync(Guid shareId, DateTime occurrence, CancellationToken ct = default);
 
     // Derived from the Vendor Payable balance (owed == 0). Member settlement is gated on this: a
-    // share can only be settled once the bill itself is funded. Legacy cash-basis charges never
+    // share can only be settled once the bill itself is funded. Legacy cash-basis expenses never
     // touched Vendor Payable, so they read as paid.
-    Task<bool> IsVendorPaidAsync(Guid chargeId, CancellationToken ct = default);
+    Task<bool> IsVendorPaidAsync(Guid expenseId, CancellationToken ct = default);
 }

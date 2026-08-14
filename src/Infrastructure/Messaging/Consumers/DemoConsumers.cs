@@ -64,7 +64,7 @@ internal sealed class DemoHouseholdSeededConsumer(
         if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
             return;
 
-        await demoSeedManager.SeedGroupChargesAsync(message.UserId, message.HouseholdId, context.CancellationToken);
+        await demoSeedManager.SeedGroupExpensesAsync(message.UserId, message.HouseholdId, context.CancellationToken);
 
         db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoHouseholdSeededEvent), DateTime.UtcNow));
 

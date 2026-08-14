@@ -2,7 +2,7 @@ namespace Finance.Domain.ValueObjects;
 
 /// <summary>
 /// Which of two id spaces an owner id came from. NOT a switch anything is allowed to branch on:
-/// a ledger records money in and out and does not care whose it is, so the chart, the posting
+/// a ledger records money in and out and does not care whose it is, so the chart, the journalLine
 /// engine and every balance are identical either way.
 ///
 /// It exists because a household id and a person id are both bare Guids, and without saying which
@@ -19,7 +19,7 @@ public enum EntityKind
 ///
 /// This replaces the pairs that used to say the same thing twice — a nullable GroupId doubling as
 /// a discriminator with a UserId that meant the owner in one case and the author in another, and a
-/// ledger's OwnerType beside its OwnerId. A charge, a schedule and a ledger all belong to an
+/// ledger's OwnerType beside its OwnerId. A expense, a schedule and a ledger all belong to an
 /// entity; nothing else about them turns on which kind it is.
 /// </summary>
 public readonly record struct AccountingEntity(EntityKind Kind, Guid Id)

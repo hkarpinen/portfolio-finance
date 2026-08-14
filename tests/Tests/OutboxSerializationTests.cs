@@ -7,7 +7,7 @@ using Finance.Domain.ValueObjects;
 namespace Tests;
 
 // The outbox wire contract: every strongly-typed id must serialise as a FLAT guid string. A
-// consumer declares `Guid ChargeId`, so a `{"value":"…"}` envelope binds to nothing and the field
+// consumer declares `Guid ExpenseId`, so a `{"value":"…"}` envelope binds to nothing and the field
 // arrives empty — silently, with no deserialisation error.
 public class OutboxSerializationTests
 {
@@ -20,11 +20,11 @@ public class OutboxSerializationTests
     private static string Serialize<T>(T ev) => JsonSerializer.Serialize(ev, Options);
 
     [Fact]
-    public void EveryIdOnAChargeEventIsAFlatGuid()
+    public void EveryIdOnAExpenseEventIsAFlatGuid()
     {
-        var json = Serialize(new ChargeCreated(
-            ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow,
+        var json = Serialize(new ExpenseCreated(
+            ExpenseId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
+            ExpenseCategory.Rent, DateTime.UtcNow,
             GroupId.Create(Guid.NewGuid()), Guid.NewGuid()));
 
         Assert.DoesNotContain("\"value\"", json);
@@ -61,12 +61,12 @@ public class OutboxSerializationTests
     [Fact]
     public void EventsRoundTripThroughTheOutboxOptions()
     {
-        var original = new ChargeCreated(
-            ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow,
+        var original = new ExpenseCreated(
+            ExpenseId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
+            ExpenseCategory.Rent, DateTime.UtcNow,
             GroupId.Create(Guid.NewGuid()), Guid.NewGuid());
 
-        var back = JsonSerializer.Deserialize<ChargeCreated>(Serialize(original), Options);
+        var back = JsonSerializer.Deserialize<ExpenseCreated>(Serialize(original), Options);
 
         Assert.Equal(original, back);
     }
@@ -81,24 +81,24 @@ public class OutboxSerializationTests
             typeof(Infrastructure.Persistence.FinanceDbContext).Assembly
                 .GetType("Infrastructure.Persistence.StronglyTypedIdConverter")!)!;
 
-        Assert.True(factory.CanConvert(typeof(ChargeId)));
+        Assert.True(factory.CanConvert(typeof(ExpenseId)));
         Assert.True(factory.CanConvert(typeof(IncomeId)));
         Assert.False(factory.CanConvert(typeof(Money)));
         Assert.False(factory.CanConvert(typeof(RecurrenceSchedule)));
-        Assert.False(factory.CanConvert(typeof(PostingLine)));
+        Assert.False(factory.CanConvert(typeof(JournalLineDraft)));
         Assert.False(factory.CanConvert(typeof(Guid)));
     }
 
-    // A personal charge carries no GroupId. The nullable strongly-typed id must survive the round
+    // A personal expense carries no GroupId. The nullable strongly-typed id must survive the round
     // trip as null rather than becoming an empty Guid.
     [Fact]
     public void ANullableIdRoundTripsAsNull()
     {
-        var personal = new ChargeCreated(
-            ChargeId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
-            ChargeCategory.Rent, DateTime.UtcNow, null, null);
+        var personal = new ExpenseCreated(
+            ExpenseId.New(), UserId.New(), "Rent", Money.Create(100m, "USD"),
+            ExpenseCategory.Rent, DateTime.UtcNow, null, null);
 
-        var back = JsonSerializer.Deserialize<ChargeCreated>(Serialize(personal), Options);
+        var back = JsonSerializer.Deserialize<ExpenseCreated>(Serialize(personal), Options);
 
         Assert.Null(back!.GroupId);
         Assert.Equal(personal, back);
@@ -116,7 +116,7 @@ public class OutboxSerializationTests
         var includes = published.GetMethod("Includes", BindingFlags.NonPublic | BindingFlags.Static)!;
         var tryResolve = published.GetMethod("TryResolve", BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        var domainEvents = typeof(ChargeCreated).Assembly.GetTypes()
+        var domainEvents = typeof(ExpenseCreated).Assembly.GetTypes()
             .Where(t => t.IsSubclassOf(typeof(DomainEvent)) && !t.IsAbstract);
 
         foreach (var ev in domainEvents)

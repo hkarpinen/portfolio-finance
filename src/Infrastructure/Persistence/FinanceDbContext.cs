@@ -11,15 +11,15 @@ namespace Infrastructure.Persistence;
 public sealed class FinanceDbContext : DbContext
 {
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
-    public DbSet<Charge> Charges => Set<Charge>();
-    public DbSet<ChargeSchedule> ChargeSchedules => Set<ChargeSchedule>();
-    public DbSet<Allocation> Allocations => Set<Allocation>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<RecurringExpense> RecurringExpenses => Set<RecurringExpense>();
+    public DbSet<Share> Shares => Set<Share>();
 
     public DbSet<Ledger> Ledgers => Set<Ledger>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<DebtTerms> DebtTerms => Set<DebtTerms>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
-    public DbSet<Posting> Postings => Set<Posting>();
+    public DbSet<JournalLine> JournalLines => Set<JournalLine>();
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();
     public DbSet<GroupMemberProjection> GroupMemberProjections => Set<GroupMemberProjection>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();

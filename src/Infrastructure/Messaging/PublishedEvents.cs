@@ -17,17 +17,17 @@ internal static class PublishedEvents
 {
     private static readonly Dictionary<string, Type> ByName = new()
     {
-        [nameof(ChargeCreated)] = typeof(ChargeCreated),
-        [nameof(ChargeUpdated)] = typeof(ChargeUpdated),
-        [nameof(ChargeDeactivated)] = typeof(ChargeDeactivated),
-        [nameof(ChargeActivated)] = typeof(ChargeActivated),
-        [nameof(ChargePaid)] = typeof(ChargePaid),
-        [nameof(ChargeUnpaid)] = typeof(ChargeUnpaid),
+        [nameof(ExpenseCreated)] = typeof(ExpenseCreated),
+        [nameof(ExpenseUpdated)] = typeof(ExpenseUpdated),
+        [nameof(ExpenseDeactivated)] = typeof(ExpenseDeactivated),
+        [nameof(ExpenseActivated)] = typeof(ExpenseActivated),
+        [nameof(ExpensePaid)] = typeof(ExpensePaid),
+        [nameof(ExpenseUnpaid)] = typeof(ExpenseUnpaid),
         [nameof(VendorPaid)] = typeof(VendorPaid),
         [nameof(VendorPaymentReversed)] = typeof(VendorPaymentReversed),
-        [nameof(AllocationCreated)] = typeof(AllocationCreated),
-        [nameof(AllocationUpdated)] = typeof(AllocationUpdated),
-        [nameof(AllocationRemoved)] = typeof(AllocationRemoved),
+        [nameof(ShareCreated)] = typeof(ShareCreated),
+        [nameof(ShareUpdated)] = typeof(ShareUpdated),
+        [nameof(ShareRemoved)] = typeof(ShareRemoved),
         [nameof(SettlementRecorded)] = typeof(SettlementRecorded),
         [nameof(SettlementReversed)] = typeof(SettlementReversed),
     };

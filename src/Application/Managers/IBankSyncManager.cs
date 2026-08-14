@@ -9,7 +9,7 @@ public interface IBankSyncManager
         FinancialConnection connection,
         CancellationToken cancellationToken = default);
 
-    // Also auto-links new suggestions to existing income / charge entities.
+    // Also auto-links new suggestions to existing income / expense entities.
     Task RefreshSuggestionsAsync(
         FinancialConnection connection,
         CancellationToken ct = default);

@@ -22,13 +22,13 @@ internal sealed class LedgerQuery : ILedgerQuery
             .Where(a => a.LedgerId == ledger.Id)
             .ToListAsync(ct);
 
-        var postings = await (
-            from p in _db.Postings.AsNoTracking()
+        var journal_lines = await (
+            from p in _db.JournalLines.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
             where e.LedgerId == ledger.Id
             select p).ToListAsync(ct);
 
-        var byAccount = postings.ToLookup(p => p.AccountId);
+        var byAccount = journal_lines.ToLookup(p => p.AccountId);
 
         var accountDtos = accounts
             .Select(a => new AccountBalanceDto(
@@ -38,7 +38,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .OrderBy(a => a.Code)
             .ToList();
 
-        var (debits, credits) = LedgerMath.TrialBalance(postings);
+        var (debits, credits) = LedgerMath.TrialBalance(journal_lines);
         return new LedgerViewDto(ledger.Id.Value, ledger.Currency, accountDtos, debits, credits, debits == credits);
     }
 
@@ -55,27 +55,27 @@ internal sealed class LedgerQuery : ILedgerQuery
 
         // Oldest first — the running balance below depends on it.
         var rows = await (
-            from p in _db.Postings.AsNoTracking()
+            from p in _db.JournalLines.AsNoTracking()
             join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
             where e.LedgerId == ledger.Id && p.AccountId == accId
             orderby e.Date, e.RecordedAt
-            select new { Posting = p, Entry = e }).ToListAsync(ct);
+            select new { JournalLine = p, Entry = e }).ToListAsync(ct);
 
         var normal = account.NormalBalance;
         decimal running = 0m;
         var lines = new List<StatementLineDto>(rows.Count);
         foreach (var r in rows)
         {
-            // Per-posting contribution to the oriented balance: a debit raises a debit-normal account and
+            // Per-journalLine contribution to the oriented balance: a debit raises a debit-normal account and
             // lowers a credit-normal one, and vice-versa.
-            var signed = r.Posting.Direction == EntryDirection.Debit
-                ? r.Posting.Amount.Amount
-                : -r.Posting.Amount.Amount;
+            var signed = r.JournalLine.Direction == EntryDirection.Debit
+                ? r.JournalLine.Amount.Amount
+                : -r.JournalLine.Amount.Amount;
             running += normal == NormalBalance.Debit ? signed : -signed;
 
             lines.Add(new StatementLineDto(
                 r.Entry.Id.Value, r.Entry.Date, r.Entry.Description, r.Entry.Source,
-                r.Posting.Direction.ToString(), r.Posting.Amount.Amount, running,
+                r.JournalLine.Direction.ToString(), r.JournalLine.Amount.Amount, running,
                 r.Entry.ReversalOfEntryId is not null));
         }
 
@@ -92,17 +92,17 @@ internal sealed class LedgerQuery : ILedgerQuery
         // The user's cross-group position is the RECIPROCAL of these member-equity balances — recorded
         // once, in the group ledger, never double-posted into a second book.
         var rows = await (
-            from p in _db.Postings.AsNoTracking()
+            from p in _db.JournalLines.AsNoTracking()
             join a in _db.Accounts.AsNoTracking() on p.AccountId equals a.Id
             join l in _db.Ledgers.AsNoTracking() on a.LedgerId equals l.Id
             where a.Code == memberCode && l.Owner.Kind == EntityKind.Household
-            select new { Posting = p, GroupId = l.Owner.Id, l.Currency, a.NormalBalance }).ToListAsync(ct);
+            select new { JournalLine = p, GroupId = l.Owner.Id, l.Currency, a.NormalBalance }).ToListAsync(ct);
 
         var groups = rows
             .GroupBy(x => new { x.GroupId, x.Currency, x.NormalBalance })
             .Select(g => new GroupPositionDto(
                 g.Key.GroupId, g.Key.Currency,
-                LedgerMath.AccountBalance(g.Key.NormalBalance, g.Select(x => x.Posting))))
+                LedgerMath.AccountBalance(g.Key.NormalBalance, g.Select(x => x.JournalLine))))
             .OrderByDescending(g => Math.Abs(g.Net))
             .ToList();
 
@@ -111,12 +111,12 @@ internal sealed class LedgerQuery : ILedgerQuery
         return new UserPositionDto(total, currency, groups);
     }
 
-    public async Task<bool> IsAllocationSettledAsync(Guid allocationId, DateTime occurrence, CancellationToken ct = default)
+    public async Task<bool> IsShareSettledAsync(Guid shareId, DateTime occurrence, CancellationToken ct = default)
     {
-        var settled = await SettlementReads.GetSettledByAllocationOccurrenceAsync(_db, new[] { allocationId }, ct);
-        return settled.TryGetValue((allocationId, occurrence.Date), out var v) && v.Settled > 0m;
+        var settled = await SettlementReads.GetSettledByShareOccurrenceAsync(_db, new[] { shareId }, ct);
+        return settled.TryGetValue((shareId, occurrence.Date), out var v) && v.Settled > 0m;
     }
 
-    public Task<bool> IsVendorPaidAsync(Guid chargeId, CancellationToken ct = default)
-        => VendorPaymentReads.IsVendorPaidAsync(_db, chargeId, ct);
+    public Task<bool> IsVendorPaidAsync(Guid expenseId, CancellationToken ct = default)
+        => VendorPaymentReads.IsVendorPaidAsync(_db, expenseId, ct);
 }
