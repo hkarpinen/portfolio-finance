@@ -14,15 +14,18 @@ internal sealed class RecurringExpenseRepository(FinanceDbContext db) : IRecurri
     public Task<RecurringExpense?> GetByIdAsync(RecurringExpenseId id, CancellationToken ct = default)
         => db.RecurringExpenses.FirstOrDefaultAsync(s => s.Id == id, ct);
 
+    // Owner.Kind/Owner.Id, never the computed GroupId: it has no column, so EF cannot translate
+    // it and the query throws when it runs — see GroupQuery.ExpenseBelongsToGroupAsync.
     public async Task<IReadOnlyList<RecurringExpense>> ListForGroupAsync(GroupId groupId, CancellationToken ct = default)
         => await db.RecurringExpenses.AsNoTracking()
-            .Where(s => s.GroupId == groupId && s.IsActive)
+            .Where(s => s.Owner.Kind == EntityKind.Group && s.Owner.Id == groupId.Value && s.IsActive)
             .OrderBy(s => s.Title)
             .ToListAsync(ct);
 
+    /// <summary>Somebody's own agreements — the ones owned by the person, not by a group.</summary>
     public async Task<IReadOnlyList<RecurringExpense>> ListForUserAsync(UserId userId, CancellationToken ct = default)
         => await db.RecurringExpenses.AsNoTracking()
-            .Where(s => s.CreatedBy == userId && s.GroupId == null && s.IsActive)
+            .Where(s => s.Owner.Kind == EntityKind.Person && s.Owner.Id == userId.Value && s.IsActive)
             .OrderBy(s => s.Title)
             .ToListAsync(ct);
 
