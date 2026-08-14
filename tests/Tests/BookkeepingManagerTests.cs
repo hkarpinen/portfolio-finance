@@ -21,7 +21,7 @@ public class BookkeepingManagerTests
         repo = new FakeLedgerRepository();
         // The direct ledger-journalLine methods never touch the expense/share repos — only the convergence
         // wrappers do — so the nulls below are never dereferenced.
-        return new BookkeepingManager(repo, new CashBasisJournalizingEngine(), null!, null!);
+        return new BookkeepingManager(repo, null!, null!);
     }
 
     private static RecordSettlementCommand Settlement(FundingSource funding) => new(

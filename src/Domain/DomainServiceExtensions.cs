@@ -10,7 +10,6 @@ public static class DomainServiceExtensions
         services.AddScoped<IBankSyncMatchingEngine, BankSyncMatchingEngine>();
         services.AddScoped<IGroupCoverageEngine, GroupCoverageEngine>();
         services.AddScoped<IPayrollDeductionEngine, PayrollDeductionEngine>();
-        services.AddScoped<IJournalizingEngine, CashBasisJournalizingEngine>();
         return services;
     }
 }

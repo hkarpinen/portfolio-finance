@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Aggregates;
 
 /// <summary>The DIRECTION carries the sign; the amount is always positive.</summary>
-public sealed class JournalLine
+public sealed class JournalLine : IJournalLineFacts
 {
     public JournalLineId Id { get; private set; }
     public JournalEntryId EntryId { get; private set; }
@@ -31,7 +31,7 @@ public sealed class JournalLine
 /// An entry cannot exist unless Σ debits == Σ credits, and is immutable once posted —
 /// corrections are mirror entries referencing the original, never edits.
 /// </summary>
-public sealed class JournalEntry : IAggregateRoot
+public sealed class JournalEntry : IAggregateRoot, IJournalEntryFacts
 {
     private readonly List<JournalLine> _lines = new();
     private readonly List<DomainEvent> _domainEvents = new();
@@ -64,6 +64,10 @@ public sealed class JournalEntry : IAggregateRoot
     public Guid? SourceMemberId { get; private set; }
 
     public IReadOnlyList<JournalLine> JournalLines => _lines.AsReadOnly();
+
+    /// <summary>The lines as a draft sees them, so convergence can compare without the value
+    /// object depending on this aggregate.</summary>
+    IReadOnlyList<IJournalLineFacts> IJournalEntryFacts.Lines => _lines;
     public IReadOnlyList<DomainEvent> GetDomainEvents() => _domainEvents.AsReadOnly();
     public void ClearDomainEvents() => _domainEvents.Clear();
 
@@ -159,34 +163,6 @@ public sealed class JournalEntry : IAggregateRoot
     /// deciding this never means scanning for reversal pairs.
     /// </summary>
     public bool IsInEffect => ReversalOfEntryId is null && ReversedByEntryId is null;
-
-    /// <summary>
-    /// Already says what a fresh accrual would say — same expense account, amount, currency,
-    /// description and value date. What makes journalLine convergent: an entry that matches is left
-    /// alone rather than reversed and rewritten identically.
-    /// </summary>
-    public bool SaysAccrual(AccountId expenseAccount, decimal total, string currency, string description, DateTime date)
-    {
-        var debit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        return debit is not null
-            && debit.AccountId == expenseAccount
-            && debit.Amount.Amount == total
-            && debit.Amount.Currency == currency
-            && Description == description
-            && Date == date;
-    }
-
-    /// <summary>Already says the same 1↔1 move — same two accounts, same amount.</summary>
-    public bool SaysTransfer(AccountId debitAccount, AccountId creditAccount, decimal amount, string currency)
-    {
-        var debit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Debit);
-        var credit = _lines.FirstOrDefault(p => p.Direction == EntryDirection.Credit);
-        return debit is not null && credit is not null
-            && debit.AccountId == debitAccount
-            && credit.AccountId == creditAccount
-            && debit.Amount.Amount == amount
-            && debit.Amount.Currency == currency;
-    }
 
     private static EntryDirection Flip(EntryDirection d) =>
         d == EntryDirection.Debit ? EntryDirection.Credit : EntryDirection.Debit;

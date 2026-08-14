@@ -210,18 +210,15 @@ public interface IBookkeepingManager
 internal sealed class BookkeepingManager : IBookkeepingManager
 {
     private readonly ILedgerRepository _ledgers;
-    private readonly IJournalizingEngine _journalizing;
     private readonly IExpenseRepository _expenses;
     private readonly IShareRepository _shares;
 
     public BookkeepingManager(
         ILedgerRepository ledgers,
-        IJournalizingEngine journalizing,
         IExpenseRepository expenses,
         IShareRepository shares)
     {
         _ledgers = ledgers;
-        _journalizing = journalizing;
         _expenses = expenses;
         _shares = shares;
     }
@@ -233,40 +230,29 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, cmd.Category), ct);
 
         var source = LedgerSources.Expense(cmd.ExpenseId);
-        var date = DateTime.SpecifyKind(cmd.Date.Date, DateTimeKind.Utc);
-        var description = $"{cmd.Title} — incurred";
-
-        // Already in sync? One active accrual entry debiting the right expense account for the
-        // right amount with the same description and value date — nothing to do. This is what
-        // makes the event-driven journalLine convergent: redeliveries and no-op edits fall out here.
-        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
-        if (active.Count == 1 && active[0].SaysAccrual(expenseAccount.Id, cmd.Total, cmd.Currency, description, date))
-            return false;
-
-        // Stale (amount/category/title/date changed) — reverse what's on the books, then re-post.
-        //
-        // Reversed at the ORIGINAL entry's date, not today's. A correction and its re-post have to
-        // land in the same period or that period is misstated: reversing a July accrual in August
-        // and re-journalLine it to July leaves July carrying both the old amount and the new one, and a
-        // balance sheet drawn at 31 July reports the sum of them. The cumulative position is right
-        // either way, which is what makes the split version so quiet.
-        foreach (var stale in active)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-
-        // Accrual basis: the expense is incurred and OWED to the vendor — Dr Expense / Cr Vendor
-        // Payable. Member shares are journaled per-share (SyncShareAsync) so a split added
-        // after creation is tracked exactly like a create-time one. Who pays the vendor (the pot) is
-        // recorded later. "Is it paid" is derived from the Vendor Payable balance — the ledger is the
-        // single source of truth.
         var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: expenseAccount.Id, CreditAccount: vendorPayable.Id,
-            Money.Create(cmd.Total, cmd.Currency), date, description, source));
-        var entry = JournalEntry.Post(
-            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-            sourceExpenseId: cmd.ExpenseId, postedByUserId: cmd.PostedByUserId);
-        await _ledgers.AddJournalEntryAsync(entry, ct);
+        // Accrual basis: the cost is incurred and OWED to the vendor. Member shares are journaled
+        // per-share (SyncShareAsync) so a split added later is tracked exactly like a create-time
+        // one, and who pays the vendor is recorded separately. "Is it paid" is derived from the
+        // Vendor Payable balance rather than a flag.
+        var draft = EntryDraft.Between(
+            debit: expenseAccount.Id, credit: vendorPayable.Id,
+            Money.Create(cmd.Total, cmd.Currency), cmd.Date, $"{cmd.Title} — incurred", source);
+
+        var plan = ConvergencePlan.For(draft, (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect());
+        if (plan.AlreadyThere) return false;
+
+        // Reversed at the ORIGINAL entry's date, not today's. A correction and its re-post have to
+        // land in the same period or that period is misstated: reversing a July accrual in August
+        // and re-posting it to July leaves July carrying both the old amount and the new one, and a
+        // balance sheet drawn at 31 July reports the sum of them.
+        foreach (var stale in plan.Reverse)
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
+
+        await _ledgers.AddJournalEntryAsync(
+            JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+                sourceExpenseId: cmd.ExpenseId, postedByUserId: cmd.PostedByUserId), ct);
         await _ledgers.CommitAsync(ct);
         return true;
     }
@@ -281,25 +267,22 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, category), ct);
         var member = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, userId), ct);
 
-        // Already in sync? One active entry moving the right amount from the right member onto the
-        // right expense account — nothing to do (redeliveries and unchanged upserts land here).
-        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
-        if (active.Count == 1 && active[0].SaysTransfer(member.Id, expenseAccount.Id, amount, currency))
-            return;
+        // The member bears their share — Dr Member / Cr Expense, moving the cost off the nominal
+        // expense account onto that member's stake.
+        var draft = EntryDraft.Between(
+            debit: member.Id, credit: expenseAccount.Id,
+            Money.Create(amount, currency), DateTime.UtcNow.Date, "Share", source);
 
-        foreach (var stale in active)
-            // Same rule as the accrual: a correction is reversed in the period it corrects.
+        var plan = ConvergencePlan.For(draft, (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect());
+        if (plan.AlreadyThere) return;
+
+        // Same rule as the accrual: a correction is reversed in the period it corrects.
+        foreach (var stale in plan.Reverse)
             await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
 
-        // The member bears their share — Dr Member / Cr Expense (moves the cost off the nominal
-        // expense onto the member's stake).
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: member.Id, CreditAccount: expenseAccount.Id,
-            Money.Create(amount, currency), DateTime.UtcNow.Date, "Share", source));
-        var entry = JournalEntry.Post(
-            ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
-            sourceExpenseId: expenseId, sourceMemberId: userId, postedByUserId: userId);
-        await _ledgers.AddJournalEntryAsync(entry, ct);
+        await _ledgers.AddJournalEntryAsync(
+            JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
+                sourceExpenseId: expenseId, sourceMemberId: userId, postedByUserId: userId), ct);
         await _ledgers.CommitAsync(ct);
     }
 
@@ -318,9 +301,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             ledger.Id, Chart.Funding(ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty), ct);
 
         // Clear the liability against the funding account: Dr Vendor Payable / Cr funding.
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: vendorPayable.Id, CreditAccount: funding.Id,
-            Money.Create(cmd.Total, cmd.Currency), cmd.ValueDate, "Vendor payment", cmd.Source));
+        var draft = EntryDraft.Between(
+            debit: vendorPayable.Id, credit: funding.Id,
+            Money.Create(cmd.Total, cmd.Currency), cmd.ValueDate, "Vendor payment", cmd.Source);
 
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
@@ -347,9 +330,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         // A settlement debits the funding account and credits the debtor — that direction is the
         // workflow's call; the engine just balances it.
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: funding.Id, CreditAccount: from.Id,
-            Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, "Settlement", cmd.Source));
+        var draft = EntryDraft.Between(
+            debit: funding.Id, credit: from.Id,
+            Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, "Settlement", cmd.Source);
 
         // The ledger records only the accounting (with opaque source-document provenance for the
         // read side). The SettlementRecorded fact is raised by the Share aggregate in the
@@ -392,9 +375,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         // The payer (from, a debtor) squares up with a creditor (to): Dr Member:to / Cr Member:from,
         // moving both toward zero. The cash changed hands directly between the two — no pot involved.
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: to.Id, CreditAccount: from.Id,
-            Money.Create(amount, currency), DateTime.UtcNow.Date, "Settle-up", source));
+        var draft = EntryDraft.Between(
+            debit: to.Id, credit: from.Id,
+            Money.Create(amount, currency), DateTime.UtcNow.Date, "Settle-up", source);
 
         var entry = JournalEntry.Post(
             ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
@@ -527,14 +510,14 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var source = LedgerSources.Expense(expenseId);
         var date = DateTime.SpecifyKind(expense.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
+        var inEffect = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
 
         // Deactivated or deleted: take it off the books and stop.
         if (!expense.IsActive)
         {
-            foreach (var stale in active)
+            foreach (var stale in ConvergencePlan.Remove(inEffect).Reverse)
                 await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-            if (active.Count > 0) await _ledgers.CommitAsync(ct);
+            if (inEffect.Count > 0) await _ledgers.CommitAsync(ct);
             return;
         }
 
@@ -546,16 +529,15 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // in the books to answer with — which is the hole a paid FLAG kept getting invented for.
         var payable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        var description = $"{expense.Title} — incurred";
-        if (active.Count == 1 && active[0].SaysAccrual(expenseAccount.Id, expense.Amount.Amount, expense.Amount.Currency, description, date))
-            return;
+        var draft = EntryDraft.Between(
+            debit: expenseAccount.Id, credit: payable.Id,
+            expense.Amount, date, $"{expense.Title} — incurred", source);
 
-        foreach (var stale in active)
+        var plan = ConvergencePlan.For(draft, inEffect);
+        if (plan.AlreadyThere) return;
+
+        foreach (var stale in plan.Reverse)
             await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: expenseAccount.Id, CreditAccount: payable.Id,
-            expense.Amount, date, description, source));
 
         await _ledgers.AddJournalEntryAsync(
             JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
@@ -586,10 +568,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var draft = _journalizing.JournalizeTransfer(new TransferContext(
-            DebitAccount: payable.Id, CreditAccount: funding.Id,
+        var draft = EntryDraft.Between(
+            debit: payable.Id, credit: funding.Id,
             expense.Amount, DateTime.SpecifyKind(valueDate.Date, DateTimeKind.Utc),
-            $"{expense.Title} — paid", source));
+            $"{expense.Title} — paid", source);
 
         await _ledgers.AddJournalEntryAsync(
             JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
@@ -655,13 +637,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         {
             var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.OpeningBalance(ledger.Id), ct);
 
-            var draft = _journalizing.JournalizeTransfer(new TransferContext(
-                DebitAccount: opening.Id,
-                CreditAccount: account.Id,
-                Amount: Money.Create(cmd.OpeningBalance, cmd.Currency),
-                ValueDate: cmd.AsOf,
-                Description: $"{cmd.Name} — balance carried in",
-                Source: $"debt-opening:{account.Id.Value:N}"));
+            var draft = EntryDraft.Between(
+                debit: opening.Id, credit: account.Id,
+                Money.Create(cmd.OpeningBalance, cmd.Currency), cmd.AsOf,
+                $"{cmd.Name} — balance carried in", $"debt-opening:{account.Id.Value:N}");
 
             await _ledgers.AddJournalEntryAsync(
                 JournalEntry.Post(ledger.Id, draft.Date, draft.Description, draft.Lines, draft.Source,
