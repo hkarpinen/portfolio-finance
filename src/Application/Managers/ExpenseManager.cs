@@ -173,13 +173,8 @@ internal sealed class ExpenseManager : IExpenseManager
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
         if (expense is null) return null;
 
-        // Shrinking below what is already split would strand the shares above the total. The
-        // engine refuses to journalize that, and the refusal lands in a consumer — so it is caught
-        // here, where the person who typed the number is still listening.
+        // Summed here because shares are their own rows; Update refuses the shrink itself.
         var allocated = await _splitRepository.SumForExpenseAsync(expense.Id, null, cancellationToken);
-        if (!ShareMath.CoversShares(request.Amount, allocated))
-            throw new InvalidOperationException(
-                $"Shares already total {allocated:0.##}; the expense cannot be less than that.");
 
         expense.Update(
             request.Title,
@@ -187,7 +182,8 @@ internal sealed class ExpenseManager : IExpenseManager
             request.Category,
             request.DueDate,
             request.Description,
-            request.PayerUserId);
+            request.PayerUserId,
+            sharesAlreadyOn: allocated);
 
         await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
@@ -226,7 +222,7 @@ internal sealed class ExpenseManager : IExpenseManager
             if (existing is not null)
             {
                 var others = await _splitRepository.SumForExpenseAsync(expenseId, existing.Id, cancellationToken);
-                if (!ShareMath.Fits(others, money.Amount, expenseTotal))
+                if (!expense.CanBear(others, money.Amount))
                     throw new InvalidOperationException(
                         $"Shares would exceed the expense total of {expenseTotal:0.##}.");
 
@@ -250,7 +246,7 @@ internal sealed class ExpenseManager : IExpenseManager
             throw new InvalidOperationException("A split for this member already exists on this expense.");
 
         var existingTotal = await _splitRepository.SumForExpenseAsync(expenseId, null, cancellationToken);
-        if (!ShareMath.Fits(existingTotal, money.Amount, expenseTotal))
+        if (!expense.CanBear(existingTotal, money.Amount))
             throw new InvalidOperationException(
                 $"Shares would exceed the expense total of {expenseTotal:0.##}.");
 
@@ -335,7 +331,7 @@ internal sealed class ExpenseManager : IExpenseManager
         // redeliverable household event, so a violation must NOT throw (that would dead-letter and
         // redeliver forever) — log and skip instead.
         var others = await _splitRepository.SumForExpenseAsync(id, existing?.Id, cancellationToken);
-        if (!ShareMath.Fits(others, money.Amount, expense.Amount.Amount))
+        if (!expense.CanBear(others, money.Amount))
         {
             _logger.LogWarning(
                 "Skipping GroupShareAssigned for expense {ExpenseId} user {UserId}: amount {Amount} would push shares past the expense total {Total}.",

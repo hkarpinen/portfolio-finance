@@ -117,7 +117,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
                     // The payer's own share counts as covered only once the VENDOR is paid.
                     // Everyone else's is covered when settlements reach the share — summed
                     // signed, so a reversal nets its original to zero.
-                    var callerIsPayer = expense.PayerUserId == callerUserId.Value;
+                    var callerIsPayer = expense.CoversOwnShare(callerUserId.Value);
                     var settled = settledMap.TryGetValue((split.Id.Value, occurrence.Date), out var sv) ? sv.Settled : 0m;
                     if ((callerIsPayer && VendorPaidFor(expense.Id.Value)) || settled >= split.Amount.Amount)
                         paidExpenseIds.Add(expense.Id.Value);
@@ -284,7 +284,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
             IEnumerable<DateTime> occurrenceDates = [expense.OccurrenceDate];
 
             // Before the vendor is paid the bill is upcoming and no share is settled.
-            var isPayerOwnShare = expense.PayerUserId == split.UserId.Value && vendorPaidFor(expense.Id.Value);
+            var isPayerOwnShare = expense.CoversOwnShare(split.UserId.Value) && vendorPaidFor(expense.Id.Value);
 
             foreach (var date in occurrenceDates)
             {

@@ -63,4 +63,64 @@ public class ExpenseVersionTests
 
         Assert.Empty(expense.GetDomainEvents());
     }
+
+    // The rule about how much an expense can be divided into is the EXPENSE's — it used to be a
+    // static taking the total as an argument, so nothing stopped a caller handing it one that was
+    // not this expense's.
+    [Theory]
+    [InlineData(600, 300, true)]    // room left
+    [InlineData(600, 300.00, true)] // to the penny
+    [InlineData(600, 300.01, false)]// a penny over
+    public void AnExpenseKnows_WhatMoreItCanBear(decimal others, decimal newShare, bool expected)
+    {
+        // Rent is 900.
+        Assert.Equal(expected, Rent().CanBear(others, newShare));
+    }
+
+    // Shrinking below what is already divided up strands those shares above the total, which the
+    // journalizing engine cannot post — it fails inside a consumer where nobody is listening.
+    [Fact]
+    public void ShrinkingBelowItsShares_IsRefusedWhereTheAmountChanges()
+    {
+        var expense = Rent();
+
+        var error = Assert.Throws<InvalidOperationException>(() => expense.Update(
+            "Rent", Money.Create(500m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date,
+            sharesAlreadyOn: 600m));
+
+        Assert.Contains("600", error.Message);
+    }
+
+    [Fact]
+    public void ShrinkingToExactlyItsShares_IsAllowed()
+    {
+        Rent().Update("Rent", Money.Create(600m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date,
+            sharesAlreadyOn: 600m);
+    }
+
+    // Whoever fronted a shared bill has already borne their part; their share never gets settled.
+    // Read in three places from two fields before this, which is one rule able to drift twice.
+    [Fact]
+    public void TheFronterOfASharedBill_CoversTheirOwnShare()
+    {
+        var payer = Guid.NewGuid();
+        var expense = Expense.Create(
+            AccountingEntity.Household(Guid.NewGuid()), UserId.New(), "Rent",
+            Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date,
+            payerUserId: payer);
+
+        Assert.True(expense.CoversOwnShare(payer));
+        Assert.False(expense.CoversOwnShare(Guid.NewGuid()));
+    }
+
+    // A personal expense has no fronting and nobody to reimburse.
+    [Fact]
+    public void AnExpenseOfYourOwn_CoversNobodysShare()
+    {
+        var me = UserId.New();
+        var mine = Expense.CreateOwn(me, "Gym", Money.Create(40m, "USD"),
+            ExpenseCategory.Other, DateTime.UtcNow.Date);
+
+        Assert.False(mine.CoversOwnShare(me.Value));
+    }
 }

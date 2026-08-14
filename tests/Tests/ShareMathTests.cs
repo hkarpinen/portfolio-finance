@@ -41,27 +41,4 @@ public class ShareMathTests
     public void SplitEvenly_ZeroMembers_Throws()
         => Assert.Throws<ArgumentOutOfRangeException>(() => ShareMath.SplitEvenly(100m, 0));
 
-    [Fact]
-    public void Fits_ExactTotal_IsAllowed()
-        => Assert.True(ShareMath.Fits(alreadyAllocated: 60m, newAmount: 40m, expenseTotal: 100m));
-
-    [Fact]
-    public void Fits_UnderTotal_IsAllowed()
-        => Assert.True(ShareMath.Fits(alreadyAllocated: 60m, newAmount: 30m, expenseTotal: 100m));
-
-    [Fact]
-    public void Fits_Overshoot_IsRejected()
-        => Assert.False(ShareMath.Fits(alreadyAllocated: 60m, newAmount: 50m, expenseTotal: 100m));
-
-    [Fact]
-    public void Fits_OvershootByCent_IsRejected()
-        => Assert.False(ShareMath.Fits(alreadyAllocated: 99.99m, newAmount: 0.02m, expenseTotal: 100m));
-
-    [Theory]
-    [InlineData(100, 100, true)]   // split to the penny
-    [InlineData(100, 60, true)]    // partly split
-    [InlineData(60, 100, false)]   // shrunk below what is already split
-    public void CoversShares_RefusesOnlyWhenTheExpenseIsTooSmall(
-        decimal expenseTotal, decimal allocated, bool expected) =>
-        Assert.Equal(expected, ShareMath.CoversShares(expenseTotal, allocated));
 }

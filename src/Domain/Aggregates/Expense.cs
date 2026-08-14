@@ -88,6 +88,25 @@ public class Expense : IAggregateRoot
     ///
     /// Raises no event — the share raises its own.
     /// </summary>
+    /// <summary>
+    /// Can this expense carry one more share of <paramref name="newShare"/>, given what its other
+    /// shares already come to?
+    ///
+    /// The expense supplies its own total. Callers used to pass it back in beside the sum, which
+    /// meant nothing stopped them passing a different one — and shares stranded above a total is
+    /// the case the journalizing engine cannot post, failing inside a consumer where nobody sees it.
+    /// </summary>
+    public bool CanBear(decimal otherSharesTotal, decimal newShare) =>
+        otherSharesTotal + newShare <= Amount.Amount;
+
+
+    /// <summary>
+    /// Whoever fronted a shared bill has already borne their own part of it, so their share needs
+    /// no settlement and never gets one. Read in three places from two fields, which is one rule
+    /// spelled out three times and able to drift twice.
+    /// </summary>
+    public bool CoversOwnShare(Guid userId) => Owner.IsHousehold && PayerUserId == userId;
+
     public void RecordShareChange()
     {
         Version++;
@@ -262,12 +281,19 @@ public class Expense : IAggregateRoot
         ExpenseCategory category,
         DateTime dueDate,
         string? description = null,
-        Guid? payerUserId = null)
+        Guid? payerUserId = null,
+        decimal sharesAlreadyOn = 0m)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Title cannot be empty.", nameof(title));
         if (amount.Amount < 0)
             throw new ArgumentException("Amount cannot be negative.", nameof(amount));
+        // Shrinking below what is already divided up would strand those shares above the total.
+        // The journalizing engine cannot post that — it fails inside a consumer, where nobody is
+        // listening — so it is refused here, at the moment the amount actually changes.
+        if (sharesAlreadyOn > amount.Amount)
+            throw new InvalidOperationException(
+                $"Shares already total {sharesAlreadyOn:0.##}; the expense cannot be less than that.");
 
         Title = title;
         Amount = amount;

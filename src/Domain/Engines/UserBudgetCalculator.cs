@@ -1,4 +1,3 @@
-using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
@@ -15,22 +14,4 @@ public static class UserBudgetCalculator
     // paycheck lands: $80,000 Annually paid BiWeekly → 80,000 / 26 = $3,076.92 per paycheck.
     public static decimal PerPaycheckAmount(decimal amount, RecurrenceFrequency amountFrequency, RecurrenceFrequency paymentFrequency) =>
         AnnualAmount(amount, amountFrequency) / paymentFrequency.PeriodsPerYear();
-
-    public static decimal MonthlyObligationsForUser(
-        IEnumerable<(Share Share, Expense Expense)> splits,
-        int year, int month)
-    {
-        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var monthEndExclusive = monthStart.AddMonths(1);
-
-        decimal total = 0m;
-        foreach (var s in splits)
-        {
-            // One expense IS one occurrence, so this counts rather than projects. A repeating bill
-            // reaches here as a row per month, generated when that month came round.
-            if (s.Expense.OccurrenceDate >= monthStart && s.Expense.OccurrenceDate < monthEndExclusive)
-                total += s.Share.Amount.Amount;
-        }
-        return total;
-    }
 }

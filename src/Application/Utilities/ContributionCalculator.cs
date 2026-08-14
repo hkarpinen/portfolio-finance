@@ -48,9 +48,10 @@ internal sealed class ContributionCalculator : IContributionCalculator
                     ? [s.Expense.OccurrenceDate]
                     : [];
 
-            // The payer's own share is covered by fronting the bill — they never reimburse themselves, so
-            // there is no payment record and hence no PaidAt.
-            var isPayerOwnShare = s.Expense.PayerUserId == s.Share.UserId.Value;
+            // Fronting the bill covers your own part of it, so there is no payment record and
+            // hence no PaidAt. The expense answers this rather than two of its fields being
+            // compared here, which is how the same rule ended up spelled out in three places.
+            var isPayerOwnShare = s.Expense.CoversOwnShare(s.Share.UserId.Value);
 
             foreach (var date in occurrenceDates)
             {

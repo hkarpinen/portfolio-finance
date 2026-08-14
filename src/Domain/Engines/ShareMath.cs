@@ -21,14 +21,7 @@ public static class ShareMath
         return shares;
     }
 
-    // alreadyAllocated is the sum of the expense's OTHER active shares. Equality is allowed —
-    // shares may sum exactly to the expense total.
-    public static bool Fits(decimal alreadyAllocated, decimal newAmount, decimal expenseTotal)
-        => alreadyAllocated + newAmount <= expenseTotal;
-
-    // The same rule read from the other end: shrinking an expense must not strand shares above
-    // it. Journalizing such an expense has no account that can absorb the negative remainder, and
-    // that failure surfaces inside the journalLine consumer where nobody can act on it.
-    public static bool CoversShares(decimal expenseTotal, decimal allocatedTotal)
-        => allocatedTotal <= expenseTotal;
+    // Whether a set of shares fits inside an expense is the EXPENSE's question — see
+    // Expense.CanBear and Expense.WouldStillCover. It lived here taking the total as an argument,
+    // which let a caller hand it one that was not the expense's.
 }
