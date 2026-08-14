@@ -1,9 +1,10 @@
+using System.Text.Json.Serialization;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Commands;
 
 public sealed record CreateExpenseCommand(
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,
@@ -17,6 +18,10 @@ public sealed record CreateExpenseCommand(
     /// which is the honest default for somebody who has told us about no accounts.</summary>
     Guid? FundingAccountId = null);
 
+// Anything the server already knows is marked JsonIgnore: who is asking comes from the token, and
+// the group comes from the route. A body that names either is not a bad request the binder can
+// reject — it is a well-formed one saying something it has no standing to say, so the binder is
+// simply not allowed to read them.
 // CallerUserId is WHO IS ASKING, on every command that changes something. An expense id on its own
 // must never authorise an update, a delete or a re-split — the aggregate decides, via
 // Expense.IsManagedBy.
@@ -26,7 +31,7 @@ public sealed record CreateExpenseCommand(
 // the next, and nothing but the manager could tell you which.
 public sealed record UpdateExpenseCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,
@@ -42,12 +47,12 @@ public sealed record DeleteExpenseCommand(Guid ExpenseId, Guid CallerUserId);
 public sealed record CreateShareDto(Guid MemberUserId, decimal Amount, string Currency);
 
 public sealed record CreateGroupExpenseCommand(
-    Guid GroupId,
+    [property: JsonIgnore] Guid GroupId,
     string Title,
     decimal Amount,
     string Currency,
     ExpenseCategory Category,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     DateTime DueDate,
     RecurrenceFrequency? RecurrenceFrequency = null,
     DateTime? RecurrenceStartDate = null,
@@ -59,7 +64,7 @@ public sealed record CreateGroupExpenseCommand(
 
 public sealed record UpdateGroupExpenseCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,
@@ -73,8 +78,8 @@ public sealed record DeactivateExpenseCommand(Guid ExpenseId, Guid CallerUserId)
 public sealed record UpsertShareCommand(
     Guid? ShareId,
     Guid ExpenseId,
-    Guid GroupId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid GroupId,
+    [property: JsonIgnore] Guid CallerUserId,
     /// <summary>Whose share this is — not who is assigning it.</summary>
     Guid MemberUserId,
     decimal Amount,
@@ -84,7 +89,7 @@ public sealed record RemoveShareCommand(Guid ShareId, Guid CallerUserId);
 
 public sealed record MarkExpensePaidCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     DateTime OccurrenceDate,
     string? TransactionReference = null,
     /// <summary>Which account the money came from. Null keeps whatever the expense already named,
@@ -93,18 +98,18 @@ public sealed record MarkExpensePaidCommand(
 
 public sealed record MarkExpenseUnpaidCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     DateTime OccurrenceDate);
 
 // Owner-only: the bill's owner pays the vendor from the shared pot (collect-first).
 public sealed record MarkVendorPaidCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     DateTime OccurrenceDate);
 
 public sealed record MarkVendorUnpaidCommand(
     Guid ExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     DateTime OccurrenceDate);
 
 public sealed record PaymentOccurrenceBody(DateTime OccurrenceDate);

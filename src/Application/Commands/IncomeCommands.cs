@@ -1,10 +1,11 @@
+using System.Text.Json.Serialization;
 using Finance.Application.Dtos;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Commands;
 
 public sealed record CreateIncomeCommand(
-    Guid UserId,
+    [property: JsonIgnore] Guid UserId,
     decimal Amount,
     string Currency,
     string Source,
@@ -20,7 +21,7 @@ public sealed record CreateIncomeCommand(
 
 // CallerUserId is the owner check and is always overwritten server-side from the token.
 public sealed record UpdateIncomeCommand(
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     Guid IncomeId,
     decimal Amount,
     string Currency,
@@ -39,20 +40,20 @@ public sealed record SetTaxProfileCommand(
     Guid IncomeId,
     // Null CLEARS the tax profile.
     TaxProfileDto? TaxProfile,
-    Guid CallerUserId = default);
+    [property: JsonIgnore] Guid CallerUserId = default);
 
 public sealed record AddDeductionCommand(
     Guid IncomeId,
     PayrollDeductionDto Deduction,
-    Guid CallerUserId = default);
+    [property: JsonIgnore] Guid CallerUserId = default);
 
 public sealed record RemoveDeductionCommand(
     Guid IncomeId,
     string DeductionType,
     string Label,
-    Guid CallerUserId = default);
+    [property: JsonIgnore] Guid CallerUserId = default);
 
 public sealed record DeleteIncomeCommand(Guid IncomeId);
 
 // CallerUserId is the owner check, always overwritten server-side from the token.
-public sealed record DeactivateIncomeCommand(Guid IncomeId, Guid CallerUserId);
+public sealed record DeactivateIncomeCommand(Guid IncomeId, [property: JsonIgnore] Guid CallerUserId);
