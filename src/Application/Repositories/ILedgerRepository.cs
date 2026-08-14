@@ -34,6 +34,19 @@ public interface ILedgerRepository
     Task<IReadOnlyList<DebtTerms>> GetDebtTermsForUserAsync(Guid userId, CancellationToken ct = default);
 
     Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default);
+
+    /// <summary>
+    /// Makes the books say what <paramref name="candidate"/> says, and commits.
+    ///
+    /// Reads what is in effect under the candidate's source, asks <see cref="ConvergencePlan"/>
+    /// what has to change, then writes the reversals and the replacement together. Decides
+    /// nothing itself — the plan is a pure domain call — but reading, writing and committing as
+    /// one unit is persistence, and every posting path was spelling it out for itself.
+    ///
+    /// Returns whether anything was written: false means the books already agreed, which is the
+    /// common case for a redelivered message or an edit that changed nothing.
+    /// </summary>
+    Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default);
     // Returns BOTH originals and any reversals, which is what makes a journalLine idempotent to redo and
     // possible to unwind.
     Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default);

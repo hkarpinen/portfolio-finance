@@ -1,5 +1,6 @@
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
+using Finance.Domain.Engines;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,27 @@ internal sealed class LedgerRepository : ILedgerRepository
 
     public async Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default)
         => await _db.JournalEntries.AddAsync(entry, ct);
+
+    public async Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default)
+    {
+        var inEffect = (await GetEntriesBySourceAsync(candidate.LedgerId, candidate.Source!, ct)).InEffect();
+        var plan = ConvergencePlan.For(candidate, inEffect);
+        if (plan.AlreadyThere) return false;
+
+        // Reversed at the ORIGINAL entry's date, not today's. A correction and its replacement have
+        // to land in the same period or that period is misstated: reversing a July entry in August
+        // leaves July carrying the old figure and the new one, and a balance drawn at 31 July
+        // reports their sum. The cumulative position comes out right either way, which is what
+        // makes that bug so quiet.
+        foreach (var stale in plan.Reverse)
+            await _db.JournalEntries.AddAsync(stale.Reverse(stale.Date), ct);
+
+        if (plan.Post is { } entry)
+            await _db.JournalEntries.AddAsync(entry, ct);
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 
     public async Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default)
         => await _db.JournalEntries

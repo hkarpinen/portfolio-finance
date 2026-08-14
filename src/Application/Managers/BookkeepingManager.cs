@@ -232,29 +232,12 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var source = LedgerSources.Expense(cmd.ExpenseId);
         var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        // Accrual basis: the cost is incurred and OWED to the vendor. Member shares are journaled
-        // per-share (SyncShareAsync) so a split added later is tracked exactly like a create-time
-        // one, and who pays the vendor is recorded separately. "Is it paid" is derived from the
-        // Vendor Payable balance rather than a flag.
-        var candidate = JournalEntry.Movement(
+        // Member shares are journaled per-share (SyncShareAsync) so a split added later is tracked
+        // exactly like a create-time one, and who pays the vendor is recorded separately.
+        return await _ledgers.ConvergeAsync(Journalize.ExpenseIncurred(
             ledger.Id, expenseAccount.Id, vendorPayable.Id,
-            Money.Create(cmd.Total, cmd.Currency), cmd.Date, $"{cmd.Title} — incurred", source,
-            sourceExpenseId: cmd.ExpenseId, postedByUserId: cmd.PostedByUserId);
-
-        var plan = ConvergencePlan.For(candidate, (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect());
-        if (plan.AlreadyThere) return false;
-
-        // Reversed at the ORIGINAL entry's date, not today's. A correction and its re-post have to
-        // land in the same period or that period is misstated: reversing a July accrual in August
-        // and re-posting it to July leaves July carrying both the old amount and the new one, and a
-        // balance sheet drawn at 31 July reports the sum of them.
-        foreach (var stale in plan.Reverse)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-
-        await _ledgers.AddJournalEntryAsync(
-            candidate, ct);
-        await _ledgers.CommitAsync(ct);
-        return true;
+            Money.Create(cmd.Total, cmd.Currency), cmd.Date, cmd.Title, source,
+            cmd.ExpenseId, cmd.PostedByUserId), ct);
     }
 
     public async Task SyncShareAsync(
@@ -267,30 +250,19 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, category), ct);
         var member = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, userId), ct);
 
-        // The member bears their share — Dr Member / Cr Expense, moving the cost off the nominal
-        // expense account onto that member's stake.
-        var candidate = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.ShareBorne(
             ledger.Id, member.Id, expenseAccount.Id,
-            Money.Create(amount, currency), DateTime.UtcNow.Date, "Share", source,
-            sourceExpenseId: expenseId, sourceMemberId: userId, postedByUserId: userId);
-
-        var plan = ConvergencePlan.For(candidate, (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect());
-        if (plan.AlreadyThere) return;
-
-        // Same rule as the accrual: a correction is reversed in the period it corrects.
-        foreach (var stale in plan.Reverse)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-
-        await _ledgers.AddJournalEntryAsync(
-            candidate, ct);
-        await _ledgers.CommitAsync(ct);
+            Money.Create(amount, currency), DateTime.UtcNow.Date, source,
+            expenseId, userId), ct);
     }
 
     public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
     {
         var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
 
-        // Idempotent: if this occurrence's vendor payment is already on the books, do nothing.
+        // Post-once, deliberately: a vendor payment that is on the books stays as posted. Converging
+        // would CORRECT it if the figure upstream had moved, and money leaving is a fact rather than
+        // a restatement — undoing one is its own event, not an amendment.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
@@ -300,22 +272,19 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var funding = await _ledgers.GetOrOpenAccountAsync(
             ledger.Id, Chart.Funding(ledger.Id, cmd.FundingSource, cmd.PaidByUserId ?? Guid.Empty), ct);
 
-        // Clear the liability against the funding account: Dr Vendor Payable / Cr funding.
-        var entry = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.VendorPaid(
             ledger.Id, vendorPayable.Id, funding.Id,
             Money.Create(cmd.Total, cmd.Currency), cmd.ValueDate, "Vendor payment", cmd.Source,
-            sourceExpenseId: cmd.ExpenseId, sourceOccurrence: cmd.Occurrence,
-            postedByUserId: cmd.PaidByUserId);
-        await _ledgers.AddJournalEntryAsync(entry, ct);
-        await _ledgers.CommitAsync(ct);
+            cmd.ExpenseId, cmd.Occurrence, cmd.PaidByUserId), ct);
     }
 
     public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
     {
         var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
 
-        // Idempotent: if this settlement is already on the books (active entry under its
-        // source), do nothing. The ledger is the single source of truth — no dual write.
+        // Post-once for the same reason as a vendor payment: somebody handing over money happened,
+        // and it is reversed rather than restated. The ledger is the single source of truth — no
+        // dual write.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, cmd.Source, ct)).InEffect();
         if (existing.Count > 0) return;
 
@@ -330,15 +299,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // The ledger records only the accounting (with opaque source-document provenance for the
         // read side). The SettlementRecorded fact is raised by the Share aggregate in the
         // expense context — the ledger must not know about expense-domain events.
-        var entry = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.Settlement(
             ledger.Id, funding.Id, from.Id,
-            Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, "Settlement", cmd.Source,
-            sourceExpenseId: cmd.ExpenseId, sourceShareId: cmd.ShareId,
-            sourceOccurrence: cmd.Occurrence, sourceMemberId: cmd.FromUserId,
-            postedByUserId: cmd.FromUserId);
-        await _ledgers.AddJournalEntryAsync(entry, ct);
-
-        await _ledgers.CommitAsync(ct);
+            Money.Create(cmd.Amount, cmd.Currency), cmd.ValueDate, cmd.Source,
+            cmd.ExpenseId, cmd.ShareId, cmd.Occurrence, cmd.FromUserId), ct);
     }
 
     public async Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default)
@@ -360,7 +324,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
     {
         var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
 
-        // Idempotent on source — re-journalLine the same settle-up payment is a no-op.
+        // Post-once on source — re-delivering the same settle-up is a no-op.
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (existing.Count > 0) return;
 
@@ -369,12 +333,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         // The payer (from, a debtor) squares up with a creditor (to): Dr Member:to / Cr Member:from,
         // moving both toward zero. The cash changed hands directly between the two — no pot involved.
-        var entry = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.SettleUp(
             ledger.Id, to.Id, from.Id,
-            Money.Create(amount, currency), DateTime.UtcNow.Date, "Settle-up", source,
-            sourceMemberId: fromUserId, postedByUserId: fromUserId);
-        await _ledgers.AddJournalEntryAsync(entry, ct);
-        await _ledgers.CommitAsync(ct);
+            Money.Create(amount, currency), DateTime.UtcNow.Date, source, fromUserId), ct);
     }
 
     public async Task ReverseExpenseAsync(Guid groupId, Guid expenseId, CancellationToken ct = default)
@@ -501,11 +462,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var source = LedgerSources.Expense(expenseId);
         var date = DateTime.SpecifyKind(expense.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        var inEffect = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
-
         // Deactivated or deleted: take it off the books and stop.
         if (!expense.IsActive)
         {
+            var inEffect = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
             foreach (var stale in ConvergencePlan.Remove(inEffect).Reverse)
                 await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
             if (inEffect.Count > 0) await _ledgers.CommitAsync(ct);
@@ -520,20 +480,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // in the books to answer with — which is the hole a paid FLAG kept getting invented for.
         var payable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        var candidate = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.ExpenseIncurred(
             ledger.Id, expenseAccount.Id, payable.Id,
-            expense.Amount, date, $"{expense.Title} — incurred", source);
-
-        var plan = ConvergencePlan.For(candidate, inEffect);
-        if (plan.AlreadyThere) return;
-
-        foreach (var stale in plan.Reverse)
-            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
-
-        await _ledgers.AddJournalEntryAsync(
-            candidate,
-            ct);
-        await _ledgers.CommitAsync(ct);
+            expense.Amount, date, expense.Title, source,
+            expenseId, expense.EnteredBy.Value), ct);
     }
 
     public async Task RecordPersonalPaymentAsync(
@@ -558,17 +508,10 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var existing = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
         if (existing.Count > 0) return;
 
-        var candidate = JournalEntry.Movement(
+        await _ledgers.ConvergeAsync(Journalize.VendorPaid(
             ledger.Id, payable.Id, funding.Id,
-            expense.Amount, DateTime.SpecifyKind(valueDate.Date, DateTimeKind.Utc),
-            $"{expense.Title} — paid", source,
-            sourceExpenseId: expenseId, sourceOccurrence: expense.OccurrenceDate,
-                postedByUserId: expense.EnteredBy.Value);
-
-        await _ledgers.AddJournalEntryAsync(
-            candidate,
-            ct);
-        await _ledgers.CommitAsync(ct);
+            expense.Amount, valueDate, $"{expense.Title} — paid", source,
+            expenseId, expense.OccurrenceDate, expense.EnteredBy.Value), ct);
     }
 
     public async Task ReversePersonalPaymentAsync(Guid expenseId, CancellationToken ct = default)
@@ -627,15 +570,11 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         {
             var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.OpeningBalance(ledger.Id), ct);
 
-            var candidate = JournalEntry.Movement(
+            // Not converged: this runs once, when the account is opened, and nothing re-derives it.
+            await _ledgers.AddJournalEntryAsync(Journalize.BalanceCarriedIn(
                 ledger.Id, opening.Id, account.Id,
-                Money.Create(cmd.OpeningBalance, cmd.Currency), cmd.AsOf,
-                $"{cmd.Name} — balance carried in", $"debt-opening:{account.Id.Value:N}",
-            postedByUserId: cmd.CallerUserId);
-
-            await _ledgers.AddJournalEntryAsync(
-                candidate,
-                ct);
+                Money.Create(cmd.OpeningBalance, cmd.Currency), cmd.AsOf, cmd.Name,
+                $"debt-opening:{account.Id.Value:N}", cmd.CallerUserId), ct);
         }
 
         await _ledgers.CommitAsync(ct);

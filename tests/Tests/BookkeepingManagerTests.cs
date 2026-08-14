@@ -214,6 +214,19 @@ public class BookkeepingManagerTests
 
         public Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default) { JournalEntries.Add(entry); return Task.CompletedTask; }
 
+        public Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default)
+        {
+            var inEffect = JournalEntries
+                .Where(e => e.LedgerId == candidate.LedgerId && e.Source == candidate.Source)
+                .ToList().InEffect();
+            var plan = ConvergencePlan.For(candidate, inEffect);
+            if (plan.AlreadyThere) return Task.FromResult(false);
+
+            foreach (var stale in plan.Reverse) JournalEntries.Add(stale.Reverse(stale.Date));
+            if (plan.Post is { } entry) JournalEntries.Add(entry);
+            return Task.FromResult(true);
+        }
+
         public Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<JournalEntry>>(JournalEntries.Where(e => e.LedgerId == ledgerId && e.Source == source).ToList());
 
