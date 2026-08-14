@@ -1,51 +1,76 @@
-using Finance.Application.Managers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
 namespace Tests;
 
 /// <summary>
-/// Two rules that lived only in the controller, so anything reaching the manager from a consumer
-/// or a test could get past them.
+/// Settling up is a document now, not a call into the bookkeeper from an HTTP handler. That is
+/// what gives these two rules somewhere to live: they used to be controller BadRequests, so
+/// anything arriving another way went straight past them.
 /// </summary>
 public class SettleUpTests
 {
-    private static BookkeepingManager Manager() =>
-        new(new BookkeepingManagerTests.FakeLedgerRepository(), null!, null!);
+    private static readonly GroupId House = GroupId.Create(Guid.NewGuid());
+    private static Money Usd(decimal a) => Money.Create(a, "USD");
 
-    // Both legs would land on ONE member account. It nets to nothing, balances perfectly, and
+    // Both legs would land on ONE member account: it nets to nothing, satisfies double-entry, and
     // records a payment that never happened.
     [Fact]
-    public async Task SettlingUpWithYourself_IsRefused()
+    public void SettlingUpWithYourself_IsRefused()
     {
-        var me = Guid.NewGuid();
+        var me = UserId.New();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Manager().RecordMemberTransferAsync(Guid.NewGuid(), me, me, 30m, "USD", "settleup:1"));
+        Assert.Throws<InvalidOperationException>(
+            () => MemberTransfer.Record(House, me, me, Usd(30m), DateTime.UtcNow));
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-30)]
-    public async Task ASettleUpOfNothingOrLess_IsRefused(decimal amount)
+    public void ASettleUpOfNothingOrLess_IsRefused(decimal amount)
     {
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            Manager().RecordMemberTransferAsync(
-                Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), amount, "USD", "settleup:1"));
+        Assert.Throws<ArgumentException>(() => MemberTransfer.Record(
+            House, UserId.New(), UserId.New(), Usd(amount), DateTime.UtcNow));
     }
 
     [Fact]
-    public async Task ARealSettleUp_MovesBetweenTheTwoMembers()
+    public void ARealSettleUp_RaisesTheFactWithBothSides()
     {
-        var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var from = Guid.NewGuid();
-        var to = Guid.NewGuid();
+        var from = UserId.New();
+        var to = UserId.New();
 
-        await new BookkeepingManager(repo, null!, null!)
-            .RecordMemberTransferAsync(Guid.NewGuid(), from, to, 30m, "USD", "settleup:1");
+        var transfer = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
 
-        var entry = Assert.Single(repo.JournalEntries);
-        Assert.Equal(2, entry.JournalLines.Count);
-        Assert.Equal(from, entry.SourceMemberId);
+        var recorded = Assert.IsType<Finance.Domain.Events.MemberTransferRecorded>(
+            Assert.Single(transfer.GetDomainEvents()));
+        Assert.Equal(from, recorded.FromUserId);
+        Assert.Equal(to, recorded.ToUserId);
+        Assert.Equal(30m, recorded.Amount.Amount);
+    }
+
+    // Keyed on its own id, not on who-and-when: settle-ups repeat between the same two people, and
+    // anything derived from the pair would make the second payment look like a redelivery of the
+    // first and swallow it.
+    [Fact]
+    public void TwoSettleUpsBetweenTheSamePeople_AreDifferentFacts()
+    {
+        var from = UserId.New();
+        var to = UserId.New();
+
+        var first = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
+        var second = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
+
+        Assert.NotEqual(first.LedgerSource, second.LedgerSource);
+    }
+
+    [Fact]
+    public void TheDateIsTheDayItHappened_NotTheInstant()
+    {
+        var at = new DateTime(2026, 3, 4, 17, 42, 11, DateTimeKind.Utc);
+
+        var transfer = MemberTransfer.Record(House, UserId.New(), UserId.New(), Usd(30m), at);
+
+        Assert.Equal(at.Date, transfer.OccurredOn);
+        Assert.Equal(DateTimeKind.Utc, transfer.OccurredOn.Kind);
     }
 }

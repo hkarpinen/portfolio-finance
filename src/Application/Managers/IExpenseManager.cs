@@ -23,6 +23,12 @@ public interface IExpenseManager
 
     // Null for personal bills and for self-payer no-ops; a group share resolves an outcome the
     // caller posts to the ledger.
+    /// <summary>
+    /// One member paying another directly to square up. Commits the document and lets the outbox
+    /// drive the posting, like every other mutation — the controller used to call the bookkeeper.
+    /// </summary>
+    Task SettleUpAsync(Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, CancellationToken ct = default);
+
     Task<SettlementOutcome?> MarkPaidAsync(MarkExpensePaidCommand request, CancellationToken cancellationToken = default);
 
     // Null for personal bills and no-ops; otherwise the outcome whose source the caller reverses.

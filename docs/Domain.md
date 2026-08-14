@@ -3,42 +3,66 @@
 > **Boundary:** finance knows nothing of "household". Everything group-scoped is keyed by an
 > **opaque `GroupId`** (and members by opaque `UserId`); there is no `Household`/`Membership`
 > entity here. The double-entry **ledger is the single source of truth** for who-owes-whom and
-> settled-state — `Charge`/`Allocation` are *source documents* that drive journal entries, and a
+> settled-state — `Expense`/`Share` are *source documents* that drive journal entries, and a
 > settlement lives only as a `JournalEntry` (there is no `Reimbursement` table).
 
 ## ERD
 
+> Regenerate this when the model moves. It described `Charge`, `Allocation`, `ChargePayment` and a
+> `PayerMembershipId` for some time after all four were gone, which is worse than having no ERD:
+> a document that claims to settle arguments and is wrong will settle them wrongly.
+
 ```mermaid
 erDiagram
-    Charge {
+    Expense {
         uuid Id PK
-        uuid UserId "creator / personal owner"
-        uuid GroupId "null = personal, set = group/shared"
-        uuid CreatedBy "null for personal"
-        uuid PayerMembershipId "opaque; who fronted the bill"
+        enum OwnerKind "Household | Person"
+        uuid OwnerId "opaque GroupId or UserId"
+        uuid EnteredBy "the person who wrote it down"
+        uuid RecurringExpenseId FK "null = entered directly"
+        datetime OccurredOn "the period it reports in; never moves"
+        datetime DueDate "when it is payable; may be corrected"
         string Title
         decimal Amount
         string Currency
-        enum Category "ChargeCategory"
-        datetime DueDate
-        json RecurrenceSchedule "nullable"
+        enum Category "ExpenseCategory"
+        uuid PayerUserId "who fronted it; household only"
+        enum FundingSource "PayerMember | GroupCash"
+        uuid FundingAccountId "which of your accounts paid; personal only"
+        bigint Version "concurrency token guarding the share total"
         bool IsActive
     }
-    Allocation {
+    Share {
         uuid Id PK
-        uuid ChargeId FK
-        uuid GroupId
-        uuid UserId "the member who owes this share"
+        uuid ExpenseId FK
+        uuid UserId "the member who bears this share"
         decimal Amount
         string Currency
     }
-    ChargePayment {
+    RecurringExpense {
         uuid Id PK
-        uuid ChargeId FK "personal charge occurrence"
-        uuid UserId
-        datetime OccurrenceDate
-        datetime PaidAt
-        string TransactionReference
+        enum OwnerKind
+        uuid OwnerId
+        uuid CreatedBy
+        string Title
+        string Currency
+        enum Category
+        json Recurrence "interval + anchor date"
+        bool IsActive
+    }
+    RecurringExpenseTerm {
+        uuid RecurringExpenseId FK
+        datetime EffectiveFrom
+        decimal Amount "what it charges from that date"
+    }
+    MemberTransfer {
+        uuid Id PK
+        uuid GroupId
+        uuid FromUserId
+        uuid ToUserId
+        decimal Amount
+        string Currency
+        datetime OccurredOn
     }
     IncomeSource {
         uuid Id PK
@@ -51,66 +75,61 @@ erDiagram
     }
     Ledger {
         uuid Id PK
-        enum OwnerType "Group | User"
+        enum OwnerKind "Household | Person"
         uuid OwnerId "opaque GroupId or UserId"
-        string Currency
+        string Currency "fixed at open"
     }
     Account {
         uuid Id PK
         uuid LedgerId FK
-        uuid ParentAccountId FK "nullable; rollup"
-        string Code "1000 Cash, 2000 Vendor Payable, 3000:{user} Member, 5000:{cat} Expense"
-        string Name
+        string Code "see ChartCodes"
         enum AccountType "Asset|Liability|Equity|Income|Expense"
     }
     JournalEntry {
         uuid Id PK
         uuid LedgerId FK
-        datetime Date "value date"
-        string Description
-        string Source "deterministic: charge:{id} | settlement:{charge}:{occ}:{user}"
-        datetime RecordedAt
-        uuid ReversalOfEntryId FK "nullable; correction"
-        uuid SourceChargeId "provenance (opaque)"
-        uuid SourceAllocationId "settlement provenance"
-        datetime SourceOccurrence "settlement provenance"
-        uuid SourceMemberId "settling member"
+        datetime Date "the period it lands in"
+        string Source "expense:{id}, share:{id}, settleup:{id}, ..."
+        uuid PostedByUserId
+        uuid ReversalOfEntryId
+        uuid ReversedByEntryId
+        uuid SourceExpenseId "provenance, by column not by parsing Source"
+        uuid SourceShareId
+        datetime SourceOccurrence
+        uuid SourceMemberId
     }
-    Posting {
+    JournalLine {
         uuid Id PK
         uuid EntryId FK
         uuid AccountId FK
         enum Direction "Debit | Credit"
-        decimal Amount "positive; direction carries sign"
+        decimal Amount "always positive"
     }
-    UserProjection {
-        uuid UserId PK
-        string UserName
-        string DisplayName
-        string AvatarUrl
+    DebtTerms {
+        uuid Id PK
+        uuid AccountId FK "unique; a declared debt only"
+        decimal AnnualPercentageRate
+        decimal CreditLimit "null for a loan"
     }
 
-    Charge        ||--o{ Allocation    : "allocated across members"
-    Charge        ||--o{ ChargePayment : "personal occurrence paid"
-    Ledger        ||--o{ Account       : "chart of accounts"
-    Ledger        ||--o{ JournalEntry  : "book of entries"
-    Account       ||--o| Account       : "parent (rollup)"
-    JournalEntry  ||--|{ Posting       : "balanced postings (>= 2, sum=0)"
-    Account       ||--o{ Posting       : "posted to"
-    JournalEntry  }o..o| Charge        : "SourceChargeId (soft link, no FK)"
-    JournalEntry  }o..o| Allocation    : "SourceAllocationId (settlement, soft link)"
+    RecurringExpense ||--o{ RecurringExpenseTerm : "versioned by"
+    RecurringExpense ||--o{ Expense : "generates, copying amount and split"
+    Expense ||--o{ Share : "divides into"
+    Ledger ||--o{ Account : holds
+    Ledger ||--o{ JournalEntry : records
+    JournalEntry ||--|{ JournalLine : "balances across"
+    Account ||--o{ JournalLine : "posted to"
+    Account ||--o| DebtTerms : "carries"
 ```
 
-**Soft links (no DB FK)** are the dotted relationships: a `JournalEntry` carries opaque
-`Source*` provenance columns pointing back at the `Charge`/`Allocation`/member that originated
-it. This is how the ledger stays generic (it knows nothing of charges) while read models still
-attribute a journal entry to its occurrence — replacing the deleted `Reimbursement` table.
+**Not in the ERD, deliberately:** any balance, any `IsPaid`. Both are folds over `JournalLine`;
+storing either is how a derived total drifts from the entries it came from.
 
 ## How source documents drive the ledger
 
 | Business event | Journal entry(ies) | Source |
 |---|---|---|
-| **Group charge created** (payer fronts, members allocated) | ① Dr `Expense:{cat}` / Cr `FundingAccount` (incurred)  ② Dr `Member:{each}` (+ funder remainder) / Cr `Expense:{cat}` (allocated) | `charge:{id}` · `SourceChargeId` |
+| **Household expense created** (payer fronts, members take shares) | ① Dr `Expense:{cat}` / Cr `FundingAccount` (incurred)  ② Dr `Member:{each}` (+ funder remainder) / Cr `Expense:{cat}` (allocated) | `charge:{id}` · `SourceChargeId` |
 | **Member settles their share** | Dr `FundingAccount` / Cr `Member:{debtor}` (a balanced **Transfer**) | `settlement:{charge}:{occ}:{user}` · `SourceChargeId`+`SourceAllocationId`+`SourceOccurrence`+`SourceMemberId` |
 | **Un-mark paid** | reversing entry (mirror Dr/Cr), references the original | same source; `ReversalOfEntryId` set |
 
@@ -149,9 +168,10 @@ be durably saved without its ledger posting eventually following.
 
 | Aggregate | Key invariants (where enforced) |
 |---|---|
-| **Charge** | Title non-empty; Amount ≥ 0 (`Charge.Create`/`Update`); cannot deactivate twice (`Charge.Deactivate`) |
-| **Allocation** | Amount ≥ 0 (`Allocation.Create`/`Update`); one allocation per member per charge; **Σ active allocations ≤ charge total** (`ChargeManager`, all write paths — even-split rounding absorbs the remainder into the last share, `AllocationMath`) |
-| **ChargePayment** | At most one payment per (ChargeId, OccurrenceDate) (`ChargeManager.MarkPaidAsync`, personal path) |
+| **Expense** | Title non-empty; Amount ≥ 0 (`Expense.Create`/`Update`); cannot deactivate twice (`Expense.Deactivate`); a person can only enter an expense into their own book; `OccurredOn` never moves once set |
+| **Share** | Amount ≥ 0 (`Share.Create`/`Update`); one share per member per expense; a share refuses an expense it is not on; a personal expense has no shares; **Σ shares ≤ expense total** — checked in `ExpenseManager` against `ShareMath`, serialised by `Expense.Version` because shares are their own rows |
+| **MemberTransfer** | Nobody settles up with themselves; amount > 0 (`MemberTransfer.Record`); keyed on its own id, so two settle-ups between the same pair are two facts |
+| **DebtTerms** | One set per account, and only on a declared debt — a rate on a cash account is meaningless rather than merely odd (`DebtTerms.For`) |
 | **IncomeSource** | Source non-empty; Amount ≥ 0; `TryDeactivate` idempotent, `Deactivate` throws if inactive |
 | **Ledger** | Single currency (P10) |
 | **Account** | Typed; `NormalBalance` derived from `AccountType`; balances never stored (derived from postings) |
@@ -163,17 +183,18 @@ be durably saved without its ledger posting eventually following.
 |---|---|
 | `Money` | Amount + currency. **Signed** (contra/reversing entries, card balances go negative); non-negativity is a per-aggregate invariant, not intrinsic |
 | `RecurrenceSchedule` | Frequency + start + optional end |
-| `ChargeCategory` | Enum of charge categories |
+| `ExpenseCategory` | Enum of expense categories; `ExpenseCategories.Parse` is the one reader, and it refuses an unknown rather than filing it under Other |
 | `RecurrenceFrequency` | `Daily`, `Weekly`, `Monthly`, `Yearly` |
-| `LedgerId`/`AccountId`/`JournalEntryId`/`PostingId`/`ChargeId`/`AllocationId` | Strongly-typed ids |
+| `LedgerId`/`AccountId`/`JournalEntryId`/`JournalLineId`/`ExpenseId`/`ShareId`/`RecurringExpenseId`/`MemberTransferId` | Strongly-typed ids |
 | `AccountType` · `NormalBalance` · `EntryDirection` · `LedgerOwnerType` | Ledger enums |
 
 ## Domain events
 
 | Event | Raised by | Notes |
 |---|---|---|
-| `ChargeCreated` / `ChargeUpdated` / `ChargeDeactivated` / `ChargeActivated` | `Charge.*` | household consumes `ChargeCreated` |
-| `AllocationCreated` / `AllocationUpdated` / `AllocationRemoved` | `Allocation.*` | |
+| `ExpenseCreated` / `ExpenseUpdated` / `ExpenseDeactivated` / `ExpenseActivated` | `Expense.*` | household and notifications consume these |
+| `ShareCreated` / `ShareUpdated` / `ShareRemoved` | `Share.*` | |
+| `MemberTransferRecorded` | `MemberTransfer.Record` | drives the settle-up posting |
 | `SettlementRecorded` / `SettlementReversed` | the settlement `JournalEntry` (attached by `BookkeepingManager`) | household activity feed consumes `SettlementRecorded`; drained to outbox via `SaveChangesAsync` |
 | `JournalEntryPosted` / `JournalEntryReversed` | `JournalEntry.Post` / `Reverse` | ledger-internal |
 | `IncomeSourceCreated` / `Updated` / `Deactivated` | `IncomeSource.*` | |

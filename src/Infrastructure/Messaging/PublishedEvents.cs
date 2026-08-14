@@ -30,6 +30,7 @@ internal static class PublishedEvents
         [nameof(ShareRemoved)] = typeof(ShareRemoved),
         [nameof(SettlementRecorded)] = typeof(SettlementRecorded),
         [nameof(SettlementReversed)] = typeof(SettlementReversed),
+        [nameof(MemberTransferRecorded)] = typeof(MemberTransferRecorded),
     };
 
     internal static bool Includes(Type eventType) => ByName.ContainsKey(eventType.Name);

@@ -31,13 +31,11 @@ public sealed class ExpensesController : ControllerBase
 {
     private readonly IExpenseManager _manager;
     private readonly IExpenseQuery _query;
-    private readonly IBookkeepingManager _bookkeeping;
 
-    public ExpensesController(IExpenseManager manager, IExpenseQuery query, IBookkeepingManager bookkeeping)
+    public ExpensesController(IExpenseManager manager, IExpenseQuery query)
     {
         _manager = manager;
         _query = query;
-        _bookkeeping = bookkeeping;
     }
 
     [HttpGet]
@@ -196,15 +194,12 @@ public sealed class ExpensesController : ControllerBase
     public async Task<IActionResult> SettleUpTransfer(Guid groupId, [FromBody] SettleUpTransferBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // Turned into a 400 here; the rule itself lives on RecordMemberTransferAsync, which refuses
-        // both regardless of who calls it.
+        // Answered as a 400 rather than letting the document's refusal surface as a 500. The rules
+        // themselves are on MemberTransfer, so anything arriving another way meets them too.
         if (body.ToUserId == userId.Value) return BadRequest(new { error = "Can't settle up with yourself." });
         if (body.Amount <= 0) return BadRequest(new { error = "Amount must be positive." });
 
-        // Unique source per payment (settle-ups repeat over time, so they are not idempotent on a
-        // fixed key); the random suffix keeps a double-submit from being silently swallowed mid-pay.
-        var source = $"settleup:{groupId:N}:{userId.Value:N}:{body.ToUserId:N}:{Guid.NewGuid():N}";
-        await _bookkeeping.RecordMemberTransferAsync(groupId, userId.Value, body.ToUserId, body.Amount, body.Currency, source, ct);
+        await _manager.SettleUpAsync(groupId, userId.Value, body.ToUserId, body.Amount, body.Currency, ct);
         return NoContent();
     }
 

@@ -23,6 +23,7 @@ public sealed class FinanceDbContext : DbContext
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();
     public DbSet<GroupMemberProjection> GroupMemberProjections => Set<GroupMemberProjection>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
+    public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<FinancialConnection> FinancialConnections => Set<FinancialConnection>();

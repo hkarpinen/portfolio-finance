@@ -221,6 +221,25 @@ namespace Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "member_transfers",
+                schema: "finance",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    group_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    from_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    to_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    occurred_on = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
+                    currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_member_transfers", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "outbox_messages",
                 schema: "finance",
                 columns: table => new
@@ -617,6 +636,12 @@ namespace Infrastructure.Persistence.Migrations
                 column: "entry_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_member_transfers_group_id_occurred_on",
+                schema: "finance",
+                table: "member_transfers",
+                columns: new[] { "group_id", "occurred_on" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_outbox_messages_published_dead_lettered",
                 schema: "finance",
                 table: "outbox_messages",
@@ -721,6 +746,10 @@ namespace Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "ledgers",
+                schema: "finance");
+
+            migrationBuilder.DropTable(
+                name: "member_transfers",
                 schema: "finance");
 
             migrationBuilder.DropTable(

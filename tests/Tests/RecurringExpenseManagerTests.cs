@@ -20,7 +20,8 @@ public class RecurringExpenseManagerTests
     {
         schedules = new FakeScheduleRepo();
         expenses = new FakeExpenseRepo(schedules);
-        return new RecurringExpenseManager(schedules, expenses);
+        // Bookkeeping is only reached by CatchUpPersonalAsync, which these do not exercise.
+        return new RecurringExpenseManager(schedules, expenses, null!);
     }
 
     private static CreateRecurringExpenseCommand Rent(decimal amount = 1000m) => new(

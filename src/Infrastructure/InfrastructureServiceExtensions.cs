@@ -75,6 +75,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IIncomeSourceRepository, IncomeSourceRepository>();
         services.AddScoped<IExpenseRepository, ExpenseRepository>();
         services.AddScoped<IShareRepository, ShareRepository>();
+        services.AddScoped<IMemberTransferRepository, MemberTransferRepository>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
 
         services.AddScoped<IIncomeQuery, IncomeQuery>();

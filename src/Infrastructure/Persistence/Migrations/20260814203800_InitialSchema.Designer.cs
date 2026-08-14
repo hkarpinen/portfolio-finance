@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    [Migration("20260814191934_InitialSchema")]
+    [Migration("20260814203800_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -528,6 +528,55 @@ namespace Infrastructure.Persistence.Migrations
                         .HasName("pk_ledgers");
 
                     b.ToTable("ledgers", "finance");
+                });
+
+            modelBuilder.Entity("Finance.Domain.Aggregates.MemberTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("FromUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_user_id");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<DateTime>("OccurredOn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_on");
+
+                    b.Property<Guid>("ToUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_user_id");
+
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.MemberTransfer.Amount#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("currency");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_member_transfers");
+
+                    b.HasIndex("GroupId", "OccurredOn")
+                        .HasDatabaseName("ix_member_transfers_group_id_occurred_on");
+
+                    b.ToTable("member_transfers", "finance");
                 });
 
             modelBuilder.Entity("Finance.Domain.Aggregates.RecurringExpense", b =>

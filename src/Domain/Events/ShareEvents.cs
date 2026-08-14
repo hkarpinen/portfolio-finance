@@ -41,3 +41,14 @@ public record SettlementReversed(
     UserId FromUserId,
     DateTime OccurrenceDate) : DomainEvent;
 
+/// <summary>
+/// One member paid another directly to square up. Carries everything the books need, so the
+/// consumer never reloads the document — and nothing about an expense, because there isn't one.
+/// </summary>
+public record MemberTransferRecorded(
+    MemberTransferId TransferId,
+    GroupId GroupId,
+    UserId FromUserId,
+    UserId ToUserId,
+    Money Amount,
+    DateTime OccurredOn) : DomainEvent;

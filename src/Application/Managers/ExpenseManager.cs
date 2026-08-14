@@ -17,6 +17,7 @@ internal sealed class ExpenseManager : IExpenseManager
     private readonly IFinancialConnectionRepository _connectionRepository;
     private readonly ILedgerQuery _ledgerQuery;
     private readonly IRecurringExpenseManager _schedules;
+    private readonly IMemberTransferRepository _transfers;
     private readonly ILogger<ExpenseManager> _logger;
 
     public ExpenseManager(
@@ -25,6 +26,7 @@ internal sealed class ExpenseManager : IExpenseManager
         IFinancialConnectionRepository connectionRepository,
         ILedgerQuery ledgerQuery,
         IRecurringExpenseManager schedules,
+        IMemberTransferRepository transfers,
         ILogger<ExpenseManager> logger)
     {
         _repository = repository;
@@ -32,6 +34,7 @@ internal sealed class ExpenseManager : IExpenseManager
         _connectionRepository = connectionRepository;
         _ledgerQuery = ledgerQuery;
         _schedules = schedules;
+        _transfers = transfers;
         _logger = logger;
     }
 
@@ -376,6 +379,17 @@ internal sealed class ExpenseManager : IExpenseManager
         await _splitRepository.CommitAsync(cancellationToken);
         // The committed event drives the share journalLine (Dr Member / Cr Expense).
         return ExpenseMapper.ToShareResponse(result);
+    }
+
+    public async Task SettleUpAsync(
+        Guid groupId, Guid fromUserId, Guid toUserId, decimal amount, string currency, CancellationToken ct = default)
+    {
+        var transfer = MemberTransfer.Record(
+            GroupId.Create(groupId), UserId.Create(fromUserId), UserId.Create(toUserId),
+            Money.Create(amount, currency), DateTime.UtcNow);
+
+        await _transfers.AddAsync(transfer, ct);
+        await _transfers.CommitAsync(ct);
     }
 
     public async Task<SettlementOutcome?> MarkPaidAsync(MarkExpensePaidCommand request, CancellationToken cancellationToken = default)

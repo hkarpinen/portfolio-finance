@@ -26,6 +26,7 @@ internal sealed class LedgerJournalLineConsumer :
     IConsumer<ShareUpdated>,
     IConsumer<ShareRemoved>,
     IConsumer<SettlementRecorded>,
+    IConsumer<MemberTransferRecorded>,
     IConsumer<SettlementReversed>,
     IConsumer<VendorPaid>,
     IConsumer<VendorPaymentReversed>
@@ -88,6 +89,15 @@ internal sealed class LedgerJournalLineConsumer :
                 context.Message.GroupId.Value,
                 LedgerSources.Share(context.Message.ShareId.Value), ct),
             context.CancellationToken);
+
+    public Task Consume(ConsumeContext<MemberTransferRecorded> context) =>
+        HandleAsync(context.Message, nameof(MemberTransferRecorded), ct =>
+        {
+            var m = context.Message;
+            return _bookkeeping.RecordMemberTransferAsync(
+                m.GroupId.Value, m.FromUserId.Value, m.ToUserId.Value,
+                m.Amount.Amount, m.Amount.Currency, $"settleup:{m.TransferId.Value:N}", ct);
+        }, context.CancellationToken);
 
     public Task Consume(ConsumeContext<SettlementRecorded> context) =>
         HandleAsync(context.Message, nameof(SettlementRecorded), ct =>

@@ -19,8 +19,7 @@ namespace Client.Controllers;
 [RequireGroupMembership]
 [Route("api/finance/recurring-expenses")]
 public sealed class RecurringExpensesController(
-    IRecurringExpenseManager schedules,
-    IBookkeepingManager bookkeeping) : ControllerBase
+    IRecurringExpenseManager schedules) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> ListMine(CancellationToken ct = default)
@@ -75,10 +74,7 @@ public sealed class RecurringExpensesController(
     {
         var userId = User.GetUserId().Value;
 
-        // Two halves of the same catch-up: write the bills whose period has come round, then post
-        // anything now due — including a one-off somebody entered ahead of its date.
-        var generated = await schedules.CatchUpAsync(null, userId, DateTime.UtcNow, ct);
-        var posted = await bookkeeping.PostDuePersonalExpensesAsync(userId, DateTime.UtcNow, ct);
+        var (generated, posted) = await schedules.CatchUpPersonalAsync(userId, DateTime.UtcNow, ct);
 
         return Ok(new { generated, posted });
     }

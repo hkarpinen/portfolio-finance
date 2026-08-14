@@ -37,11 +37,19 @@ public interface IRecurringExpenseManager
     /// past <paramref name="asOf"/> — a cost that has not happened does not belong in the books.
     /// </summary>
     Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Both halves of one person's catch-up: write the bills whose period has come round, then post
+    /// anything now due — including a one-off entered ahead of its date. Paired here so the
+    /// controller does not have to know that the second half is bookkeeping.
+    /// </summary>
+    Task<(int Generated, int Posted)> CatchUpPersonalAsync(Guid userId, DateTime asOf, CancellationToken ct = default);
 }
 
 internal sealed class RecurringExpenseManager(
     IRecurringExpenseRepository schedules,
-    IExpenseRepository expenses) : IRecurringExpenseManager
+    IExpenseRepository expenses,
+    IBookkeepingManager bookkeeping) : IRecurringExpenseManager
 {
     public async Task<RecurringExpenseDto> CreateAsync(CreateRecurringExpenseCommand cmd, CancellationToken ct = default)
     {
@@ -109,6 +117,14 @@ internal sealed class RecurringExpenseManager(
             .Select(d => RecurringExpenseMapper.ToOccurrence(
                 schedule, d, recorded.GetValueOrDefault(d)))
             .ToList();
+    }
+
+    public async Task<(int Generated, int Posted)> CatchUpPersonalAsync(
+        Guid userId, DateTime asOf, CancellationToken ct = default)
+    {
+        var generated = await CatchUpAsync(null, userId, asOf, ct);
+        var posted = await bookkeeping.PostDuePersonalExpensesAsync(userId, asOf, ct);
+        return (generated, posted);
     }
 
     public async Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default)
