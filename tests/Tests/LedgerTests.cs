@@ -1,6 +1,7 @@
 using Finance.Domain.Aggregates;
 using Finance.Domain.Events;
 using Finance.Domain.ValueObjects;
+using Finance.Domain.Engines;
 
 namespace Tests;
 

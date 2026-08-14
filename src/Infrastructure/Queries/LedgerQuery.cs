@@ -3,6 +3,7 @@ using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Finance.Domain.Engines;
 
 namespace Infrastructure.Queries;
 

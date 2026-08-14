@@ -1,4 +1,4 @@
-namespace Finance.Domain.Aggregates;
+namespace Finance.Domain.Engines;
 
 /// <summary>
 /// The account-numbering convention, shared by every ledger because the journal does not care

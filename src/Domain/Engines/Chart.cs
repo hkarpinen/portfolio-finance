@@ -1,6 +1,7 @@
+using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Aggregates;
+namespace Finance.Domain.Engines;
 
 /// <summary>
 /// The chart of accounts. One chart, not one per kind of owner: the numbering is

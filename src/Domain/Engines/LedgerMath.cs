@@ -1,6 +1,7 @@
+using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Aggregates;
+namespace Finance.Domain.Engines;
 
 // The proofs a whole book owes: what it debited, what it credited, and whether they agree.
 // Balances are NEVER stored — always computed from the journal, so no derived total can drift

@@ -1,4 +1,5 @@
-namespace Finance.Domain.Aggregates;
+using Finance.Domain.Aggregates;
+namespace Finance.Domain.ValueObjects;
 
 /// <summary>
 /// An account a chart knows how to name and open, before anyone has checked whether the ledger
