@@ -75,6 +75,7 @@ internal sealed class IncomeQuery : IIncomeQuery
     {
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
+        if (income.UserId.Value != request.CallerUserId) return null;
 
         var breakdown = _deductionEngine.ComputeBreakdown(income, request.Year, request.Month);
 
@@ -202,7 +203,7 @@ internal sealed class IncomeQuery : IIncomeQuery
         // One expense is one occurrence, so the window is a plain date filter the database can run.
         var relevantExpenses = (await _db.Expenses
             .AsNoTracking()
-            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.Owner.Kind == EntityKind.Household
+            .Where(b => expenseIds.Contains(b.Id) && b.IsActive && b.Owner.Kind == EntityKind.Group
                         && b.OccurrenceDate >= from && b.OccurrenceDate <= to)
             .ToListAsync(cancellationToken))
             .ToDictionary(b => b.Id);

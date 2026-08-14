@@ -32,7 +32,7 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
         // JournalLines cascade from journal_entries (fk_journalLines_journal_entries_entry_id, ON DELETE CASCADE),
         // so deleting entries removes their journal_lines; accounts and the ledger row go explicitly.
         var ledger = await _db.Ledgers.FirstOrDefaultAsync(
-            l => l.Owner.Kind == EntityKind.Household && l.Owner.Id == groupId, ct);
+            l => l.Owner.Kind == EntityKind.Group && l.Owner.Id == groupId, ct);
         if (ledger is not null)
         {
             var ledgerId = ledger.Id;

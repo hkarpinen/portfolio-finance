@@ -12,7 +12,7 @@ public class SharedExpenseTests
     {
         var hId = groupId ?? GroupId.Create(Guid.NewGuid());
         var uId = createdBy ?? UserId.New();
-        return Expense.Create(AccountingEntity.Household(hId),
+        return Expense.Create(AccountingEntity.Group(hId),
             uId,
             "Test Bill",
             Money.Create(100m, "USD"),
@@ -26,7 +26,7 @@ public class SharedExpenseTests
         var (hId, uId) = NewIds();
         var dueDate = DateTime.UtcNow.Date.AddDays(5);
 
-        var bill = Expense.Create(AccountingEntity.Household(hId), uId, "Electricity", Money.Create(80m, "USD"), ExpenseCategory.Utilities, dueDate);
+        var bill = Expense.Create(AccountingEntity.Group(hId), uId, "Electricity", Money.Create(80m, "USD"), ExpenseCategory.Utilities, dueDate);
 
         Assert.Equal("Electricity", bill.Title);
         Assert.Equal(hId, bill.GroupId);
@@ -50,7 +50,7 @@ public class SharedExpenseTests
         var (hId, uId) = NewIds();
 
         Assert.Throws<ArgumentException>(() =>
-            Expense.Create(AccountingEntity.Household(hId), uId, "", Money.Create(100m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
+            Expense.Create(AccountingEntity.Group(hId), uId, "", Money.Create(100m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class SharedExpenseTests
         var (hId, uId) = NewIds();
         var payer = Guid.NewGuid();
 
-        var bill = Expense.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
+        var bill = Expense.Create(AccountingEntity.Group(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: payer);
 
         // Assert — stored on the aggregate
@@ -121,7 +121,7 @@ public class SharedExpenseTests
         // Arrange — created with an initial payer
         var (hId, uId) = NewIds();
         var initialPayer = Guid.NewGuid();
-        var bill = Expense.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
+        var bill = Expense.Create(AccountingEntity.Group(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: initialPayer);
         bill.ClearDomainEvents();
 
@@ -143,7 +143,7 @@ public class SharedExpenseTests
         // Arrange — PATCH semantics: a null payer in Update means "leave as-is"
         var (hId, uId) = NewIds();
         var payer = Guid.NewGuid();
-        var bill = Expense.Create(AccountingEntity.Household(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
+        var bill = Expense.Create(AccountingEntity.Group(hId), uId, "Rent", Money.Create(1900m, "USD"), ExpenseCategory.Rent,
             DateTime.UtcNow.Date.AddDays(1), payerUserId: payer);
         bill.ClearDomainEvents();
 

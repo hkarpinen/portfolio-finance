@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Finance.Infrastructure.Persistence.Projections;
 
-// Denormalized projection of group membership synced from the household service via domain
+// Denormalized projection of group membership synced from the group service via domain
 // events. Note the deliberate asymmetry with the ledger: when a member leaves, this row goes
 // inactive but their Member account and balances stay on the books — debt does not vanish with
 // departure. Telling current members from departed ones is what this projection is for.
@@ -54,8 +54,8 @@ public sealed class GroupMemberProjection
     }
 
     /// <summary>
-    /// Each member's role in one house. Absent means unknown — a row predating this projection,
-    /// not somebody outside the house — so callers fall back to "Member".
+    /// Each member's role in one group. Absent means unknown — a row predating this projection,
+    /// not somebody outside the group — so callers fall back to "Member".
     /// </summary>
     public static async Task<Dictionary<Guid, string>> RolesAsync(
         DbSet<GroupMemberProjection> members, Guid groupId, CancellationToken ct = default)

@@ -81,15 +81,15 @@ internal sealed class DemoSeedManager : IDemoSeedManager
             (title: "Netflix", amount: 18m, category: ExpenseCategory.Subscriptions),
         };
 
-        // Seeding goes through the outbox like any live write, so demo households get a real double-entry
+        // Seeding goes through the outbox like any live write, so demo groups get a real double-entry
         // ledger by the same path — seeded data is never ledger-less.
         foreach (var (title, amount, category) in sharedExpenses)
         {
             // A PayerMember expense has to name the member who fronted it — the default left
             // payerUserId null, so the bill detail rendered "Someone, out of their own pocket" and
-            // there was nobody for the house to pay back.
+            // there was nobody for the group to pay back.
             var expense = Expense.Create(
-                AccountingEntity.Household(gid), uid, title, Money.Create(amount, "USD"),
+                AccountingEntity.Group(gid), uid, title, Money.Create(amount, "USD"),
                 category, startOfMonth.AddMonths(1),
                 payerUserId: userId);
             await _expenseRepo.AddAsync(expense, cancellationToken);

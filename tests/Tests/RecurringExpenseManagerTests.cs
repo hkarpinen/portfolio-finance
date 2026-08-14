@@ -1,5 +1,6 @@
 using Finance.Application.Dtos;
 using Finance.Application.Managers;
+using Finance.Application.Queries;
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
@@ -21,7 +22,7 @@ public class RecurringExpenseManagerTests
         schedules = new FakeScheduleRepo();
         expenses = new FakeExpenseRepo(schedules);
         // Bookkeeping is only reached by CatchUpPersonalAsync, which these do not exercise.
-        return new RecurringExpenseManager(schedules, expenses, null!);
+        return new RecurringExpenseManager(schedules, expenses, new FakeGroups(Group, User), null!);
     }
 
     private static CreateRecurringExpenseCommand Rent(decimal amount = 1000m) => new(
@@ -34,7 +35,7 @@ public class RecurringExpenseManagerTests
         var manager = NewManager(out _, out var expenses);
         var schedule = await manager.CreateAsync(Rent());
 
-        var expense = await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
+        var expense = await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
 
         Assert.NotNull(expense);
         Assert.Equal(1000m, expense!.Amount.Amount);
@@ -48,8 +49,8 @@ public class RecurringExpenseManagerTests
         var manager = NewManager(out _, out var expenses);
         var schedule = await manager.CreateAsync(Rent());
 
-        var first = await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
-        var second = await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
+        var first = await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
+        var second = await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
 
         Assert.Equal(first!.Id, second!.Id);
         Assert.Single(expenses.Saved);
@@ -62,7 +63,7 @@ public class RecurringExpenseManagerTests
         var schedule = await manager.CreateAsync(Rent());
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3.AddDays(5)));
+            () => manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3.AddDays(5)));
     }
 
     [Fact]
@@ -70,13 +71,13 @@ public class RecurringExpenseManagerTests
     {
         var manager = NewManager(out _, out _);
         var schedule = await manager.CreateAsync(Rent());
-        var january = await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
+        var january = await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
 
         await manager.AmendAsync(new AmendRecurringExpenseCommand(
             schedule.RecurringExpenseId, User, "Rent", 1100m, "USD", ExpenseCategory.Rent,
             EffectiveFrom: Jan3.AddMonths(1)));
 
-        var feb = await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3.AddMonths(1));
+        var feb = await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3.AddMonths(1));
 
         Assert.Equal(1000m, january!.Amount.Amount);
         Assert.Equal(1100m, feb!.Amount.Amount);
@@ -87,12 +88,12 @@ public class RecurringExpenseManagerTests
     {
         var manager = NewManager(out _, out _);
         var schedule = await manager.CreateAsync(Rent());
-        await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
+        await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
         await manager.AmendAsync(new AmendRecurringExpenseCommand(
             schedule.RecurringExpenseId, User, "Rent", 1100m, "USD", ExpenseCategory.Rent,
             EffectiveFrom: Jan3.AddMonths(1)));
 
-        var forecast = await manager.ForecastAsync(schedule.RecurringExpenseId, Jan3, Jan3.AddMonths(3));
+        var forecast = await manager.ForecastAsync(schedule.RecurringExpenseId, User, Jan3, Jan3.AddMonths(3));
 
         Assert.Equal(3, forecast.Count);
         // January was billed at 1,000 and says so; the months not yet recorded quote the schedule.
@@ -107,12 +108,67 @@ public class RecurringExpenseManagerTests
     {
         var manager = NewManager(out _, out var expenses);
         var schedule = await manager.CreateAsync(Rent());
-        await manager.MaterialiseAsync(schedule.RecurringExpenseId, Jan3);
+        await manager.MaterialiseAsync(schedule.RecurringExpenseId, User, Jan3);
 
         await manager.DeactivateAsync(schedule.RecurringExpenseId, User);
 
-        Assert.Empty(await manager.ForecastAsync(schedule.RecurringExpenseId, Jan3, Jan3.AddMonths(6)));
+        Assert.Empty(await manager.ForecastAsync(schedule.RecurringExpenseId, User, Jan3, Jan3.AddMonths(6)));
         Assert.Single(expenses.Saved);
+    }
+
+    // The route this arrives on carries no {groupId}, so the membership filter never fires and the
+    // group is whatever the body says. Without this check a signed-in stranger could open a
+    // standing charge against any group whose id they had.
+    [Fact]
+    public async Task Create_RefusesAGroupTheCallerIsNotIn()
+    {
+        var manager = NewManager(out var schedules, out _);
+        var stranger = Rent() with { CallerUserId = Guid.NewGuid() };
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => manager.CreateAsync(stranger));
+        Assert.Empty(schedules.Schedules);
+    }
+
+    [Fact]
+    public async Task Create_AllowsAScheduleOfYourOwn()
+    {
+        var manager = NewManager(out _, out _);
+        var mine = Rent() with { GroupId = null, CallerUserId = Guid.NewGuid() };
+
+        var schedule = await manager.CreateAsync(mine);
+
+        Assert.Null(schedule.GroupId);
+    }
+
+    // Amend and deactivate find the schedule by id alone. Answering as though it does not exist
+    // keeps the endpoint from confirming ids to somebody guessing them.
+    [Fact]
+    public async Task AmendAndDeactivate_AreRefusedToAnyoneButWhoeverOpenedIt()
+    {
+        var manager = NewManager(out _, out _);
+        var schedule = await manager.CreateAsync(Rent());
+        var stranger = Guid.NewGuid();
+
+        var amended = await manager.AmendAsync(new AmendRecurringExpenseCommand(
+            schedule.RecurringExpenseId, stranger, "Rent", 5000m, "USD", ExpenseCategory.Rent));
+
+        Assert.Null(amended);
+        Assert.False(await manager.DeactivateAsync(schedule.RecurringExpenseId, stranger));
+        Assert.Equal(1000m, (await manager.ForecastAsync(
+            schedule.RecurringExpenseId, User, Jan3, Jan3.AddMonths(1)))[0].Amount);
+    }
+
+    // The forecast states the amount and every date it falls due — the terms of the agreement.
+    [Fact]
+    public async Task Forecast_IsRefusedToAnyoneOutsideTheGroup()
+    {
+        var manager = NewManager(out _, out _);
+        var schedule = await manager.CreateAsync(Rent());
+
+        var seen = await manager.ForecastAsync(
+            schedule.RecurringExpenseId, Guid.NewGuid(), Jan3, Jan3.AddMonths(3));
+
+        Assert.Empty(seen);
     }
 
     [Fact]
@@ -183,6 +239,16 @@ public class RecurringExpenseManagerTests
 
         Assert.Equal(0, await manager.CatchUpAsync(Group, User, Jan3.AddMonths(3)));
         Assert.Empty(expenses.Saved);
+    }
+
+    /// <summary>One group with one member in it. Anybody else is a stranger.</summary>
+    internal sealed class FakeGroups(Guid group, Guid member) : IGroupQuery
+    {
+        public Task<bool> IsCurrentMemberAsync(Guid groupId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(groupId == group && userId == member);
+
+        public Task<bool> ExpenseBelongsToGroupAsync(Guid groupId, Guid expenseId, CancellationToken ct = default)
+            => Task.FromResult(true);
     }
 
     internal sealed class FakeScheduleRepo : IRecurringExpenseRepository

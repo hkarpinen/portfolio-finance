@@ -170,7 +170,7 @@ public interface IBookkeepingManager
     /// <summary>
     /// Posts a personal expense into the caller's OWN book: Dr Expense / Cr whatever paid for it.
     ///
-    /// This never touches a group ledger — a cost only one person bore is not the household's —
+    /// This never touches a group ledger — a cost only one person bore is not the group's —
     /// and it is the same convergent shape the group accrual uses, so a redelivery or a no-op edit
     /// falls out without writing anything.
     /// </summary>
@@ -262,7 +262,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task<bool> SyncExpenseAccrualAsync(PostExpenseToLedgerCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Group(cmd.GroupId), cmd.Currency, ct);
 
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, cmd.Category), ct);
 
@@ -281,7 +281,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         Guid groupId, Guid expenseId, string category, Guid userId, decimal amount, string currency,
         Guid shareId, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Group(groupId), currency, ct);
         var source = LedgerSources.Share(shareId);
 
         var expenseAccount = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Expense(ledger.Id, category), ct);
@@ -295,7 +295,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordVendorPaymentAsync(RecordVendorPaymentCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Group(cmd.GroupId), cmd.Currency, ct);
 
         var vendorPayable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
         // The funding account is whoever actually paid the vendor — the payer's own Member account
@@ -311,7 +311,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task RecordSettlementAsync(RecordSettlementCommand cmd, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(cmd.GroupId), cmd.Currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Group(cmd.GroupId), cmd.Currency, ct);
 
         var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, cmd.FromUserId), ct);
         // The debtor settles INTO the funding account that paid the vendor — the payer's Member
@@ -332,7 +332,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Household(groupId), ct);
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Group(groupId), ct);
         if (ledger is null) return;
 
         var active = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, source, ct)).InEffect();
@@ -355,7 +355,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         if (amount <= 0m)
             throw new ArgumentException("A settle-up moves a positive amount.", nameof(amount));
 
-        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Household(groupId), currency, ct);
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Group(groupId), currency, ct);
 
         var from = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, fromUserId), ct);
         var to = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Member(ledger.Id, toUserId), ct);
@@ -369,7 +369,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
     public async Task ReverseExpenseAsync(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
-        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Household(groupId), ct);
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(AccountingEntity.Group(groupId), ct);
         if (ledger is null) return;
 
         // Every in-effect entry for the expense — accrual, vendor payment, and settlements all carry
@@ -387,7 +387,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         var expense = await _expenses.GetByIdAsync(ExpenseId.Create(expenseId), ct);
         if (expense is null) return;
 
-        // A personal cost belongs in the person's own book, never the household's. Routed here
+        // A personal cost belongs in the person's own book, never the group's. Routed here
         // rather than in the consumer so there is one answer to "where does this post".
         if (expense.GroupId is null)
         {

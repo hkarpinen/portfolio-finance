@@ -1,7 +1,7 @@
 namespace Finance.Application.Dtos;
 
 // GroupId and PaidAt are populated only for personal-period contexts; they are null in
-// per-household member breakdowns, where the group is implied by the enclosing dto.
+// per-group member breakdowns, where the group is implied by the enclosing dto.
 public sealed record ContributionItemDto(
     Guid ShareId,
     Guid BillId,

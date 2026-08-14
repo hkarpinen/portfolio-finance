@@ -119,7 +119,8 @@ public sealed class IncomeController : ControllerBase
     {
         var now = DateTime.UtcNow;
         var result = await _incomeQuery.GetNetPayBreakdownAsync(
-            new GetNetPayBreakdownParams(incomeId, year ?? now.Year, month ?? now.Month), ct);
+            new GetNetPayBreakdownParams(
+                incomeId, User.GetUserId().Value, year ?? now.Year, month ?? now.Month), ct);
         return result is null ? NotFound() : Ok(result);
     }
 

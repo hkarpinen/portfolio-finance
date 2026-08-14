@@ -1,7 +1,7 @@
 # Domain Model — Finance
 
-> **Boundary:** finance knows nothing of "household". Everything group-scoped is keyed by an
-> **opaque `GroupId`** (and members by opaque `UserId`); there is no `Household`/`Membership`
+> **Boundary:** finance never resolves a group to anything. Everything group-scoped is keyed by an
+> **opaque `GroupId`** (and members by opaque `UserId`); there is no group or membership
 > entity here. The double-entry **ledger is the single source of truth** for who-owes-whom and
 > settled-state — `Expense`/`Share` are *source documents* that drive journal entries, and a
 > settlement lives only as a `JournalEntry` (there is no `Reimbursement` table).
@@ -16,7 +16,7 @@
 erDiagram
     Expense {
         uuid Id PK
-        enum OwnerKind "Household | Person"
+        enum OwnerKind "Group | Person"
         uuid OwnerId "opaque GroupId or UserId"
         uuid EnteredBy "the person who wrote it down"
         uuid RecurringExpenseId FK "null = entered directly"
@@ -26,7 +26,7 @@ erDiagram
         decimal Amount
         string Currency
         enum Category "ExpenseCategory"
-        uuid PayerUserId "who fronted it; household only"
+        uuid PayerUserId "who fronted it; group only"
         enum FundingSource "PayerMember | GroupCash"
         uuid FundingAccountId "which of your accounts paid; personal only"
         bigint Version "concurrency token guarding the share total"
@@ -75,7 +75,7 @@ erDiagram
     }
     Ledger {
         uuid Id PK
-        enum OwnerKind "Household | Person"
+        enum OwnerKind "Group | Person"
         uuid OwnerId "opaque GroupId or UserId"
         string Currency "fixed at open"
     }
@@ -129,7 +129,7 @@ storing either is how a derived total drifts from the entries it came from.
 
 | Business event | Journal entry(ies) | Source |
 |---|---|---|
-| **Household expense created** (payer fronts, members take shares) | ① Dr `Expense:{cat}` / Cr `FundingAccount` (incurred)  ② Dr `Member:{each}` (+ funder remainder) / Cr `Expense:{cat}` (allocated) | `charge:{id}` · `SourceChargeId` |
+| **Group expense created** (payer fronts, members take shares) | ① Dr `Expense:{cat}` / Cr `FundingAccount` (incurred)  ② Dr `Member:{each}` (+ funder remainder) / Cr `Expense:{cat}` (allocated) | `charge:{id}` · `SourceChargeId` |
 | **Member settles their share** | Dr `FundingAccount` / Cr `Member:{debtor}` (a balanced **Transfer**) | `settlement:{charge}:{occ}:{user}` · `SourceChargeId`+`SourceAllocationId`+`SourceOccurrence`+`SourceMemberId` |
 | **Un-mark paid** | reversing entry (mirror Dr/Cr), references the original | same source; `ReversalOfEntryId` set |
 
@@ -192,10 +192,10 @@ be durably saved without its ledger posting eventually following.
 
 | Event | Raised by | Notes |
 |---|---|---|
-| `ExpenseCreated` / `ExpenseUpdated` / `ExpenseDeactivated` / `ExpenseActivated` | `Expense.*` | household and notifications consume these |
+| `ExpenseCreated` / `ExpenseUpdated` / `ExpenseDeactivated` / `ExpenseActivated` | `Expense.*` | group and notifications consume these |
 | `ShareCreated` / `ShareUpdated` / `ShareRemoved` | `Share.*` | |
 | `MemberTransferRecorded` | `MemberTransfer.Record` | drives the settle-up posting |
-| `SettlementRecorded` / `SettlementReversed` | the settlement `JournalEntry` (attached by `BookkeepingManager`) | household activity feed consumes `SettlementRecorded`; drained to outbox via `SaveChangesAsync` |
+| `SettlementRecorded` / `SettlementReversed` | the settlement `JournalEntry` (attached by `BookkeepingManager`) | group activity feed consumes `SettlementRecorded`; drained to outbox via `SaveChangesAsync` |
 | `JournalEntryPosted` / `JournalEntryReversed` | `JournalEntry.Post` / `Reverse` | ledger-internal |
 | `IncomeSourceCreated` / `Updated` / `Deactivated` | `IncomeSource.*` | |
 

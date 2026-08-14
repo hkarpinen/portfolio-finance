@@ -42,7 +42,7 @@ internal sealed class ExpenseManager : IExpenseManager
         var recurrence = RecurrenceSchedule.ParseOrNone(
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
-        // A repeating personal cost is an agreement, same as a repeating house bill. Only the
+        // A repeating personal cost is an agreement, same as a repeating group bill. Only the
         // one-off is an expense somebody typed straight in.
         if (recurrence is not null)
         {
@@ -58,7 +58,8 @@ internal sealed class ExpenseManager : IExpenseManager
                 EndDate: recurrence.EndDate,
                 Description: request.Description), cancellationToken);
 
-            var first = await _schedules.MaterialiseAsync(schedule.RecurringExpenseId, recurrence.StartDate, cancellationToken)
+            var first = await _schedules.MaterialiseAsync(
+                    schedule.RecurringExpenseId, request.CallerUserId, recurrence.StartDate, cancellationToken)
                 ?? throw new InvalidOperationException("The schedule was created but its first expense was not.");
             return ExpenseMapper.ToResponse(first);
         }
@@ -130,7 +131,7 @@ internal sealed class ExpenseManager : IExpenseManager
         // and every month would be derived from it again.
         var expense = recurrence is null
             ? Expense.Create(
-                AccountingEntity.Household(request.GroupId), UserId.Create(request.CallerUserId), request.Title,
+                AccountingEntity.Group(request.GroupId), UserId.Create(request.CallerUserId), request.Title,
                 Money.Create(request.Amount, request.Currency), request.Category, request.DueDate,
                 request.Description, payerUserId: payerUserId, fundingSource: request.FundingSource)
             : await _schedules.OpenAndBillFirstAsync(new CreateRecurringExpenseCommand(
@@ -150,8 +151,8 @@ internal sealed class ExpenseManager : IExpenseManager
         if (expense.RecurringExpenseId is null)
             await _repository.AddAsync(expense, cancellationToken);
 
-        // The share's actor is the identity userId (the PERSON), not the household
-        // membership — one financial identity across all of that person's households.
+        // The share's actor is the identity userId (the PERSON), not the group
+        // membership — one financial identity across all of that person's groups.
         if (request.Shares is { Count: > 0 })
         {
             foreach (var split in request.Shares)
@@ -209,7 +210,7 @@ internal sealed class ExpenseManager : IExpenseManager
         var expense = await _repository.GetByIdAsync(expenseId, cancellationToken)
             ?? throw new KeyNotFoundException("Expense not found.");
 
-        // Your own share, or you entered the bill. Being in the house lets you settle what you owe;
+        // Your own share, or you entered the bill. Being in the group lets you settle what you owe;
         // it does not let you re-cut how somebody else's bill was divided.
         if (request.MemberUserId != request.CallerUserId && !expense.IsManagedBy(request.CallerUserId))
             throw new UnauthorizedAccessException("Only the bill's owner can set another member's share.");
@@ -323,12 +324,12 @@ internal sealed class ExpenseManager : IExpenseManager
         var uid = UserId.Create(userId);
 
         // Upsert by (expense, user): the event is authoritative and may be redelivered, so this is
-        // idempotent on amount. The userId came from a household-authorized event — no caller override.
+        // idempotent on amount. The userId came from a group-authorized event — no caller override.
         Share result;
         var existing = await _splitRepository.GetByExpenseAndUserAsync(id, uid, cancellationToken);
 
         // Enforce the Σ shares ≤ expense total invariant. This arrives via an authoritative,
-        // redeliverable household event, so a violation must NOT throw (that would dead-letter and
+        // redeliverable group event, so a violation must NOT throw (that would dead-letter and
         // redeliver forever) — log and skip instead.
         var others = await _splitRepository.SumForExpenseAsync(id, existing?.Id, cancellationToken);
         if (!expense.CanBear(others, money.Amount))

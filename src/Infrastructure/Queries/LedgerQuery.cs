@@ -16,7 +16,7 @@ internal sealed class LedgerQuery : ILedgerQuery
     public async Task<LedgerViewDto?> GetGroupLedgerAsync(Guid groupId, CancellationToken ct = default)
     {
         var ledger = await _db.Ledgers.AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Household && l.Owner.Id == groupId, ct);
+            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Group && l.Owner.Id == groupId, ct);
         if (ledger is null) return null;
 
         var accounts = await _db.Accounts.AsNoTracking()
@@ -46,7 +46,7 @@ internal sealed class LedgerQuery : ILedgerQuery
     public async Task<AccountStatementDto?> GetAccountStatementAsync(Guid groupId, Guid accountId, CancellationToken ct = default)
     {
         var ledger = await _db.Ledgers.AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Household && l.Owner.Id == groupId, ct);
+            .FirstOrDefaultAsync(l => l.Owner.Kind == EntityKind.Group && l.Owner.Id == groupId, ct);
         if (ledger is null) return null;
 
         var accId = new AccountId(accountId);
@@ -96,7 +96,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             from p in _db.JournalLines.AsNoTracking()
             join a in _db.Accounts.AsNoTracking() on p.AccountId equals a.Id
             join l in _db.Ledgers.AsNoTracking() on a.LedgerId equals l.Id
-            where a.Code == memberCode && l.Owner.Kind == EntityKind.Household
+            where a.Code == memberCode && l.Owner.Kind == EntityKind.Group
             select new { JournalLine = p, GroupId = l.Owner.Id, l.Currency, a.NormalBalance }).ToListAsync(ct);
 
         var groups = rows

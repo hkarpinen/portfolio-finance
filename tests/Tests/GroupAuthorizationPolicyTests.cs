@@ -51,7 +51,7 @@ public class GroupAuthorizationPolicyTests
         Assert.True(
             unguarded.Count == 0,
             "These controllers expose a {groupId} route without [RequireGroupMembership], so any "
-                + "signed-in user could reach another household's data: "
+                + "signed-in user could reach another group's data: "
                 + string.Join(", ", unguarded));
     }
 

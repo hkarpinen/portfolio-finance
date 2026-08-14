@@ -3,8 +3,8 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Aggregates;
 
-// One set of books for one accounting entity. Finance knows nothing of "household" — the owner is
-// an opaque id with a kind. Accounts and journal entries reference the ledger by id; the root
+// One set of books for one accounting entity. What sort of thing that entity IS does not reach
+// in here — the owner is an opaque id with a kind. Accounts and journal entries reference the ledger by id; the root
 // itself only fixes whose books these are and the reporting currency. One currency per ledger.
 public sealed class Ledger : IAggregateRoot
 {

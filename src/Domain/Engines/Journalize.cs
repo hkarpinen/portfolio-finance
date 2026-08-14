@@ -8,8 +8,8 @@ namespace Finance.Domain.Engines;
 ///
 /// These used to be written inline in the manager, between the account lookups and the repository
 /// calls, and two of them were written twice — a cost incurred and a payable cleared each had a
-/// household version and a personal one that had to agree by memory. Here they are named once, and
-/// the household and personal paths call the same rule.
+/// group version and a personal one that had to agree by memory. Here they are named once, and
+/// the group and personal paths call the same rule.
 ///
 /// Which accounts to use is the caller's job: resolving "the groceries account for this ledger"
 /// is a database round trip, so it cannot live in here. What these own is the DIRECTION — which
@@ -31,7 +31,7 @@ public static class Journalize
             ledger, category, payable, expense.Amount, expense.OccurrenceDate,
             expense.Title, source, expense.Id.Value, expense.EnteredBy.Value);
 
-    /// <summary>For the household path, which holds a command rather than the expense.</summary>
+    /// <summary>For the group path, which holds a command rather than the expense.</summary>
     public static JournalEntry ExpenseIncurred(
         LedgerId ledger, AccountId category, AccountId payable, Money amount,
         DateTime occurredOn, string title, string source, Guid expenseId, Guid? enteredBy) =>
@@ -67,7 +67,7 @@ public static class Journalize
             ledger, payable, funding, expense.Amount, paidOn, $"{expense.Title} — paid", source,
             expense.Id.Value, expense.OccurrenceDate, expense.EnteredBy.Value);
 
-    /// <summary>For the household path, which holds a command rather than the expense.</summary>
+    /// <summary>For the group path, which holds a command rather than the expense.</summary>
     public static JournalEntry VendorPaid(
         LedgerId ledger, AccountId payable, AccountId funding, Money amount,
         DateTime paidOn, string description, string source,

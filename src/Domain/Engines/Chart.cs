@@ -60,7 +60,7 @@ public static class Chart
     public static AccountSpec Expense(LedgerId ledgerId, string category) =>
         new(ExpenseCode(category), () => OpenExpenseAccount(ledgerId, category));
 
-    /// <summary>One member's standing in the house's book. Only meaningful where there are
+    /// <summary>One member's standing in the group's book. Only meaningful where there are
     /// members.</summary>
     public static AccountSpec Member(LedgerId ledgerId, Guid userId) =>
         new(MemberCode(userId), () => OpenMemberAccount(ledgerId, userId));

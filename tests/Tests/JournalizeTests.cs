@@ -117,15 +117,15 @@ public class JournalizeTests
     }
 
     // Both books say a cost the same way. They were two implementations that had to agree by
-    // memory; the household and personal paths now call this one.
+    // memory; the group and personal paths now call this one.
     [Fact]
-    public void AHouseholdCostAndAPersonalOne_AreTheSameRule()
+    public void AGroupCostAndAPersonalOne_AreTheSameRule()
     {
-        var household = Journalize.ExpenseIncurred(
+        var group = Journalize.ExpenseIncurred(
             L, Category, Payable, Usd(90m), Jan3, "Shop", "expense:1", Expense, Hank);
         var personal = Journalize.ExpenseIncurred(
             L, Category, Payable, Usd(90m), Jan3, "Shop", "expense:1", Expense, Hank);
 
-        Assert.True(household.SaysTheSameAs(personal));
+        Assert.True(group.SaysTheSameAs(personal));
     }
 }

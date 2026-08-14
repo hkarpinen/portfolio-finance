@@ -16,11 +16,14 @@ public sealed record ListUserIncomeParams(
     bool ActiveOnly = true);
 
 // CallerUserId: income is readable ONLY by its owner — the app promises it is never shown to anyone
-// in the household — so the id alone must not resolve one.
+// in the group — so the id alone must not resolve one.
 public sealed record IncomeDetailParams(Guid IncomeId, Guid CallerUserId);
 
+// Carries the caller for the same reason IncomeDetailParams does: a breakdown states gross pay,
+// every deduction and take-home, so resolving one by id alone would hand over the whole payslip.
 public sealed record GetNetPayBreakdownParams(
     Guid IncomeId,
+    Guid CallerUserId,
     int Year,
     int Month);
 

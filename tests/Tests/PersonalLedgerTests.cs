@@ -306,7 +306,7 @@ public class PersonalLedgerTests
 
         await manager.ConvergePersonalExpenseAsync(expense.Id.Value);
 
-        Assert.Null(await repo.GetLedgerByOwnerAsync(AccountingEntity.Household(User)));
+        Assert.Null(await repo.GetLedgerByOwnerAsync(AccountingEntity.Group(User)));
         Assert.NotNull(await repo.GetLedgerByOwnerAsync(AccountingEntity.Person(User)));
     }
 
@@ -368,7 +368,7 @@ public class PersonalLedgerTests
     public void RecordPersonalPayment_RefusesASharedExpense()
     {
         var shared = Expense.Create(
-            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), UserId.Create(User), "Rent", Money.Create(900m, "USD"),
+            AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), UserId.Create(User), "Rent", Money.Create(900m, "USD"),
             ExpenseCategory.Rent, DateTime.UtcNow, null, payerUserId: User, fundingSource: FundingSource.PayerMember);
 
         // A shared cost is settled through its shares — one member paying does not clear it.

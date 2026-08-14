@@ -258,7 +258,7 @@ public sealed class ExpensesController : ControllerBase
     }
 
     /// <summary>
-    /// Returns per-month, per-member contribution breakdowns for a household.
+    /// Returns per-month, per-member contribution breakdowns for a group.
     /// Window: 3 past months + current month + 8 future months (12 total).
     /// </summary>
     [HttpGet("/api/finance/groups/{groupId:guid}/contributions")]

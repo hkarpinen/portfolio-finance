@@ -11,7 +11,7 @@ namespace Client.Filters;
 /// Membership alone is not enough, so there are two checks. When the route also
 /// carries an <c>{expenseId}</c>, that expense must really belong to the
 /// <c>{groupId}</c> — most such actions look the expense up by id alone, so without
-/// it a member of their own household could reach another household's bill through
+/// it a member of their own group could reach another group's bill through
 /// their own group's URL.
 ///
 /// Answers 404, never 403: a 403 confirms the resource exists, which turns the

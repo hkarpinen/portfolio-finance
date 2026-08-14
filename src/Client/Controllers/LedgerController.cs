@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Client.Controllers;
 
-// Group-scoped by opaque GroupId — finance knows nothing of "household". Read-only over HTTP:
+// Group-scoped by opaque GroupId, which finance never resolves to anything. Read-only over HTTP:
 // the ledger is never event-replicated out.
 [ApiController]
 [Authorize]

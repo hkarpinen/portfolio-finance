@@ -7,7 +7,7 @@ namespace Tests;
 public class SharedShareTests
 {
     private static Expense GroupExpense(decimal amount = 100m) => Expense.Create(
-            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), UserId.New(), "Rent", Money.Create(amount, "USD"),
+            AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), UserId.New(), "Rent", Money.Create(amount, "USD"),
         ExpenseCategory.Rent, DateTime.UtcNow.Date);
 
     [Fact]

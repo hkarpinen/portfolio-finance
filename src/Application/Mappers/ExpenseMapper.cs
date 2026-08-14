@@ -8,7 +8,7 @@ public static class ExpenseMapper
     public static ExpenseResponseDto ToResponse(Expense expense, bool isPaid = false, bool vendorPaid = false) =>
         new(
             ExpenseId: expense.Id.Value,
-            Scope: expense.Owner.IsHousehold ? ExpenseScope.Group : ExpenseScope.Personal,
+            Scope: expense.Owner.IsGroup ? ExpenseScope.Group : ExpenseScope.Personal,
             OwnerId: expense.Owner.Id,
             EnteredBy: expense.EnteredBy.Value,
             Title: expense.Title,
@@ -25,9 +25,9 @@ public static class ExpenseMapper
             RecurringExpenseId: expense.RecurringExpenseId?.Value,
             // Only a shared bill has a payer or a funding side; on somebody's own there is nobody
             // to be paid back and nothing to pool.
-            PayerUserId: expense.Owner.IsHousehold ? expense.PayerUserId : null,
-            FundingSource: expense.Owner.IsHousehold ? expense.FundingSource : null,
-            VendorPaid: expense.Owner.IsHousehold && vendorPaid);
+            PayerUserId: expense.Owner.IsGroup ? expense.PayerUserId : null,
+            FundingSource: expense.Owner.IsGroup ? expense.FundingSource : null,
+            VendorPaid: expense.Owner.IsGroup && vendorPaid);
 
     public static ShareDto ToShareResponse(Share split) => new(
         split.Id.Value,

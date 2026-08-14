@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Application.Dtos;
@@ -29,9 +30,14 @@ public sealed record ScheduledOccurrenceDto(
     string Currency,
     Guid? ExpenseId);
 
+/// <summary>
+/// `GroupId` names the group the agreement belongs to, or null for one of your own. It is the
+/// one id here the body legitimately supplies — there is no `{groupId}` in this route for the
+/// membership filter to work from — so the manager checks membership itself before opening it.
+/// </summary>
 public sealed record CreateRecurringExpenseCommand(
     Guid? GroupId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,
@@ -49,8 +55,8 @@ public sealed record CreateRecurringExpenseCommand(
 /// rather than an edit.
 /// </summary>
 public sealed record AmendRecurringExpenseCommand(
-    Guid RecurringExpenseId,
-    Guid CallerUserId,
+    [property: JsonIgnore] Guid RecurringExpenseId,
+    [property: JsonIgnore] Guid CallerUserId,
     string Title,
     decimal Amount,
     string Currency,

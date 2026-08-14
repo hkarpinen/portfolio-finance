@@ -1,5 +1,6 @@
 using Finance.Application.Dtos;
 using Finance.Application.Mappers;
+using Finance.Application.Queries;
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
@@ -16,7 +17,8 @@ public interface IRecurringExpenseManager
 
     /// <summary>Dates in a window with the expense that exists for each, or null where none does.</summary>
     Task<IReadOnlyList<ScheduledOccurrenceDto>> ForecastAsync(
-        Guid recurringExpenseId, DateTime from, DateTime toExclusive, CancellationToken ct = default);
+        Guid recurringExpenseId, Guid callerUserId, DateTime from, DateTime toExclusive,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Writes the expense for one occurrence if it is not already there, and returns it either way.
@@ -26,10 +28,11 @@ public interface IRecurringExpenseManager
     /// exist until then, and generating ahead of time would put a cost in the books that has not
     /// happened.
     /// </summary>
-    Task<Expense?> MaterialiseAsync(Guid recurringExpenseId, DateTime occurrenceDate, CancellationToken ct = default);
+    Task<Expense?> MaterialiseAsync(
+        Guid recurringExpenseId, Guid callerUserId, DateTime occurrenceDate, CancellationToken ct = default);
 
     /// <summary>
-    /// Writes every occurrence that has come due and is not on the books yet, for one house or one
+    /// Writes every occurrence that has come due and is not on the books yet, for one group or one
     /// person, and returns how many that was.
     ///
     /// This is how a period passing turns into an expense without a clock: nobody needs the bill to
@@ -56,12 +59,19 @@ public interface IRecurringExpenseManager
 internal sealed class RecurringExpenseManager(
     IRecurringExpenseRepository schedules,
     IExpenseRepository expenses,
+    IGroupQuery groups,
     IBookkeepingManager bookkeeping) : IRecurringExpenseManager
 {
     public async Task<RecurringExpenseDto> CreateAsync(CreateRecurringExpenseCommand cmd, CancellationToken ct = default)
     {
+        // The group is named by the body — this route has no {groupId} for the membership
+        // filter to read — so the one check standing between a signed-in stranger and a standing
+        // charge on somebody else's group is this one.
+        if (cmd.GroupId is { } named && !await groups.IsCurrentMemberAsync(named, cmd.CallerUserId, ct))
+            throw new UnauthorizedAccessException("Access denied.");
+
         var schedule = RecurringExpense.Create(
-            cmd.GroupId is { } g ? AccountingEntity.Household(g) : AccountingEntity.Person(cmd.CallerUserId),
+            cmd.GroupId is { } g ? AccountingEntity.Group(g) : AccountingEntity.Person(cmd.CallerUserId),
             UserId.Create(cmd.CallerUserId),
             cmd.Title,
             Money.Create(cmd.Amount, cmd.Currency),
@@ -81,6 +91,9 @@ internal sealed class RecurringExpenseManager(
         var schedule = await schedules.GetByIdAsync(RecurringExpenseId.Create(cmd.RecurringExpenseId), ct);
         if (schedule is null) return null;
 
+        // Same answer as "no such schedule": a 403 would confirm the id exists.
+        if (!schedule.IsManagedBy(cmd.CallerUserId)) return null;
+
         // Takes effect on occurrences not yet generated. Expenses already written keep their own
         // amount, which is the entire reason the two are separate.
         schedule.Amend(
@@ -94,6 +107,7 @@ internal sealed class RecurringExpenseManager(
     {
         var schedule = await schedules.GetByIdAsync(RecurringExpenseId.Create(recurringExpenseId), ct);
         if (schedule is null) return false;
+        if (!schedule.IsManagedBy(callerUserId)) return false;
 
         // Stops future occurrences only. Expenses already generated are history and stay.
         schedule.Deactivate();
@@ -108,10 +122,16 @@ internal sealed class RecurringExpenseManager(
         => (await schedules.ListForUserAsync(UserId.Create(userId), ct)).Select(RecurringExpenseMapper.ToResponse).ToList();
 
     public async Task<IReadOnlyList<ScheduledOccurrenceDto>> ForecastAsync(
-        Guid recurringExpenseId, DateTime from, DateTime toExclusive, CancellationToken ct = default)
+        Guid recurringExpenseId, Guid callerUserId, DateTime from, DateTime toExclusive,
+        CancellationToken ct = default)
     {
         var schedule = await schedules.GetByIdAsync(RecurringExpenseId.Create(recurringExpenseId), ct);
         if (schedule is null) return [];
+
+        // A forecast states what the agreement charges and when — reading it is reading the terms.
+        var isMember = schedule.GroupId is { } g
+            && await groups.IsCurrentMemberAsync(g.Value, callerUserId, ct);
+        if (!schedule.IsVisibleTo(callerUserId, isMember)) return [];
 
         var dates = schedule.OccurrencesIn(from, toExclusive);
         if (dates.Count == 0) return [];
@@ -139,7 +159,7 @@ internal sealed class RecurringExpenseManager(
     {
         var schedule = await CreateAsync(cmd, ct);
 
-        return await MaterialiseAsync(schedule.RecurringExpenseId, cmd.AnchorDate, ct)
+        return await MaterialiseAsync(schedule.RecurringExpenseId, cmd.CallerUserId, cmd.AnchorDate, ct)
             ?? throw new InvalidOperationException("The agreement was opened but its first bill was not written.");
     }
 
@@ -171,10 +191,18 @@ internal sealed class RecurringExpenseManager(
         return written;
     }
 
-    public async Task<Expense?> MaterialiseAsync(Guid recurringExpenseId, DateTime occurrenceDate, CancellationToken ct = default)
+    public async Task<Expense?> MaterialiseAsync(
+        Guid recurringExpenseId, Guid callerUserId, DateTime occurrenceDate, CancellationToken ct = default)
     {
         var schedule = await schedules.GetByIdAsync(RecurringExpenseId.Create(recurringExpenseId), ct);
         if (schedule is null) return null;
+
+        // Writing a bill into somebody's books. Anyone who can see the agreement may bill a period
+        // that has come round — that is how paying a share generates the expense — but a stranger
+        // must not be able to put a cost on a group they are not in.
+        var isMember = schedule.GroupId is { } g
+            && await groups.IsCurrentMemberAsync(g.Value, callerUserId, ct);
+        if (!schedule.IsVisibleTo(callerUserId, isMember)) return null;
 
         var day = DateTime.SpecifyKind(occurrenceDate.Date, DateTimeKind.Utc);
 

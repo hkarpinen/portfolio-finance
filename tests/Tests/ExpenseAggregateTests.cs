@@ -45,7 +45,7 @@ public class ExpenseAggregateTests
     {
         var hId = GroupId.Create(Guid.NewGuid());
         var creator = NewUser();
-        var expense = Expense.Create(AccountingEntity.Household(hId), creator, "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
+        var expense = Expense.Create(AccountingEntity.Group(hId), creator, "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
 
         Assert.Equal(hId, expense.GroupId);
         Assert.Equal(creator, expense.EnteredBy);
@@ -58,7 +58,7 @@ public class ExpenseAggregateTests
     public void CreateGroup_DefaultsToPayerMemberFunding()
     {
         var expense = Expense.Create(
-            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), NewUser(), "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
+            AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), NewUser(), "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
 
         // Front-and-reimburse is the historical default — the payer fronts the bill.
         Assert.Equal(FundingSource.PayerMember, expense.FundingSource);
@@ -68,7 +68,7 @@ public class ExpenseAggregateTests
     public void CreateGroup_RecordsPooledFundingWhenRequested()
     {
         var expense = Expense.Create(
-            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), NewUser(), "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow,
+            AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), NewUser(), "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow,
             fundingSource: FundingSource.GroupCash);
 
         // Pooled — the vendor is paid from shared Cash; every member settles reversibly.
@@ -152,12 +152,12 @@ public class ExpenseAggregateTests
         var creator = Guid.NewGuid();
         var member = Guid.NewGuid();
         var bill = Expense.Create(
-            AccountingEntity.Household(GroupId.Create(Guid.NewGuid())), UserId.Create(creator), "Rent",
+            AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), UserId.Create(creator), "Rent",
             Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow,
             null, payerUserId: creator, fundingSource: FundingSource.PayerMember);
 
         Assert.True(bill.IsManagedBy(creator));
-        // Being in the house lets you settle your share, not re-cut the bill.
+        // Being in the group lets you settle your share, not re-cut the bill.
         Assert.False(bill.IsManagedBy(member));
     }
 

@@ -24,12 +24,12 @@ public sealed class RecurringExpense : IAggregateRoot
     /// <see cref="Expense"/> carries.</summary>
     public AccountingEntity Owner { get; private set; }
 
-    /// <summary>The household when this is one of theirs, null when it is somebody's own.</summary>
+    /// <summary>The group when this is one of theirs, null when it is somebody's own.</summary>
     public GroupId? GroupId => Owner.AsGroup;
 
     /// <summary>
     /// Who opened the agreement. On a personal schedule that is also whose it is; on a shared one
-    /// the house holds the agreement and this names whoever set it up. One field for both because
+    /// the group holds the agreement and this names whoever set it up. One field for both because
     /// the two were always written with the same value.
     /// </summary>
     public UserId CreatedBy { get; private set; }
@@ -151,6 +151,23 @@ public sealed class RecurringExpense : IAggregateRoot
         UpdatedAt = DateTime.UtcNow;
         _domainEvents.Add(new RecurringExpenseDeactivated(Id.Value, UpdatedAt));
     }
+
+    /// <summary>
+    /// Whether this person may change the agreement — amend its terms or stop it.
+    ///
+    /// Whoever opened it, matching the rule <see cref="Expense.IsManagedBy"/> already enforces on
+    /// the bills it generates. Membership is not enough: being in the group lets you see what the
+    /// rent agreement says, not raise it.
+    /// </summary>
+    public bool IsManagedBy(Guid userId) => CreatedBy.Value == userId;
+
+    /// <summary>
+    /// Whether this person may read the agreement and its forecast. A personal schedule is its
+    /// owner's alone; a group's is open to current members, which the caller establishes —
+    /// membership is a database question and cannot be answered from in here.
+    /// </summary>
+    public bool IsVisibleTo(Guid userId, bool isMember) =>
+        Owner.IsGroup ? isMember : Owner.Is(userId);
 
     /// <summary>
     /// What this schedule expensed on a given date — the latest version in force by then. Before

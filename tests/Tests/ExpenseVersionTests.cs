@@ -12,7 +12,7 @@ namespace Tests;
 public class ExpenseVersionTests
 {
     private static Expense Rent() => Expense.Create(
-        AccountingEntity.Household(Guid.NewGuid()), UserId.New(), "Rent",
+        AccountingEntity.Group(Guid.NewGuid()), UserId.New(), "Rent",
         Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date);
 
     [Fact]
@@ -105,7 +105,7 @@ public class ExpenseVersionTests
     {
         var payer = Guid.NewGuid();
         var expense = Expense.Create(
-            AccountingEntity.Household(Guid.NewGuid()), UserId.New(), "Rent",
+            AccountingEntity.Group(Guid.NewGuid()), UserId.New(), "Rent",
             Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date,
             payerUserId: payer);
 

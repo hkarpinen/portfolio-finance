@@ -15,7 +15,7 @@ public class RecurringExpenseTests
 
     private static RecurringExpense Rent(decimal amount = 1000m, RecurrenceFrequency freq = RecurrenceFrequency.Monthly) =>
         RecurringExpense.Create(
-            AccountingEntity.Household(Group), User, "Rent", Money.Create(amount, "USD"), ExpenseCategory.Rent,
+            AccountingEntity.Group(Group), User, "Rent", Money.Create(amount, "USD"), ExpenseCategory.Rent,
             RecurrenceSchedule.Create(freq, Jan3));
 
     [Fact]

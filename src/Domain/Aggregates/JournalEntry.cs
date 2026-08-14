@@ -45,7 +45,7 @@ public sealed class JournalEntry : IAggregateRoot
 
     /// <summary>
     /// Whose action produced this entry. Null for one raised by a consumer with no person behind
-    /// it — a household deletion cascading, say. Provenance columns say WHAT caused an entry;
+    /// it — a group deletion cascading, say. Provenance columns say WHAT caused an entry;
     /// this says who, which is the half an audit asks for and reversal alone cannot answer.
     /// </summary>
     public Guid? PostedByUserId { get; private set; }

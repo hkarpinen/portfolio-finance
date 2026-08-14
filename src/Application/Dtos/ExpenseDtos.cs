@@ -14,7 +14,7 @@ public enum ExpenseScope
 public sealed record ExpenseResponseDto(
     Guid ExpenseId,
     ExpenseScope Scope,
-    // Whose books it lands in: a household id when Scope is Group, a person's when Personal. One
+    // Whose books it lands in: a group id when Scope is Group, a person's when Personal. One
     // field, because three (userId/groupId/createdBy) said it between them and disagreed about
     // what userId meant.
     Guid OwnerId,

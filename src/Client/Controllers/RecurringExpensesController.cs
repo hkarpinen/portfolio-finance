@@ -60,7 +60,7 @@ public sealed class RecurringExpensesController(
         Guid recurringExpenseId, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct = default)
     {
         if (to <= from) return BadRequest(new { error = "'to' must be after 'from'." });
-        return Ok(await schedules.ForecastAsync(recurringExpenseId, from, to, ct));
+        return Ok(await schedules.ForecastAsync(recurringExpenseId, User.GetUserId().Value, from, to, ct));
     }
 
     /// <summary>
@@ -89,7 +89,8 @@ public sealed class RecurringExpensesController(
     [EnableRateLimiting("write")]
     public async Task<IActionResult> Materialise(Guid recurringExpenseId, DateTime occurrenceDate, CancellationToken ct = default)
     {
-        var expense = await schedules.MaterialiseAsync(recurringExpenseId, occurrenceDate, ct);
+        var expense = await schedules.MaterialiseAsync(
+            recurringExpenseId, User.GetUserId().Value, occurrenceDate, ct);
         return expense is null
             ? NotFound()
             : Ok(new { expenseId = expense.Id.Value, occurrenceDate = expense.OccurrenceDate, amount = expense.Amount.Amount });

@@ -1,8 +1,8 @@
 # portfolio-finance
 
-> Bounded context: see [/ARCHITECTURE-boundaries.md](../ARCHITECTURE-boundaries.md). This service references households by opaque `Guid` only (`groupId`) and must never return a `Household*Dto`.
+> Bounded context: see [/ARCHITECTURE-boundaries.md](../ARCHITECTURE-boundaries.md). Groups are referenced by opaque `Guid` (`groupId`) and never resolved to anything; no dto here describes what a group IS.
 
-Personal finance service. Tracks income sources, recurring personal expenses, household shared expenses with configurable splits, and produces a budget coverage analysis showing how much of your obligations your income actually covers.
+Personal finance service. Tracks income sources, recurring personal expenses, group shared expenses with configurable splits, and produces a budget coverage analysis showing how much of your obligations your income actually covers.
 
 Also integrates with Plaid for bank linking and transaction sync — so instead of manually entering every bill, you can connect a bank account and have recurring transactions detected automatically.
 
@@ -10,8 +10,8 @@ Also integrates with Plaid for bank linking and transaction sync — so instead 
 
 - **Income** — record salary, freelance, rental income, or any recurring/one-time source; stored with frequency so monthly totals can be normalised
 - **Expenses** — personal recurring obligations (rent, subscriptions, insurance, gym); categorised and tracked against income
-- **Household expenses** — shared bills attached to a household (from the household service); split equally or by custom amounts; tracks payment status per member
-- **Contributions** — monthly snapshot of what each household member has contributed vs what they owe; used to compute "your share" on the frontend
+- **Group expenses** — shared bills attached to a group (from the group service); split equally or by custom amounts; tracks payment status per member
+- **Contributions** — monthly snapshot of what each group member has contributed vs what they owe; used to compute "your share" on the frontend
 - **Budget analysis** — gross income vs total obligations, coverage percentage, surplus/deficit
 - **Double-entry ledger** — the single source of truth for who-owes-whom; balances and `isPaid` are *derived* from postings, never stored as flags
 - **Plaid** — bank link flow (link token → public token exchange), cursor-based transaction sync, recurring stream detection
@@ -32,7 +32,7 @@ Two boundaries this rule leans on, stated so they are not rediscovered as violat
   exactly that: it loads what is in effect under a source, hands it to `ConvergencePlan` — a pure
   domain call — and persists the answer. What a repository must never do is *decide* what a state
   change means. The line is whether the branch is a rule or a round trip.
-- **Bulk SQL is for cascades with no invariant attached.** A user or a household is deleted and
+- **Bulk SQL is for cascades with no invariant attached.** A user or a group is deleted and
   their rows go with them; no aggregate has anything to say about it, and loading tens of thousands
   of rows to call a method on each would be theatre. Everywhere else, a state change goes through
   the aggregate that owns the rule — see identity `a391a94` for what happens when it does not.
@@ -72,11 +72,12 @@ src/
 
 | Controller | Routes | Purpose |
 |---|---|---|
-| `IncomeController` | `GET/POST /api/finance/income`, `PUT/DELETE …/{id}` | Income sources |
-| `ExpensesController` | `GET/POST /api/finance/expenses`, `PUT/DELETE …/{id}` | Personal expenses |
-| `HouseholdExpensesController` | `GET/POST /api/finance/households/{id}/expenses` | Shared household bills |
-| `ContributionsController` | `GET /api/finance/contributions/summary` | Monthly contribution rollup |
-| `PlaidController` | `POST /api/finance/plaid/link-token`, `…/exchange`, `…/sync`, `…/webhook` | Plaid bank linking |
+| `IncomeController` | `GET/POST /api/finance/income`, `PUT/DELETE …/{incomeId}`, `…/{incomeId}/tax-profile`, `…/{incomeId}/deductions` | Income sources and payroll deductions |
+| `ExpensesController` | `GET/POST /api/finance/expenses`, `PUT/DELETE …/{expenseId}`, `…/{expenseId}/payments` | Personal expenses |
+| `ExpensesController` | `GET/POST /api/finance/groups/{groupId}/expenses`, `…/{expenseId}/shares`, `…/contributions` | Group expenses, shares and the monthly rollup |
+| `RecurringExpensesController` | `GET/POST /api/finance/recurring-expenses`, `PUT/DELETE …/{recurringExpenseId}`, `…/occurrences`, `…/catch-up` | Standing agreements and the bills they generate |
+| `LedgerController` | `GET /api/finance/groups/{groupId}/ledger`, `…/accounts/{accountId}/statement`, `GET /api/finance/me/position` | Read-only over the books |
+| `ConnectionsController` | `POST /api/finance/connections/link-token`, `…/exchange`, `…/{connectionId}/sync`, `…/webhook` | Plaid bank linking and import |
 
 ## Environment variables
 

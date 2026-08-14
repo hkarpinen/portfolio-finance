@@ -10,7 +10,7 @@ namespace Tests;
 /// </summary>
 public class SettleUpTests
 {
-    private static readonly GroupId House = GroupId.Create(Guid.NewGuid());
+    private static readonly GroupId Group = GroupId.Create(Guid.NewGuid());
     private static Money Usd(decimal a) => Money.Create(a, "USD");
 
     // Both legs would land on ONE member account: it nets to nothing, satisfies double-entry, and
@@ -21,7 +21,7 @@ public class SettleUpTests
         var me = UserId.New();
 
         Assert.Throws<InvalidOperationException>(
-            () => MemberTransfer.Record(House, me, me, Usd(30m), DateTime.UtcNow));
+            () => MemberTransfer.Record(Group, me, me, Usd(30m), DateTime.UtcNow));
     }
 
     [Theory]
@@ -30,7 +30,7 @@ public class SettleUpTests
     public void ASettleUpOfNothingOrLess_IsRefused(decimal amount)
     {
         Assert.Throws<ArgumentException>(() => MemberTransfer.Record(
-            House, UserId.New(), UserId.New(), Usd(amount), DateTime.UtcNow));
+            Group, UserId.New(), UserId.New(), Usd(amount), DateTime.UtcNow));
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class SettleUpTests
         var from = UserId.New();
         var to = UserId.New();
 
-        var transfer = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
+        var transfer = MemberTransfer.Record(Group, from, to, Usd(30m), DateTime.UtcNow);
 
         var recorded = Assert.IsType<Finance.Domain.Events.MemberTransferRecorded>(
             Assert.Single(transfer.GetDomainEvents()));
@@ -57,8 +57,8 @@ public class SettleUpTests
         var from = UserId.New();
         var to = UserId.New();
 
-        var first = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
-        var second = MemberTransfer.Record(House, from, to, Usd(30m), DateTime.UtcNow);
+        var first = MemberTransfer.Record(Group, from, to, Usd(30m), DateTime.UtcNow);
+        var second = MemberTransfer.Record(Group, from, to, Usd(30m), DateTime.UtcNow);
 
         Assert.NotEqual(first.LedgerSource, second.LedgerSource);
     }
@@ -68,7 +68,7 @@ public class SettleUpTests
     {
         var at = new DateTime(2026, 3, 4, 17, 42, 11, DateTimeKind.Utc);
 
-        var transfer = MemberTransfer.Record(House, UserId.New(), UserId.New(), Usd(30m), at);
+        var transfer = MemberTransfer.Record(Group, UserId.New(), UserId.New(), Usd(30m), at);
 
         Assert.Equal(at.Date, transfer.OccurredOn);
         Assert.Equal(DateTimeKind.Utc, transfer.OccurredOn.Kind);

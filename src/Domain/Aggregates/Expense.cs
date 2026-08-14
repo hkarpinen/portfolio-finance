@@ -10,7 +10,7 @@ namespace Finance.Domain.Aggregates;
 /// <see cref="OccurrenceDate"/>, and keeps the amount and split that applied then: that is why
 /// amending a schedule never rewrites a month already recorded.
 ///
-/// It belongs to ONE accounting entity — a household or a person — and somebody entered it. Those
+/// It belongs to ONE accounting entity — a group or a person — and somebody entered it. Those
 /// are two different facts, and they used to be three fields saying them: a UserId that meant the
 /// owner on a personal expense and the author on a shared one, a nullable GroupId doubling as the
 /// discriminator, and a CreatedBy that repeated the UserId. There is no such thing as a "group
@@ -26,10 +26,10 @@ public class Expense : IAggregateRoot
     public AccountingEntity Owner { get; private set; }
 
     /// <summary>The person who wrote it down. On an expense somebody keeps for themselves this is
-    /// also the owner; on a household's it is whoever entered it for the house.</summary>
+    /// also the owner; on a group's it is whoever entered it for the group.</summary>
     public UserId EnteredBy { get; private set; }
 
-    /// <summary>The household when this is one of theirs, null when it is somebody's own. Kept for
+    /// <summary>The group when this is one of theirs, null when it is somebody's own. Kept for
     /// the events other services consume, which still speak in group ids.</summary>
     public GroupId? GroupId => Owner.AsGroup;
 
@@ -105,7 +105,7 @@ public class Expense : IAggregateRoot
     /// no settlement and never gets one. Read in three places from two fields, which is one rule
     /// spelled out three times and able to drift twice.
     /// </summary>
-    public bool CoversOwnShare(Guid userId) => Owner.IsHousehold && PayerUserId == userId;
+    public bool CoversOwnShare(Guid userId) => Owner.IsGroup && PayerUserId == userId;
 
     public void RecordShareChange()
     {
@@ -118,13 +118,13 @@ public class Expense : IAggregateRoot
     /// May this person change the bill itself — its amount, its split, whether the vendor is paid?
     ///
     /// Whoever entered it, matching the rule the vendor-payment paths already enforce. Membership
-    /// alone is not enough: being in the house lets you see a bill and settle your own share, not
+    /// alone is not enough: being in the group lets you see a bill and settle your own share, not
     /// re-cut how it was divided.
     /// </summary>
     public bool IsManagedBy(Guid userId) => EnteredBy.Value == userId;
 
     /// <summary>
-    /// An expense this person keeps for themselves. A household's is never "own" — it is reached
+    /// An expense this person keeps for themselves. A group's is never "own" — it is reached
     /// through membership, which is a different question with a different answer.
     /// </summary>
     public bool IsOwnedBy(Guid userId) => Owner.Is(userId);
@@ -135,7 +135,7 @@ public class Expense : IAggregateRoot
     /// </summary>
     public void RecordPersonalPayment(Guid? fundingAccountId, DateTime paidAt)
     {
-        if (Owner.IsHousehold)
+        if (Owner.IsGroup)
             throw new InvalidOperationException("A shared expense is settled through its shares.");
 
         if (fundingAccountId is not null) FundingAccountId = fundingAccountId;
@@ -149,7 +149,7 @@ public class Expense : IAggregateRoot
     /// </summary>
     public void ReversePersonalPayment()
     {
-        if (Owner.IsHousehold)
+        if (Owner.IsGroup)
             throw new InvalidOperationException("A shared expense is settled through its shares.");
 
         UpdatedAt = DateTime.UtcNow;
@@ -165,7 +165,7 @@ public class Expense : IAggregateRoot
 
     /// <summary>
     /// One bill somebody entered directly. <paramref name="owner"/> says whose books it lands in —
-    /// a household's or that person's own — and there is no second factory for the other case,
+    /// a group's or that person's own — and there is no second factory for the other case,
     /// because nothing else about the bill turns on which it is.
     /// </summary>
     public static Expense Create(
@@ -192,10 +192,10 @@ public class Expense : IAggregateRoot
             Id = ExpenseId.New(),
             Owner = owner,
             EnteredBy = enteredBy,
-            // A person funds their own bill from one of their accounts; a household says which
+            // A person funds their own bill from one of their accounts; a group says which
             // side funded it instead. Neither is meaningful on the other.
             FundingAccountId = owner.IsPerson ? fundingAccountId : null,
-            PayerUserId = owner.IsHousehold ? payerUserId : null,
+            PayerUserId = owner.IsGroup ? payerUserId : null,
             FundingSource = fundingSource,
             Title = title,
             Description = description,
@@ -304,7 +304,7 @@ public class Expense : IAggregateRoot
         // and moving that would restate a month that has already been reported.
         Description = description;
         // Only mutate payer when explicitly supplied; meaningless on somebody's own bill.
-        if (Owner.IsHousehold && payerUserId is not null)
+        if (Owner.IsGroup && payerUserId is not null)
             PayerUserId = payerUserId;
         UpdatedAt = DateTime.UtcNow;
 

@@ -66,7 +66,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<GroupExpenseListDto> ListByGroupAsync(ListGroupExpensesParams request, CancellationToken cancellationToken = default)
     {
         var groupId = GroupId.Create(request.GroupId);
-        var query = _db.Expenses.Where(b => b.Owner.Kind == EntityKind.Household && b.Owner.Id == groupId.Value);
+        var query = _db.Expenses.Where(b => b.Owner.Kind == EntityKind.Group && b.Owner.Id == groupId.Value);
         if (request.ActiveOnly) query = query.Where(b => b.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
@@ -140,7 +140,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<ExpenseResponseDto?> GetGroupDetailAsync(GroupExpenseDetailParams request, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(request.ExpenseId);
-        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.Owner.Kind == EntityKind.Household, cancellationToken);
+        var expense = await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.Owner.Kind == EntityKind.Group, cancellationToken);
         if (expense is null) return null;
 
         var owed = await VendorPaymentReads.GetOwedToVendorByExpenseAsync(_db, new[] { id.Value }, cancellationToken);
@@ -212,7 +212,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var profiles = await UserProjection.ProfilesAsync(_db.UserProjections, [split.UserId.Value], cancellationToken);
         profiles.TryGetValue(split.UserId.Value, out var profile);
 
-        var membershipRole = expense.Owner.IsHousehold
+        var membershipRole = expense.Owner.IsGroup
             ? (await GroupMemberProjection.RolesAsync(_db.GroupMemberProjections, expense.Owner.Id, cancellationToken))
                 .GetValueOrDefault(split.UserId.Value)
             : null;
@@ -241,7 +241,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         // One expense is one occurrence, so the window is a plain date filter the database can run.
         var relevantExpenses = await _db.Expenses
             .AsNoTracking()
-            .Where(b => b.Owner.Kind == EntityKind.Household && b.Owner.Id == groupId.Value && b.IsActive
+            .Where(b => b.Owner.Kind == EntityKind.Group && b.Owner.Id == groupId.Value && b.IsActive
                         && b.OccurrenceDate >= windowStart && b.OccurrenceDate <= windowEnd)
             .ToListAsync(cancellationToken);
 
