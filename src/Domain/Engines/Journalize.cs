@@ -21,7 +21,17 @@ public static class Journalize
     /// A cost incurred and owed to whoever it is with. Not yet funded: who pays, and out of what,
     /// is a separate fact recorded later, which is what lets "has this been paid" be a question
     /// the books answer instead of a flag somebody sets.
+    ///
+    /// The expense states its own amount, title, period, id and author — five arguments that were
+    /// being unpacked at the call site and handed straight back.
     /// </summary>
+    public static JournalEntry ExpenseIncurred(
+        LedgerId ledger, AccountId category, AccountId payable, Expense expense, string source) =>
+        ExpenseIncurred(
+            ledger, category, payable, expense.Amount, expense.OccurrenceDate,
+            expense.Title, source, expense.Id.Value, expense.EnteredBy.Value);
+
+    /// <summary>For the household path, which holds a command rather than the expense.</summary>
     public static JournalEntry ExpenseIncurred(
         LedgerId ledger, AccountId category, AccountId payable, Money amount,
         DateTime occurredOn, string title, string source, Guid expenseId, Guid? enteredBy) =>
@@ -47,7 +57,17 @@ public static class Journalize
     /// The debt to the outside world settled, out of whatever funded it — a member's own standing
     /// when they fronted it, the pot when it was pooled, a card in somebody's own book. The engine
     /// has no opinion about which; it is told the account.
+    ///
+    /// Where the caller holds the expense, it states its own cost, period, name and author.
     /// </summary>
+    public static JournalEntry VendorPaid(
+        LedgerId ledger, AccountId payable, AccountId funding, Expense expense,
+        DateTime paidOn, string source) =>
+        VendorPaid(
+            ledger, payable, funding, expense.Amount, paidOn, $"{expense.Title} — paid", source,
+            expense.Id.Value, expense.OccurrenceDate, expense.EnteredBy.Value);
+
+    /// <summary>For the household path, which holds a command rather than the expense.</summary>
     public static JournalEntry VendorPaid(
         LedgerId ledger, AccountId payable, AccountId funding, Money amount,
         DateTime paidOn, string description, string source,

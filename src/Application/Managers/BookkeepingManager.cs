@@ -472,10 +472,8 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         // in the books to answer with — which is the hole a paid FLAG kept getting invented for.
         var payable = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.Payable(ledger.Id), ct);
 
-        await _ledgers.ConvergeAsync(Journalize.ExpenseIncurred(
-            ledger.Id, expenseAccount.Id, payable.Id,
-            expense.Amount, date, expense.Title, source,
-            expenseId, expense.EnteredBy.Value), ct: ct);
+        await _ledgers.ConvergeAsync(
+            Journalize.ExpenseIncurred(ledger.Id, expenseAccount.Id, payable.Id, expense, source), ct: ct);
     }
 
     public async Task RecordPersonalPaymentAsync(
@@ -498,10 +496,9 @@ internal sealed class BookkeepingManager : IBookkeepingManager
 
         var source = LedgerSources.VendorPayment(expenseId, expense.OccurrenceDate);
 
-        await _ledgers.ConvergeAsync(Journalize.VendorPaid(
-            ledger.Id, payable.Id, funding.Id,
-            expense.Amount, valueDate, $"{expense.Title} — paid", source,
-            expenseId, expense.OccurrenceDate, expense.EnteredBy.Value), postOnce: true, ct: ct);
+        await _ledgers.ConvergeAsync(
+            Journalize.VendorPaid(ledger.Id, payable.Id, funding.Id, expense, valueDate, source),
+            postOnce: true, ct: ct);
     }
 
     public async Task ReversePersonalPaymentAsync(Guid expenseId, CancellationToken ct = default)

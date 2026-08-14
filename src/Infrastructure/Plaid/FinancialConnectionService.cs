@@ -228,7 +228,7 @@ internal sealed class FinancialConnectionService : IBankConnections
             throw new UnauthorizedAccessException("Access denied.");
 
         if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
+            return FinancialConnectionMapper.ToAccepted(suggestion);
 
         var schedule = RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate);
         var sourceName = !string.IsNullOrWhiteSpace(suggestion.MerchantName) ? suggestion.MerchantName
@@ -275,7 +275,7 @@ internal sealed class FinancialConnectionService : IBankConnections
             throw new UnauthorizedAccessException("Access denied.");
 
         if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, suggestion.LinkedEntityId.Value, suggestion.LinkedEntityType);
+            return FinancialConnectionMapper.ToAccepted(suggestion);
 
         var displayName = !string.IsNullOrWhiteSpace(suggestion.MerchantName)
             ? suggestion.MerchantName : suggestion.Name;

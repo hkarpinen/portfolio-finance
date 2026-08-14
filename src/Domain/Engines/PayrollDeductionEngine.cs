@@ -38,12 +38,9 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
         {
             foreach (var d in deductions)
             {
-                if (!d.IsTaxExempt && !d.Type.IsPreTax()) continue;
+                if (!d.ReducesTaxableIncome) continue;
 
-                if (d.Method == DeductionCalculationMethod.PercentOfGross)
-                    monthlyPreTax += Math.Round(monthlyGross * d.Value / 100m, 2);
-                else
-                    monthlyPreTax += Math.Round(UserBudgetCalculator.MonthlyEquivalent(d.Value, d.Frequency), 2);
+                monthlyPreTax += d.MonthlyAmount(monthlyGross);
             }
         }
         monthlyPreTax = Math.Min(monthlyPreTax, monthlyGross);
@@ -83,10 +80,7 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
         {
             foreach (var d in deductions)
             {
-                decimal raw = d.Method == DeductionCalculationMethod.PercentOfGross
-                    ? Math.Round(monthlyGross * d.Value / 100m, 2)
-                    : Math.Round(UserBudgetCalculator.MonthlyEquivalent(d.Value, d.Frequency), 2);
-
+                var raw = d.MonthlyAmount(monthlyGross);
                 var amount = Math.Min(raw, Math.Max(0m, voluntaryRemaining - voluntaryRunning));
                 voluntaryRunning += amount;
 

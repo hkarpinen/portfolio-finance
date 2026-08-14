@@ -1,3 +1,4 @@
+using Finance.Domain.Engines;
 namespace Finance.Domain.ValueObjects;
 
 /// <summary>Voluntary deductions only — tax is computed, never stored as one of these.</summary>
@@ -85,4 +86,20 @@ public sealed class PayrollDeduction
             Math.Min(Value, grossPay.Amount), grossPay.Currency),
         _ => throw new InvalidOperationException($"Unsupported calculation method: {Method}"),
     };
+
+    /// <summary>
+    /// What this deduction comes to in a month, given the month's gross.
+    ///
+    /// Whether it is a percentage of gross or a flat amount at its own cadence is the deduction's
+    /// own business. That branch was written out twice in the payroll engine, each time reading
+    /// Method, Value and Frequency off here — two copies of one rule, able to drift apart.
+    /// </summary>
+    public decimal MonthlyAmount(decimal monthlyGross) =>
+        Method == DeductionCalculationMethod.PercentOfGross
+            ? Math.Round(monthlyGross * Value / 100m, 2)
+            : Math.Round(UserBudgetCalculator.MonthlyEquivalent(Value, Frequency), 2);
+
+    /// <summary>Comes out before tax is worked out, either by its kind or because it was marked
+    /// exempt.</summary>
+    public bool ReducesTaxableIncome => IsTaxExempt || Type.IsPreTax();
 }

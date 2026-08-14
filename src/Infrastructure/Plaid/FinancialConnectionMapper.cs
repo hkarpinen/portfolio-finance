@@ -43,6 +43,14 @@ public static class FinancialConnectionMapper
 
     /// <summary>What a suggestion ended up linked to — a new income source, a new expense, or the
     /// one it was already attached to.</summary>
+    /// <summary>What an already-linked suggestion became. Takes the suggestion: its id, the thing
+    /// it links to and what kind that is are three of its own fields, and only it knows they agree.</summary>
+    public static AcceptSuggestionDto ToAccepted(RecurringSuggestion suggestion) =>
+        ToAccepted(suggestion.Id, suggestion.LinkedEntityId!.Value, suggestion.LinkedEntityType!);
+
+    public static AcceptSuggestionDto ToAccepted(BankSyncSuggestion suggestion) =>
+        ToAccepted(suggestion.Id, suggestion.LinkedEntityId!.Value, suggestion.LinkedEntityType!);
+
     public static AcceptSuggestionDto ToAccepted(Guid suggestionId, Guid entityId, string linkedEntityType) =>
         new(suggestionId, entityId, linkedEntityType);
 }
