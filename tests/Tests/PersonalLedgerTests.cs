@@ -2,6 +2,7 @@ using Finance.Application.Managers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
 using Finance.Domain.ValueObjects;
+using Infrastructure.Queries;
 
 namespace Tests;
 
@@ -85,7 +86,7 @@ public class PersonalLedgerTests
             .SelectMany(e => e.JournalLines)
             .Where(p => p.AccountId.Value == accountId);
 
-        Assert.Equal(1200m, LedgerMath.AccountBalance(NormalBalance.Credit, lines));
+        Assert.Equal(1200m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, lines));
     }
 
     [Fact]
@@ -231,12 +232,12 @@ public class PersonalLedgerTests
         var lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
 
         // The company is paid — the payable nets to nothing.
-        Assert.Equal(0m, LedgerMath.AccountBalance(
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(
             NormalBalance.Credit,
             lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
 
         // And the 45 is now owed to the card issuer instead, which is what happened.
-        Assert.Equal(45m, LedgerMath.AccountBalance(
+        Assert.Equal(45m, LedgerBalanceReads.AccountBalance(
             NormalBalance.Credit, lines.Where(p => p.AccountId.Value == cardId)));
     }
 
@@ -254,11 +255,11 @@ public class PersonalLedgerTests
 
         var lines = repo.JournalEntries.SelectMany(e => e.JournalLines).ToList();
 
-        Assert.Equal(0m, LedgerMath.AccountBalance(
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(
             NormalBalance.Credit,
             lines.Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable)));
         // Cash is an asset, so paying out leaves it 45 down.
-        Assert.Equal(-45m, LedgerMath.AccountBalance(
+        Assert.Equal(-45m, LedgerBalanceReads.AccountBalance(
             NormalBalance.Debit,
             lines.Where(p => repo.CodeOf(p.AccountId) == Chart.CashCode)));
     }
@@ -326,7 +327,7 @@ public class PersonalLedgerTests
             .Where(p => repo.CodeOf(p.AccountId) == ChartCodes.VendorPayable);
 
         // Owed once more — the cost never went away, only the settlement did.
-        Assert.Equal(45m, LedgerMath.AccountBalance(NormalBalance.Credit, payable));
+        Assert.Equal(45m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, payable));
     }
 
     [Fact]

@@ -39,7 +39,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .OrderBy(a => a.Code)
             .ToList();
 
-        var (debits, credits) = LedgerMath.TrialBalance(lines);
+        var (debits, credits) = LedgerBalanceReads.TrialBalance(lines);
         return new LedgerViewDto(ledger.Id.Value, ledger.Currency, accountDtos, debits, credits, debits == credits);
     }
 
@@ -103,7 +103,7 @@ internal sealed class LedgerQuery : ILedgerQuery
             .GroupBy(x => new { x.GroupId, x.Currency, x.NormalBalance })
             .Select(g => new GroupPositionDto(
                 g.Key.GroupId, g.Key.Currency,
-                LedgerMath.AccountBalance(g.Key.NormalBalance, g.Select(x => x.JournalLine))))
+                LedgerBalanceReads.AccountBalance(g.Key.NormalBalance, g.Select(x => x.JournalLine))))
             .OrderByDescending(g => Math.Abs(g.Net))
             .ToList();
 

@@ -3,6 +3,7 @@ using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
 using Finance.Domain.ValueObjects;
+using Infrastructure.Queries;
 
 namespace Tests;
 
@@ -129,7 +130,7 @@ public class BookkeepingManagerTests
         var lines = repo.JournalEntries.SelectMany(e => e.JournalLines)
             .Where(p => repo.CodeOf(p.AccountId) == Chart.PayableCode);
 
-        Assert.Equal(1100m, LedgerMath.AccountBalance(NormalBalance.Credit, lines));
+        Assert.Equal(1100m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, lines));
     }
 
     [Fact]

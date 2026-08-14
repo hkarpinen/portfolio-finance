@@ -2,6 +2,7 @@ using Finance.Domain.Aggregates;
 using Finance.Domain.Events;
 using Finance.Domain.ValueObjects;
 using Finance.Domain.Engines;
+using Infrastructure.Queries;
 
 namespace Tests;
 
@@ -35,7 +36,6 @@ public class LedgerTests
         });
 
         Assert.Equal(2, entry.JournalLines.Count);
-        Assert.True(LedgerMath.IsBalanced(entry.JournalLines));
         Assert.IsType<JournalEntryPosted>(entry.GetDomainEvents()[0]);
     }
 
@@ -92,7 +92,7 @@ public class LedgerTests
             JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { JournalLineDraft.Debit(MemberHank, Usd(700)), JournalLineDraft.Debit(MemberBob, Usd(300)), JournalLineDraft.Credit(Cash, Usd(1000)) }),
         }.SelectMany(e => e.JournalLines).Where(p => p.AccountId == Cash);
 
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, lines));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Debit, lines));
     }
 
     [Fact]
@@ -106,11 +106,11 @@ public class LedgerTests
             JournalEntry.Post(L, DateTime.UtcNow, "out", new[] { JournalLineDraft.Debit(MemberHank, Usd(700)), JournalLineDraft.Credit(Cash, Usd(700)) }),
         };
         var hank = entries.SelectMany(e => e.JournalLines).Where(p => p.AccountId == MemberHank);
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, hank));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, hank));
 
         // A member who only contributed shows a positive (credit) balance — the group owes them.
         var contributedOnly = entries[0].JournalLines.Where(p => p.AccountId == MemberHank);
-        Assert.Equal(700m, LedgerMath.AccountBalance(NormalBalance.Credit, contributedOnly));
+        Assert.Equal(700m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, contributedOnly));
     }
 
     [Fact]
@@ -130,14 +130,13 @@ public class LedgerTests
         };
         var all = entries.SelectMany(e => e.JournalLines).ToList();
 
-        var (debits, credits) = LedgerMath.TrialBalance(all);
+        var (debits, credits) = LedgerBalanceReads.TrialBalance(all);
         Assert.Equal(2000m, debits);
         Assert.Equal(2000m, credits);
-        Assert.True(LedgerMath.IsBalanced(all));
 
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Debit, all.Where(p => p.AccountId == Cash)));
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberHank)));
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberBob)));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Debit, all.Where(p => p.AccountId == Cash)));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberHank)));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, all.Where(p => p.AccountId == MemberBob)));
     }
 
     [Fact]
@@ -152,15 +151,14 @@ public class LedgerTests
         var reversal = original.Reverse(DateTime.UtcNow);
 
         Assert.Equal(original.Id, reversal.ReversalOfEntryId);
-        Assert.True(LedgerMath.IsBalanced(reversal.JournalLines));
         Assert.IsType<JournalEntryReversed>(reversal.GetDomainEvents()[0]);
 
         var revBob = reversal.JournalLines.Single(p => p.AccountId == MemberBob);
         Assert.Equal(EntryDirection.Credit, revBob.Direction);
 
         var both = original.JournalLines.Concat(reversal.JournalLines).ToList();
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberHank)));
-        Assert.Equal(0m, LedgerMath.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberBob)));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberHank)));
+        Assert.Equal(0m, LedgerBalanceReads.AccountBalance(NormalBalance.Credit, both.Where(p => p.AccountId == MemberBob)));
     }
 
     [Fact]
@@ -242,5 +240,18 @@ public class LedgerTests
         // somebody who was not there.
         Assert.Equal(corrector, reversal.PostedByUserId);
         Assert.Equal(author, original.PostedByUserId);
+    }
+
+    // Where the rule actually lives. An unbalanced entry cannot be built, so nothing downstream has
+    // to check for one — which is why asserting balance on an entry that already exists proved
+    // nothing the constructor had not already guaranteed.
+    [Fact]
+    public void AnEntryThatDoesNotBalance_CannotBeBuilt()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => JournalEntry.Post(
+            L, DateTime.UtcNow, "Lopsided",
+            [JournalLineDraft.Debit(Cash, Usd(700)), JournalLineDraft.Credit(MemberHank, Usd(500))]));
+
+        Assert.Contains("balance", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

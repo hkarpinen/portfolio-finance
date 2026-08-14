@@ -1,4 +1,3 @@
-using Finance.Domain.Engines;
 using Finance.Domain.Events;
 using Finance.Domain.ValueObjects;
 
@@ -34,7 +33,12 @@ public sealed class Account : IAggregateRoot
     /// </summary>
     public decimal BalanceFrom(IEnumerable<JournalLine> lines)
     {
-        var (debits, credits) = LedgerMath.TrialBalance(lines);
+        decimal debits = 0m, credits = 0m;
+        foreach (var l in lines)
+        {
+            if (l.Direction == EntryDirection.Debit) debits += l.Amount.Amount;
+            else credits += l.Amount.Amount;
+        }
         return NormalBalance == NormalBalance.Debit ? debits - credits : credits - debits;
     }
 
