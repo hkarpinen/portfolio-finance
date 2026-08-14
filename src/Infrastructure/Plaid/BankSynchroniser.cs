@@ -4,7 +4,7 @@ using Finance.Application.Queries;
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
 using Finance.Domain.Engines;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 

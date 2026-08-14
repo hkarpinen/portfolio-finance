@@ -1,9 +1,10 @@
+using Infrastructure.Plaid.Mirrors;
 using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Application.Queries;
+namespace Infrastructure.Plaid;
 
 public sealed record ListTransactionsParams(
     Guid ConnectionId,

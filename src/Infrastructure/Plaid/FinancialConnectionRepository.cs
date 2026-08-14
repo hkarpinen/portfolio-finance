@@ -1,11 +1,11 @@
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Application.Repositories;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Repositories;
+namespace Infrastructure.Plaid;
 
 // Methods are deliberately fine-grained so the manager can sequence DB writes precisely. Concurrent
 // sync collisions are absorbed by the unique index on external_transaction_id rather than by

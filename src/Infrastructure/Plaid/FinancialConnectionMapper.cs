@@ -1,8 +1,9 @@
+using Infrastructure.Plaid.Mirrors;
 using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 
-namespace Finance.Application.Mappers;
+namespace Infrastructure.Plaid;
 
 public static class FinancialConnectionMapper
 {

@@ -1,6 +1,6 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.ReadModels;
+namespace Infrastructure.Plaid.Mirrors;
 
 public sealed class RecurringSuggestion
 {

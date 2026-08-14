@@ -1,3 +1,4 @@
+using Infrastructure.Plaid.Mirrors;
 using Finance.Application.Commands;
 using Finance.Application.Dtos;
 using Finance.Application.Mappers;
@@ -5,13 +6,13 @@ using Finance.Application.Ports;
 using Finance.Application.Queries;
 using Finance.Application.Repositories;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
-namespace Finance.Application.Managers;
+namespace Infrastructure.Plaid;
 
-internal sealed class FinancialConnectionManager : IFinancialConnectionManager
+internal sealed class FinancialConnectionService : IBankConnections
 {
     private readonly IBankDataProvider _api;
     private readonly IFinancialConnectionRepository _repo;
@@ -20,9 +21,9 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
     private readonly IExpenseRepository _expenseRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
     private readonly IBankSynchroniser _syncService;
-    private readonly ILogger<FinancialConnectionManager> _logger;
+    private readonly ILogger<FinancialConnectionService> _logger;
 
-    public FinancialConnectionManager(
+    public FinancialConnectionService(
         IBankDataProvider api,
         IFinancialConnectionRepository repo,
         IFinancialConnectionQuery connectionQuery,
@@ -30,7 +31,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         IExpenseRepository expenseRepository,
         IIncomeSourceRepository incomeRepository,
         IBankSynchroniser syncService,
-        ILogger<FinancialConnectionManager> logger)
+        ILogger<FinancialConnectionService> logger)
     {
         _api = api;
         _repo = repo;

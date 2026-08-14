@@ -3,7 +3,7 @@ using Client.Extensions;
 using Finance.Application.Dtos;
 using Finance.Application.Commands;
 using Finance.Application.Queries;
-using Finance.Application.Managers;
+using Finance.Application.Ports;
 using Infrastructure.Plaid;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,14 +17,14 @@ namespace Client.Controllers;
 [Route("api/finance/connections")]
 public sealed class ConnectionsController : ControllerBase
 {
-    private readonly IFinancialConnectionManager _manager;
+    private readonly IBankConnections _manager;
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly ILogger<ConnectionsController> _logger;
 
     private readonly IPlaidWebhookVerifier _webhookVerifier;
 
     public ConnectionsController(
-        IFinancialConnectionManager manager,
+        IBankConnections manager,
         IFinancialConnectionQuery connectionQuery,
         ILogger<ConnectionsController> logger,
         IPlaidWebhookVerifier webhookVerifier)

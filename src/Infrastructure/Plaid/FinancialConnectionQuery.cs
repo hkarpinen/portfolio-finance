@@ -1,12 +1,12 @@
 using Finance.Application.Dtos;
 using Finance.Application.Queries;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Queries;
+namespace Infrastructure.Plaid;
 
 internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
 {

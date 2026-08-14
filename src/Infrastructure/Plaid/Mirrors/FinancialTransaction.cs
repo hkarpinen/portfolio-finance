@@ -1,6 +1,6 @@
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.ReadModels;
+namespace Infrastructure.Plaid.Mirrors;
 
 // Sign convention: the provider reports outflows as POSITIVE and inflows as NEGATIVE, and that is
 // preserved as stored — IsInflow is the direction check, not the sign of Amount alone.

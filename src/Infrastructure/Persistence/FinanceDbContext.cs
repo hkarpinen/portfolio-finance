@@ -1,6 +1,6 @@
 using Finance.Domain;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence.Configurations;

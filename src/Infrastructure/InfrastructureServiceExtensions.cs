@@ -44,6 +44,7 @@ public static class InfrastructureServiceExtensions
             x.AddConsumer<HouseholdMembershipConsumer>();
             x.AddConsumer<HouseholdDeletedConsumer>();
             x.AddConsumer<LedgerJournalLineConsumer, LedgerJournalLineConsumerDefinition>();
+            x.AddConsumer<SuggestionUnlinkConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -77,6 +78,10 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IShareRepository, ShareRepository>();
         services.AddScoped<IMemberTransferRepository, MemberTransferRepository>();
         services.AddScoped<IBankSynchroniser, BankSynchroniser>();
+        services.AddScoped<IBankSyncMatchingEngine, BankSyncMatchingEngine>();
+        services.AddScoped<IBankConnections, FinancialConnectionService>();
+        services.AddScoped<IFinancialConnectionRepository, FinancialConnectionRepository>();
+        services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
 
         services.AddScoped<IIncomeQuery, IncomeQuery>();

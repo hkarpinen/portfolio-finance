@@ -1,8 +1,9 @@
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.Aggregates;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Application.Repositories;
+namespace Infrastructure.Plaid;
 
 // Connections, accounts, transactions and recurring suggestions share one repository so the
 // manager can hold a single EF transaction boundary across all of them.

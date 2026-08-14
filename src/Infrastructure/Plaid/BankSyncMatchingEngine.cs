@@ -1,7 +1,7 @@
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 
-namespace Finance.Domain.Engines;
+namespace Infrastructure.Plaid;
 
 public interface IBankSyncMatchingEngine
 {

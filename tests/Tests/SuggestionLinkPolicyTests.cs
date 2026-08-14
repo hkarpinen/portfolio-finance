@@ -1,5 +1,6 @@
 using Finance.Domain.Engines;
-using Finance.Domain.ReadModels;
+using Infrastructure.Plaid;
+using Infrastructure.Plaid.Mirrors;
 using Finance.Domain.ValueObjects;
 
 namespace Tests;

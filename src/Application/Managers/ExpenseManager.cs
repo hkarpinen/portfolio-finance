@@ -14,7 +14,6 @@ internal sealed class ExpenseManager : IExpenseManager
 {
     private readonly IExpenseRepository _repository;
     private readonly IShareRepository _splitRepository;
-    private readonly IFinancialConnectionRepository _connectionRepository;
     private readonly ILedgerQuery _ledgerQuery;
     private readonly IRecurringExpenseManager _schedules;
     private readonly IMemberTransferRepository _transfers;
@@ -23,7 +22,6 @@ internal sealed class ExpenseManager : IExpenseManager
     public ExpenseManager(
         IExpenseRepository repository,
         IShareRepository splitRepository,
-        IFinancialConnectionRepository connectionRepository,
         ILedgerQuery ledgerQuery,
         IRecurringExpenseManager schedules,
         IMemberTransferRepository transfers,
@@ -31,7 +29,6 @@ internal sealed class ExpenseManager : IExpenseManager
     {
         _repository = repository;
         _splitRepository = splitRepository;
-        _connectionRepository = connectionRepository;
         _ledgerQuery = ledgerQuery;
         _schedules = schedules;
         _transfers = transfers;
@@ -113,13 +110,9 @@ internal sealed class ExpenseManager : IExpenseManager
         if (expense.TryDeactivate())
             await _repository.UpdateAsync(expense, cancellationToken);
 
-        var suggestion = await _connectionRepository.GetSuggestionByLinkedEntityIdAsync(request.ExpenseId, cancellationToken);
-        if (suggestion is not null)
-        {
-            suggestion.Unlink();
-            await _connectionRepository.SaveSuggestionAsync(suggestion, cancellationToken);
-        }
-
+        // A bank suggestion that produced this expense is freed by SuggestionUnlinkConsumer,
+        // listening for the deactivation — reaching into the bank side from here is what put
+        // another company's data in the middle of an expense use case.
         await _repository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToResponse(expense);
     }
