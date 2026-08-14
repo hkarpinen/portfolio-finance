@@ -3,6 +3,7 @@ using Finance.Application.Queries;
 using Finance.Application.Mappers;
 using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
+using Finance.Infrastructure.Persistence.Projections;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -169,11 +170,11 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var paidShareIds = await GetPaidShareIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
         var payerGuid = expense.PayerUserId;
 
-        var names = await PeopleReads.NamesAsync(
-            _db, splits.Select(s => s.UserId).Distinct().ToList(), cancellationToken);
+        var names = await UserProjection.NamesAsync(
+            _db.UserProjections, splits.Select(s => s.UserId).Distinct().ToList(), cancellationToken);
 
         var roles = expense.Scope == ExpenseScope.Group
-            ? await PeopleReads.RolesAsync(_db, expense.OwnerId, cancellationToken)
+            ? await GroupMemberProjection.RolesAsync(_db.GroupMemberProjections, expense.OwnerId, cancellationToken)
             : [];
 
         var enrichedShares = splits.Select(s =>
@@ -208,11 +209,11 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var occurrenceDate = expense.OccurrenceDate;
         var paidShareIds = await GetPaidShareIdsForExpenseAsync(split.ExpenseId.Value, occurrenceDate, cancellationToken);
 
-        var profiles = await PeopleReads.ProfilesAsync(_db, [split.UserId.Value], cancellationToken);
+        var profiles = await UserProjection.ProfilesAsync(_db.UserProjections, [split.UserId.Value], cancellationToken);
         profiles.TryGetValue(split.UserId.Value, out var profile);
 
         var membershipRole = expense.Owner.IsHousehold
-            ? (await PeopleReads.RolesAsync(_db, expense.Owner.Id, cancellationToken))
+            ? (await GroupMemberProjection.RolesAsync(_db.GroupMemberProjections, expense.Owner.Id, cancellationToken))
                 .GetValueOrDefault(split.UserId.Value)
             : null;
 
@@ -256,8 +257,8 @@ internal sealed class ExpenseQuery : IExpenseQuery
         if (splits.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
 
         var expenseById = relevantExpenses.ToDictionary(b => b.Id);
-        var nameById = await PeopleReads.NamesAsync(
-            _db, splits.Select(s => s.UserId.Value).Distinct().ToList(), cancellationToken);
+        var nameById = await UserProjection.NamesAsync(
+            _db.UserProjections, splits.Select(s => s.UserId.Value).Distinct().ToList(), cancellationToken);
 
         var splitIds = splits.Select(s => s.Id.Value).ToList();
 
@@ -442,7 +443,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         if (membersById.Count == 0)
             return new MemberBalanceListDto([], 0);
 
-        var projections = await PeopleReads.NamesAsync(_db, membersById.Keys.ToList(), cancellationToken);
+        var projections = await UserProjection.NamesAsync(_db.UserProjections, membersById.Keys.ToList(), cancellationToken);
 
         var items = membersById
             .Select(kvp =>

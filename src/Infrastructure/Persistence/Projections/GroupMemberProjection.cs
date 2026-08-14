@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace Finance.Infrastructure.Persistence.Projections;
 
 // Denormalized projection of group membership synced from the household service via domain
@@ -50,4 +52,14 @@ public sealed class GroupMemberProjection
         Role = newRole;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Each member's role in one house. Absent means unknown — a row predating this projection,
+    /// not somebody outside the house — so callers fall back to "Member".
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> RolesAsync(
+        DbSet<GroupMemberProjection> members, Guid groupId, CancellationToken ct = default)
+        => await members.AsNoTracking()
+            .Where(m => m.GroupId == groupId)
+            .ToDictionaryAsync(m => m.UserId, m => m.Role, ct);
 }
