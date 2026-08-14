@@ -13,7 +13,6 @@ public static class ApplicationServiceExtensions
         services.AddScoped<IExpenseManager, ExpenseManager>();
         services.AddScoped<IRecurringExpenseManager, RecurringExpenseManager>();
         services.AddScoped<IFinancialConnectionManager, FinancialConnectionManager>();
-        services.AddScoped<IBankSyncManager, BankSyncManager>();
         services.AddScoped<IContributionCalculator, ContributionCalculator>();
         services.AddScoped<IDemoSeedManager, DemoSeedManager>();
         services.AddScoped<IBookkeepingManager, BookkeepingManager>();

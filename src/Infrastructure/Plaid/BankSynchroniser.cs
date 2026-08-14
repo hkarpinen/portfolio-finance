@@ -1,3 +1,4 @@
+using Finance.Application.Managers;
 using Finance.Application.Ports;
 using Finance.Application.Queries;
 using Finance.Application.Repositories;
@@ -7,9 +8,9 @@ using Finance.Domain.ReadModels;
 using Finance.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
-namespace Finance.Application.Managers;
+namespace Infrastructure.Plaid;
 
-internal sealed class BankSyncManager : IBankSyncManager
+internal sealed class BankSynchroniser : IBankSynchroniser
 {
     private readonly IBankDataProvider _api;
     private readonly IFinancialConnectionRepository _repo;
@@ -20,9 +21,9 @@ internal sealed class BankSyncManager : IBankSyncManager
     private readonly IExpenseQuery _expenseQuery;
     private readonly IIncomeQuery _incomeQuery;
     private readonly IBankSyncMatchingEngine _matchingEngine;
-    private readonly ILogger<BankSyncManager> _logger;
+    private readonly ILogger<BankSynchroniser> _logger;
 
-    public BankSyncManager(
+    public BankSynchroniser(
         IBankDataProvider api,
         IFinancialConnectionRepository repo,
         IFinancialConnectionQuery connectionQuery,
@@ -32,7 +33,7 @@ internal sealed class BankSyncManager : IBankSyncManager
         IExpenseQuery expenseQuery,
         IIncomeQuery incomeQuery,
         IBankSyncMatchingEngine matchingEngine,
-        ILogger<BankSyncManager> logger)
+        ILogger<BankSynchroniser> logger)
     {
         _api = api;
         _repo = repo;

@@ -19,7 +19,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
     private readonly IConnectionTokenProtector _tokenProtector;
     private readonly IExpenseRepository _expenseRepository;
     private readonly IIncomeSourceRepository _incomeRepository;
-    private readonly IBankSyncManager _syncService;
+    private readonly IBankSynchroniser _syncService;
     private readonly ILogger<FinancialConnectionManager> _logger;
 
     public FinancialConnectionManager(
@@ -29,7 +29,7 @@ internal sealed class FinancialConnectionManager : IFinancialConnectionManager
         IConnectionTokenProtector tokenProtector,
         IExpenseRepository expenseRepository,
         IIncomeSourceRepository incomeRepository,
-        IBankSyncManager syncService,
+        IBankSynchroniser syncService,
         ILogger<FinancialConnectionManager> logger)
     {
         _api = api;
