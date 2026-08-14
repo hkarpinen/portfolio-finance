@@ -21,4 +21,13 @@ public interface IBankSynchroniser
     Task RefreshSuggestionsAsync(
         FinancialConnection connection,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Gives each of a connection's accounts a place in the owner's own books, carrying in the
+    /// balance the provider reports. Without this a connected account is a row nobody can spend
+    /// from, and every transaction on it has nowhere to post.
+    ///
+    /// Idempotent: an account already placed is left alone.
+    /// </summary>
+    Task PlaceAccountsInLedgerAsync(FinancialConnection connection, CancellationToken ct = default);
 }

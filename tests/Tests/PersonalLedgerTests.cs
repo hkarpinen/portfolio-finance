@@ -30,7 +30,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_OpensTheUsersLedgerWhenTheyHaveNone()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         await manager.OpenDebtAccountAsync(Card(1200m));
 
@@ -43,7 +43,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_RecordsTheCardAsALiability()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
@@ -61,7 +61,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_PostsTheOpeningBalanceRatherThanStoringIt()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
@@ -78,7 +78,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_BalanceIsDerivedFromTheJournalLines()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
@@ -93,7 +93,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_ANewCardWithNothingOwedPostsNothing()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         await manager.OpenDebtAccountAsync(Card(0m));
 
@@ -105,7 +105,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_KeepsTheTermsBesideTheAccount()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         var accountId = await manager.OpenDebtAccountAsync(Card(1200m));
 
@@ -120,7 +120,7 @@ public class PersonalLedgerTests
     public async Task OpenDebtAccount_ASecondCardSharesTheOneLedger()
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
-        var manager = new BookkeepingManager(repo, null!, null!);
+        var manager = new BookkeepingManager(repo, null!, null!, null!);
 
         await manager.OpenDebtAccountAsync(Card(1200m));
         await manager.OpenDebtAccountAsync(Card(300m) with { Name = "Amex" });
@@ -199,7 +199,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -220,7 +220,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
 
         var cardId = await manager.OpenDebtAccountAsync(Card(0m));
         var expense = Groceries(fundedBy: cardId);
@@ -246,7 +246,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -269,7 +269,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -285,7 +285,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -300,7 +300,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -315,7 +315,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -335,7 +335,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 
@@ -354,7 +354,7 @@ public class PersonalLedgerTests
     {
         var repo = new BookkeepingManagerTests.FakeLedgerRepository();
         var expenses = new ExpenseStore();
-        var manager = new BookkeepingManager(repo, expenses, null!);
+        var manager = new BookkeepingManager(repo, expenses, null!, null!);
         var expense = Groceries();
         await expenses.AddAsync(expense);
 

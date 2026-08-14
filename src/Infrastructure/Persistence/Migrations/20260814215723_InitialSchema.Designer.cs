@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    [Migration("20260814203800_InitialSchema")]
+    [Migration("20260814215723_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -579,6 +579,72 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("member_transfers", "finance");
                 });
 
+            modelBuilder.Entity("Finance.Domain.Aggregates.Receipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("IntoAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("into_account_id");
+
+                    b.Property<bool>("IsVoid")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_void");
+
+                    b.Property<DateTime>("ReceivedOn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_on");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.Aggregates.Receipt.Amount#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("currency");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Owner", "Finance.Domain.Aggregates.Receipt.Owner#AccountingEntity", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("owner_id");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("integer")
+                                .HasColumnName("owner_kind");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_receipts");
+
+                    b.HasIndex("ReceivedOn")
+                        .HasDatabaseName("ix_receipts_received_on");
+
+                    b.ToTable("receipts", "finance");
+                });
+
             modelBuilder.Entity("Finance.Domain.Aggregates.RecurringExpense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -703,416 +769,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_shares_user_id_expense_id");
 
                     b.ToTable("shares", "finance");
-                });
-
-            modelBuilder.Entity("Finance.Domain.ReadModels.BankSyncSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("amount");
-
-                    b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("connection_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("currency");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("direction");
-
-                    b.Property<bool>("Dismissed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("dismissed");
-
-                    b.Property<string>("ExternalTransactionId")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("external_transaction_id");
-
-                    b.Property<bool>("IsLinked")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_linked");
-
-                    b.Property<Guid?>("LinkedEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("linked_entity_id");
-
-                    b.Property<string>("LinkedEntityType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("linked_entity_type");
-
-                    b.Property<string>("MerchantName")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("merchant_name");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("name");
-
-                    b.Property<DateTime>("TransactionDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("transaction_date");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_bank_sync_suggestions");
-
-                    b.HasIndex("ExternalTransactionId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_bank_sync_suggestions_external_transaction_id");
-
-                    b.HasIndex("UserId", "Dismissed")
-                        .HasDatabaseName("ix_bank_sync_suggestions_user_id_dismissed");
-
-                    b.ToTable("bank_sync_suggestions", "finance");
-                });
-
-            modelBuilder.Entity("Finance.Domain.ReadModels.FinancialAccount", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal?>("AvailableBalance")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("available_balance");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CurrencyCode")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("currency_code");
-
-                    b.Property<decimal?>("CurrentBalance")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("current_balance");
-
-                    b.Property<string>("ExternalAccountId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("external_account_id");
-
-                    b.Property<Guid>("FinancialConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("financial_connection_id");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Mask")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("mask");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name");
-
-                    b.Property<string>("OfficialName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("official_name");
-
-                    b.Property<string>("Subtype")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("subtype");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("type");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_financial_accounts");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_financial_accounts_user_id");
-
-                    b.HasIndex("FinancialConnectionId", "ExternalAccountId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_financial_accounts_financial_connection_id_external_account");
-
-                    b.ToTable("financial_accounts", "finance");
-                });
-
-            modelBuilder.Entity("Finance.Domain.ReadModels.FinancialTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
-                    b.Property<DateTime?>("AuthorizedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("authorized_date");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("date");
-
-                    b.Property<string>("DetailedCategory")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("detailed_category");
-
-                    b.Property<string>("ExternalTransactionId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("external_transaction_id");
-
-                    b.Property<Guid>("FinancialConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("financial_connection_id");
-
-                    b.Property<Guid?>("LinkedEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("linked_entity_id");
-
-                    b.Property<string>("LinkedEntityType")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("linked_entity_type");
-
-                    b.Property<string>("MerchantName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("merchant_name");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("name");
-
-                    b.Property<bool>("Pending")
-                        .HasColumnType("boolean")
-                        .HasColumnName("pending");
-
-                    b.Property<string>("PrimaryCategory")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("primary_category");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Finance.Domain.ReadModels.FinancialTransaction.Amount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("currency");
-                        });
-
-                    b.HasKey("Id")
-                        .HasName("pk_financial_transactions");
-
-                    b.HasIndex("ExternalTransactionId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_financial_transactions_external_transaction_id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_financial_transactions_user_id");
-
-                    b.HasIndex("FinancialConnectionId", "Date")
-                        .HasDatabaseName("ix_financial_transactions_financial_connection_id_date");
-
-                    b.ToTable("financial_transactions", "finance");
-                });
-
-            modelBuilder.Entity("Finance.Domain.ReadModels.RecurringSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("direction");
-
-                    b.Property<string>("ExternalStreamId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("external_stream_id");
-
-                    b.Property<Guid>("FinancialConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("financial_connection_id");
-
-                    b.Property<DateTime>("FirstDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("first_date");
-
-                    b.Property<string>("Frequency")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("frequency");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsLinked")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_linked");
-
-                    b.Property<DateTime>("LastDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_date");
-
-                    b.Property<Guid?>("LinkedEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("linked_entity_id");
-
-                    b.Property<string>("LinkedEntityType")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("linked_entity_type");
-
-                    b.Property<string>("MerchantName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("merchant_name");
-
-                    b.Property<DateTime?>("PredictedNextDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("predicted_next_date");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.ComplexProperty<Dictionary<string, object>>("AverageAmount", "Finance.Domain.ReadModels.RecurringSuggestion.AverageAmount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("average_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("average_currency");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("LastAmount", "Finance.Domain.ReadModels.RecurringSuggestion.LastAmount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("last_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("last_currency");
-                        });
-
-                    b.HasKey("Id")
-                        .HasName("pk_recurring_suggestions");
-
-                    b.HasIndex("ExternalStreamId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_recurring_suggestions_external_stream_id");
-
-                    b.HasIndex("FinancialConnectionId")
-                        .HasDatabaseName("ix_recurring_suggestions_financial_connection_id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_recurring_suggestions_user_id");
-
-                    b.ToTable("recurring_suggestions", "finance");
                 });
 
             modelBuilder.Entity("Finance.Infrastructure.Persistence.Projections.GroupMemberProjection", b =>
@@ -1299,6 +955,420 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_processed_events_processed_at");
 
                     b.ToTable("processed_events", "finance");
+                });
+
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.BankSyncSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<bool>("Dismissed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("dismissed");
+
+                    b.Property<string>("ExternalTransactionId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("external_transaction_id");
+
+                    b.Property<bool>("IsLinked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_linked");
+
+                    b.Property<Guid?>("LinkedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_entity_id");
+
+                    b.Property<string>("LinkedEntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("linked_entity_type");
+
+                    b.Property<string>("MerchantName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("merchant_name");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("TransactionDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transaction_date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_sync_suggestions");
+
+                    b.HasIndex("ExternalTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_sync_suggestions_external_transaction_id");
+
+                    b.HasIndex("UserId", "Dismissed")
+                        .HasDatabaseName("ix_bank_sync_suggestions_user_id_dismissed");
+
+                    b.ToTable("bank_sync_suggestions", "finance");
+                });
+
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.FinancialAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("AvailableBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("available_balance");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<decimal?>("CurrentBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("current_balance");
+
+                    b.Property<string>("ExternalAccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_account_id");
+
+                    b.Property<Guid>("FinancialConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("financial_connection_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid?>("LedgerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_account_id");
+
+                    b.Property<string>("Mask")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mask");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("OfficialName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("official_name");
+
+                    b.Property<string>("Subtype")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("subtype");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_financial_accounts");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_financial_accounts_user_id");
+
+                    b.HasIndex("FinancialConnectionId", "ExternalAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_financial_accounts_financial_connection_id_external_account");
+
+                    b.ToTable("financial_accounts", "finance");
+                });
+
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.FinancialTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime?>("AuthorizedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("authorized_date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("date");
+
+                    b.Property<string>("DetailedCategory")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("detailed_category");
+
+                    b.Property<string>("ExternalTransactionId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_transaction_id");
+
+                    b.Property<Guid>("FinancialConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("financial_connection_id");
+
+                    b.Property<Guid?>("LinkedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_entity_id");
+
+                    b.Property<string>("LinkedEntityType")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("linked_entity_type");
+
+                    b.Property<string>("MerchantName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("merchant_name");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("name");
+
+                    b.Property<bool>("Pending")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pending");
+
+                    b.Property<string>("PrimaryCategory")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("primary_category");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.ComplexProperty<Dictionary<string, object>>("Amount", "Infrastructure.Plaid.Mirrors.FinancialTransaction.Amount#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("currency");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_financial_transactions");
+
+                    b.HasIndex("ExternalTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_financial_transactions_external_transaction_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_financial_transactions_user_id");
+
+                    b.HasIndex("FinancialConnectionId", "Date")
+                        .HasDatabaseName("ix_financial_transactions_financial_connection_id_date");
+
+                    b.ToTable("financial_transactions", "finance");
+                });
+
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.RecurringSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("direction");
+
+                    b.Property<string>("ExternalStreamId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_stream_id");
+
+                    b.Property<Guid>("FinancialConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("financial_connection_id");
+
+                    b.Property<DateTime>("FirstDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_date");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("frequency");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsLinked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_linked");
+
+                    b.Property<DateTime>("LastDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_date");
+
+                    b.Property<Guid?>("LinkedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_entity_id");
+
+                    b.Property<string>("LinkedEntityType")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("linked_entity_type");
+
+                    b.Property<string>("MerchantName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("merchant_name");
+
+                    b.Property<DateTime?>("PredictedNextDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("predicted_next_date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.ComplexProperty<Dictionary<string, object>>("AverageAmount", "Infrastructure.Plaid.Mirrors.RecurringSuggestion.AverageAmount#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("average_amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("average_currency");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("LastAmount", "Infrastructure.Plaid.Mirrors.RecurringSuggestion.LastAmount#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("last_amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("last_currency");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_recurring_suggestions");
+
+                    b.HasIndex("ExternalStreamId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_recurring_suggestions_external_stream_id");
+
+                    b.HasIndex("FinancialConnectionId")
+                        .HasDatabaseName("ix_recurring_suggestions_financial_connection_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_recurring_suggestions_user_id");
+
+                    b.ToTable("recurring_suggestions", "finance");
                 });
 
             modelBuilder.Entity("Finance.Domain.Aggregates.IncomeSource", b =>
@@ -1493,7 +1563,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Finance.Domain.ReadModels.FinancialAccount", b =>
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.FinancialAccount", b =>
                 {
                     b.HasOne("Finance.Domain.Aggregates.FinancialConnection", null)
                         .WithMany()
@@ -1503,7 +1573,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_financial_accounts_financial_connections_financial_connecti");
                 });
 
-            modelBuilder.Entity("Finance.Domain.ReadModels.FinancialTransaction", b =>
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.FinancialTransaction", b =>
                 {
                     b.HasOne("Finance.Domain.Aggregates.FinancialConnection", null)
                         .WithMany()
@@ -1513,7 +1583,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_financial_transactions_financial_connections_financial_conn");
                 });
 
-            modelBuilder.Entity("Finance.Domain.ReadModels.RecurringSuggestion", b =>
+            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.RecurringSuggestion", b =>
                 {
                     b.HasOne("Finance.Domain.Aggregates.FinancialConnection", null)
                         .WithMany()

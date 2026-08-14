@@ -23,6 +23,12 @@ public sealed class FinancialAccount
     public decimal? CurrentBalance { get; private set; }
     public decimal? AvailableBalance { get; private set; }
     public bool IsActive { get; private set; }
+    /// <summary>
+    /// The account in the owner's own books that this one stands for. A transaction from here
+    /// posts against it — without the link, a provider's account is a row nobody can spend from.
+    /// </summary>
+    public Guid? LedgerAccountId { get; private set; }
+
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
@@ -80,6 +86,23 @@ public sealed class FinancialAccount
         Subtype = subtype;
         CurrentBalance = currentBalance;
         AvailableBalance = availableBalance;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Money owed rather than money held. A card or a loan is a liability; a current or savings
+    /// account is an asset. The provider's own words for it, read once here rather than at every
+    /// place that needs to know which side it goes on.
+    /// </summary>
+    public bool IsCredit =>
+        Type.Equals("credit", StringComparison.OrdinalIgnoreCase)
+        || Type.Equals("loan", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Set once, when the account is first given a place in the books.</summary>
+    public void PlaceInLedger(Guid ledgerAccountId)
+    {
+        if (LedgerAccountId is not null) return;
+        LedgerAccountId = ledgerAccountId;
         UpdatedAt = DateTime.UtcNow;
     }
 

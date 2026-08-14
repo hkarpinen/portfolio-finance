@@ -31,6 +31,8 @@ internal static class PublishedEvents
         [nameof(SettlementRecorded)] = typeof(SettlementRecorded),
         [nameof(SettlementReversed)] = typeof(SettlementReversed),
         [nameof(MemberTransferRecorded)] = typeof(MemberTransferRecorded),
+        [nameof(ReceiptRecorded)] = typeof(ReceiptRecorded),
+        [nameof(ReceiptVoided)] = typeof(ReceiptVoided),
     };
 
     internal static bool Includes(Type eventType) => ByName.ContainsKey(eventType.Name);

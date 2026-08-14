@@ -36,6 +36,8 @@ internal sealed class FinancialAccountConfiguration : IEntityTypeConfiguration<F
     public void Configure(EntityTypeBuilder<FinancialAccount> builder)
     {
         builder.ToTable("financial_accounts");
+
+        builder.Property(a => a.LedgerAccountId);
         builder.HasKey(a => a.Id);
         builder.Property(a => a.FinancialConnectionId).HasConversion(id => id.Value, v => new FinancialConnectionId(v));
         builder.Property(a => a.UserId).HasConversion(id => id.Value, v => new UserId(v));

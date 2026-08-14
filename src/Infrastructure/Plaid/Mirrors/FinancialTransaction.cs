@@ -3,7 +3,8 @@ using Finance.Domain.ValueObjects;
 namespace Infrastructure.Plaid.Mirrors;
 
 // Sign convention: the provider reports outflows as POSITIVE and inflows as NEGATIVE, and that is
-// preserved as stored — IsInflow is the direction check, not the sign of Amount alone.
+// preserved as stored — IsInflow reads it. Both call sites used to abs() the amount on the way in,
+// which made IsInflow permanently false and every deposit look like a payment.
 public sealed class FinancialTransaction
 {
     public Guid Id { get; private set; }
@@ -68,6 +69,20 @@ public sealed class FinancialTransaction
             UpdatedAt = DateTime.UtcNow,
         };
     }
+
+    /// <summary>
+    /// The document this transaction became once it was brought into the books. Without it, a
+    /// re-sync of the same transaction would import it a second time, and there would be no way to
+    /// unwind it when the provider takes it back.
+    /// </summary>
+    public void ImportedAs(Guid entityId, string entityType)
+    {
+        LinkedEntityId = entityId;
+        LinkedEntityType = entityType;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool IsImported => LinkedEntityId is not null;
 
     public void ApplyUpdate(
         Money amount,

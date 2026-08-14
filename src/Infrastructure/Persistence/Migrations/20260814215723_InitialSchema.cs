@@ -275,6 +275,28 @@ namespace Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "receipts",
+                schema: "finance",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    into_account_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    source = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
+                    received_on = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    is_void = table.Column<bool>(type: "boolean", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
+                    currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
+                    owner_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    owner_kind = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_receipts", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "recurring_expenses",
                 schema: "finance",
                 columns: table => new
@@ -357,6 +379,7 @@ namespace Infrastructure.Persistence.Migrations
                     current_balance = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     available_balance = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false),
+                    ledger_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -655,6 +678,12 @@ namespace Infrastructure.Persistence.Migrations
                 column: "processed_at");
 
             migrationBuilder.CreateIndex(
+                name: "ix_receipts_received_on",
+                schema: "finance",
+                table: "receipts",
+                column: "received_on");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_recurring_expenses_created_by",
                 schema: "finance",
                 table: "recurring_expenses",
@@ -703,6 +732,15 @@ namespace Infrastructure.Persistence.Migrations
                 table: "user_projections",
                 column: "email",
                 unique: true);
+
+            // Indexed here rather than in the model: EF 8 cannot name a complex property's columns
+            // in HasIndex, and every list of somebody's expenses filters on exactly these two.
+            migrationBuilder.Sql(
+                "CREATE INDEX ix_expenses_owner ON finance.expenses (owner_kind, owner_id, is_active);");
+            migrationBuilder.Sql(
+                "CREATE INDEX ix_recurring_expenses_owner ON finance.recurring_expenses (owner_kind, owner_id);");
+            migrationBuilder.Sql(
+                "CREATE INDEX ix_receipts_owner ON finance.receipts (owner_kind, owner_id);");
         }
 
         /// <inheritdoc />
@@ -758,6 +796,10 @@ namespace Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "processed_events",
+                schema: "finance");
+
+            migrationBuilder.DropTable(
+                name: "receipts",
                 schema: "finance");
 
             migrationBuilder.DropTable(

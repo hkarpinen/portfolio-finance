@@ -21,6 +21,8 @@ internal sealed class BankSynchroniser : IBankSynchroniser
     private readonly IExpenseQuery _expenseQuery;
     private readonly IIncomeQuery _incomeQuery;
     private readonly IBankSyncMatchingEngine _matchingEngine;
+    private readonly IReceiptRepository _receipts;
+    private readonly IBookkeepingManager _bookkeeping;
     private readonly ILogger<BankSynchroniser> _logger;
 
     public BankSynchroniser(
@@ -33,6 +35,8 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         IExpenseQuery expenseQuery,
         IIncomeQuery incomeQuery,
         IBankSyncMatchingEngine matchingEngine,
+        IReceiptRepository receipts,
+        IBookkeepingManager bookkeeping,
         ILogger<BankSynchroniser> logger)
     {
         _api = api;
@@ -44,6 +48,8 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         _expenseQuery = expenseQuery;
         _incomeQuery = incomeQuery;
         _matchingEngine = matchingEngine;
+        _receipts = receipts;
+        _bookkeeping = bookkeeping;
         _logger = logger;
     }
 
@@ -51,6 +57,11 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         FinancialConnection connection, CancellationToken cancellationToken = default)
     {
         var accessToken = _tokenProtector.Unprotect(connection.EncryptedAccessToken);
+
+        // Before anything else: a transaction has nowhere to post until the account it came from
+        // has a place in the owner's books.
+        await PlaceAccountsInLedgerAsync(connection, cancellationToken);
+
         int totalAdded = 0, totalModified = 0, totalRemoved = 0;
         bool hasMore;
 
@@ -78,32 +89,22 @@ internal sealed class BankSynchroniser : IBankSynchroniser
                     if (account is null) continue;
                 }
 
+                // Signed as the provider reported it. Both call sites used to abs() here, which
+                // made IsInflow permanently false and every deposit read as a payment.
                 var txn = FinancialTransaction.Create(
                     connection.Id, account.Id, connection.UserId,
                     dto.TransactionId,
-                    Money.Create(Math.Abs(dto.Amount), dto.Currency),
+                    Money.Create(dto.Amount, dto.Currency),
                     dto.Date, dto.AuthorizedDate, dto.Name, dto.MerchantName,
                     dto.PrimaryCategory, dto.DetailedCategory, dto.Pending);
 
                 await _repo.AddTransactionAsync(txn, cancellationToken);
                 totalAdded++;
 
-                if (!dto.Pending)
-                {
-                    var existingSuggestion = await _repo.GetBankSyncSuggestionByExternalTransactionIdAsync(
-                        dto.TransactionId, cancellationToken);
-                    if (existingSuggestion is null)
-                    {
-                        var direction = _matchingEngine.ResolveDirection(dto.Amount);
-                        var suggestion = BankSyncSuggestion.Create(
-                            connection.Id, connection.UserId,
-                            dto.TransactionId,
-                            dto.Name, dto.MerchantName,
-                            Math.Abs(dto.Amount), dto.Currency,
-                            direction, dto.Date);
-                        await _repo.AddBankSyncSuggestionAsync(suggestion, cancellationToken);
-                    }
-                }
+                // Pending is imported too, and reversed if the provider withdraws it. A charge you
+                // have made is a charge you have made; waiting for it to settle would leave a
+                // balance that disagrees with the one on your phone.
+                await ImportAsync(connection, account, txn, cancellationToken);
 
                 if (dto.Amount > 0 && !dto.Pending)
                     addedOutflows.Add((account.Id, dto.Amount, dto.Date));
@@ -113,7 +114,7 @@ internal sealed class BankSynchroniser : IBankSynchroniser
             {
                 if (!existingLookups.TryGetValue(dto.TransactionId, out var existing)) continue;
                 existing.ApplyUpdate(
-                    Money.Create(Math.Abs(dto.Amount), dto.Currency),
+                    Money.Create(dto.Amount, dto.Currency),
                     dto.Date, dto.AuthorizedDate, dto.Name, dto.MerchantName,
                     dto.PrimaryCategory, dto.DetailedCategory, dto.Pending);
                 totalModified++;
@@ -121,6 +122,12 @@ internal sealed class BankSynchroniser : IBankSynchroniser
 
             foreach (var removedId in page.Removed)
             {
+                // A withdrawn transaction is usually a pending one being replaced by the settled
+                // version under a new id. Whatever it became has to come off the books first, or
+                // the settled copy lands beside it and the month is counted twice.
+                if (existingLookups.TryGetValue(removedId, out var withdrawn))
+                    await UnimportAsync(withdrawn, cancellationToken);
+
                 await _repo.RemoveTransactionByExternalIdAsync(removedId, cancellationToken);
                 totalRemoved++;
             }
@@ -178,6 +185,101 @@ internal sealed class BankSynchroniser : IBankSynchroniser
 
         await UpsertSuggestionsAsync(connection, result.Inflow,  RecurringFlowDirection.Inflow,  accountsByExternalId, ct);
         await UpsertSuggestionsAsync(connection, result.Outflow, RecurringFlowDirection.Outflow, accountsByExternalId, ct);
+        await _repo.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// Brings one transaction into the books: money out becomes an expense already paid from the
+    /// account it left, money in becomes a receipt into the account it landed in.
+    ///
+    /// Nothing is imported twice — the mirror remembers what it became — and nothing is imported
+    /// from an account that has no place in the ledger yet, because it would have nowhere to post.
+    /// </summary>
+    private async Task ImportAsync(
+        FinancialConnection connection, FinancialAccount account, FinancialTransaction txn,
+        CancellationToken ct)
+    {
+        if (txn.IsImported) return;
+        if (account.LedgerAccountId is not { } ledgerAccountId)
+        {
+            _logger.LogWarning(
+                "Transaction {TransactionId} not imported — account {AccountId} has no place in the ledger.",
+                txn.ExternalTransactionId, account.Id);
+            return;
+        }
+
+        var amount = Money.Create(Math.Abs(txn.Amount.Amount), txn.Amount.Currency);
+        var name = string.IsNullOrWhiteSpace(txn.MerchantName) ? txn.Name : txn.MerchantName;
+
+        if (txn.IsInflow)
+        {
+            var receipt = Receipt.Record(connection.UserId, ledgerAccountId, name, amount, txn.Date);
+            await _receipts.AddAsync(receipt, ct);
+            txn.ImportedAs(receipt.Id.Value, LinkedEntityType.Receipt);
+            return;
+        }
+
+        var expense = Expense.CreateOwn(
+            connection.UserId, name, amount,
+            BankCategories.ToExpenseCategory(txn.PrimaryCategory), txn.Date,
+            fundingAccountId: ledgerAccountId);
+
+        // A bank transaction is a cost that has already been paid — both facts are known at once,
+        // so both are recorded now rather than leaving it sitting in payables forever.
+        expense.RecordPersonalPayment(ledgerAccountId, txn.Date);
+
+        await _expenseRepository.AddAsync(expense, ct);
+        txn.ImportedAs(expense.Id.Value, LinkedEntityType.Expense);
+    }
+
+    /// <summary>Takes back whatever a transaction became, when the provider takes the transaction
+    /// back. Voided rather than deleted, so the books can unwind what they were told.</summary>
+    private async Task UnimportAsync(FinancialTransaction txn, CancellationToken ct)
+    {
+        if (txn.LinkedEntityId is not { } entityId) return;
+
+        if (txn.LinkedEntityType == LinkedEntityType.Receipt)
+        {
+            var receipt = await _receipts.GetByIdAsync(ReceiptId.Create(entityId), ct);
+            receipt?.Void();
+            if (receipt is not null) await _receipts.UpdateAsync(receipt, ct);
+            return;
+        }
+
+        var expense = await _expenseRepository.GetByIdAsync(ExpenseId.Create(entityId), ct);
+        if (expense is null) return;
+
+        expense.TryDeactivate();
+        await _expenseRepository.UpdateAsync(expense, ct);
+    }
+
+    public async Task PlaceAccountsInLedgerAsync(FinancialConnection connection, CancellationToken ct = default)
+    {
+        var accounts = await _connectionQuery.ListAccountsForConnectionAsync(connection.Id, ct);
+
+        foreach (var account in accounts)
+        {
+            if (account.LedgerAccountId is not null) continue;
+
+            var ledgerAccountId = await _bookkeeping.OpenBankAccountAsync(new OpenBankAccountCommand(
+                CallerUserId: connection.UserId.Value,
+                Name: account.Name,
+                Currency: account.CurrencyCode,
+                IsCredit: account.IsCredit,
+                // A card reports what you owe as a positive number and so does a current account
+                // report what you hold, so the figure carries in as given and its side comes from
+                // the account's kind.
+                Balance: account.CurrentBalance ?? 0m,
+                AsOf: DateTime.UtcNow.Date), ct);
+
+            account.PlaceInLedger(ledgerAccountId);
+            await _repo.SaveAccountAsync(account, ct);
+
+            _logger.LogInformation(
+                "Placed connected account {AccountId} in the ledger as {LedgerAccountId}.",
+                account.Id, ledgerAccountId);
+        }
+
         await _repo.CommitAsync(ct);
     }
 

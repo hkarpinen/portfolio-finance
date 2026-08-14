@@ -23,6 +23,25 @@ public sealed record OpenDebtAccountCommand(
     int? PaymentDueDayOfMonth = null,
     decimal? MinimumPayment = null);
 
+/// <summary>
+/// A bank account somebody connected, given a place in their own books.
+///
+/// <paramref name="IsCredit"/> decides which side it sits on: money you hold is an asset, money you
+/// owe on a card or loan is a liability. Nothing else about the posting changes — a purchase
+/// credits either one.
+///
+/// <paramref name="Balance"/> is what the provider says is there today, carried in against opening
+/// equity so the book balances from its first entry. Positive means "you hold this" for a cash
+/// account and "you owe this" for a card, which is how a provider reports both.
+/// </summary>
+public sealed record OpenBankAccountCommand(
+    Guid CallerUserId,
+    string Name,
+    string Currency,
+    bool IsCredit,
+    decimal Balance,
+    DateTime AsOf);
+
 public sealed record PostExpenseToLedgerCommand(
     Guid GroupId,
     Guid ExpenseId,
@@ -167,6 +186,12 @@ public interface IBookkeepingManager
     /// </summary>
     Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand command, CancellationToken ct = default);
 
+    /// <summary>
+    /// Opens a connected bank account in the owner's ledger and carries in its balance. Returns the
+    /// ledger account id, which is what a transaction from that account posts against.
+    /// </summary>
+    Task<Guid> OpenBankAccountAsync(OpenBankAccountCommand command, CancellationToken ct = default);
+
     /// <summary>Reverses with mirror entries rather than deleting. The only place a
     /// settlement is undone.</summary>
     Task ReverseBySourceAsync(Guid groupId, string source, CancellationToken ct = default);
@@ -205,6 +230,15 @@ public interface IBookkeepingManager
 
     /// <summary>No-ops for a personal expense.</summary>
     Task ReverseVendorPaymentFromEventAsync(Guid expenseId, DateTime occurrence, CancellationToken ct = default);
+
+    /// <summary>
+    /// Money arriving: Dr the account it landed in, Cr where it came from. Converges, so a
+    /// redelivery or a corrected amount both settle to one entry.
+    /// </summary>
+    Task ConvergeReceiptAsync(Guid receiptId, CancellationToken ct = default);
+
+    /// <summary>Takes a receipt off the books — it did not arrive after all.</summary>
+    Task ReverseReceiptAsync(Guid receiptId, CancellationToken ct = default);
 }
 
 internal sealed class BookkeepingManager : IBookkeepingManager
@@ -212,15 +246,18 @@ internal sealed class BookkeepingManager : IBookkeepingManager
     private readonly ILedgerRepository _ledgers;
     private readonly IExpenseRepository _expenses;
     private readonly IShareRepository _shares;
+    private readonly IReceiptRepository _receipts;
 
     public BookkeepingManager(
         ILedgerRepository ledgers,
         IExpenseRepository expenses,
-        IShareRepository shares)
+        IShareRepository shares,
+        IReceiptRepository receipts)
     {
         _ledgers = ledgers;
         _expenses = expenses;
         _shares = shares;
+        _receipts = receipts;
     }
 
     public async Task<bool> SyncExpenseAccrualAsync(PostExpenseToLedgerCommand cmd, CancellationToken ct = default)
@@ -532,6 +569,87 @@ internal sealed class BookkeepingManager : IBookkeepingManager
             posted++;
         }
         return posted;
+    }
+
+    public async Task ConvergeReceiptAsync(Guid receiptId, CancellationToken ct = default)
+    {
+        var receipt = await _receipts.GetByIdAsync(ReceiptId.Create(receiptId), ct);
+        if (receipt is null) return;
+
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(receipt.Owner, receipt.Amount.Currency, ct);
+        var inEffect = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, receipt.LedgerSource, ct)).InEffect();
+
+        if (receipt.IsVoid)
+        {
+            // Money that turned out not to have arrived is unwound where it was recorded, not
+            // today: the month it was reported in has to stop claiming it.
+            foreach (var stale in ConvergencePlan.Remove(inEffect).Reverse)
+                await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
+            if (inEffect.Count > 0) await _ledgers.CommitAsync(ct);
+            return;
+        }
+
+        var into = await _ledgers.GetAccountAsync(AccountId.Create(receipt.IntoAccountId), ct)
+            ?? throw new InvalidOperationException("That account is not in this book.");
+        var source = await _ledgers.GetOrOpenAccountAsync(
+            ledger.Id, new AccountSpec(
+                Chart.IncomeCode(receipt.Source),
+                () => Chart.OpenIncomeAccount(ledger.Id, receipt.Source)), ct);
+
+        await _ledgers.ConvergeAsync(Journalize.Received(
+            ledger.Id, into.Id, source.Id, receipt.Amount, receipt.ReceivedOn,
+            receipt.Source, receipt.LedgerSource, receipt.Owner.Id), ct: ct);
+    }
+
+    public async Task ReverseReceiptAsync(Guid receiptId, CancellationToken ct = default)
+    {
+        var receipt = await _receipts.GetByIdAsync(ReceiptId.Create(receiptId), ct);
+        if (receipt is null) return;
+
+        var ledger = await _ledgers.GetLedgerByOwnerAsync(receipt.Owner, ct);
+        if (ledger is null) return;
+
+        var inEffect = (await _ledgers.GetEntriesBySourceAsync(ledger.Id, receipt.LedgerSource, ct)).InEffect();
+        if (inEffect.Count == 0) return;
+
+        foreach (var stale in inEffect)
+            await _ledgers.AddJournalEntryAsync(stale.Reverse(stale.Date), ct);
+        await _ledgers.CommitAsync(ct);
+    }
+
+    public async Task<Guid> OpenBankAccountAsync(OpenBankAccountCommand cmd, CancellationToken ct = default)
+    {
+        var ledger = await _ledgers.GetOrOpenLedgerAsync(AccountingEntity.Person(cmd.CallerUserId), cmd.Currency, ct);
+
+        var accountKey = Guid.NewGuid();
+        var account = cmd.IsCredit
+            ? Chart.OpenDebtAccount(ledger.Id, accountKey, cmd.Name)
+            : Chart.OpenCashAccount(ledger.Id, accountKey, cmd.Name);
+        await _ledgers.AddAccountAsync(account, ct);
+
+        // A zero balance needs no entry — it would not validate, and an account with no lines
+        // already reads as zero. A negative one is a provider quirk we do not try to interpret.
+        if (cmd.Balance > 0m)
+        {
+            var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.OpeningBalance(ledger.Id), ct);
+
+            // Cash is an asset and a card is a liability, so the balance lands on opposite sides:
+            // holding £500 debits the account, owing £500 credits it.
+            var carriedIn = cmd.IsCredit
+                ? Journalize.BalanceCarriedIn(
+                    ledger.Id, opening.Id, account.Id,
+                    Money.Create(cmd.Balance, cmd.Currency), cmd.AsOf, cmd.Name,
+                    $"bank-opening:{account.Id.Value:N}", cmd.CallerUserId)
+                : Journalize.BalanceCarriedIn(
+                    ledger.Id, account.Id, opening.Id,
+                    Money.Create(cmd.Balance, cmd.Currency), cmd.AsOf, cmd.Name,
+                    $"bank-opening:{account.Id.Value:N}", cmd.CallerUserId);
+
+            await _ledgers.AddJournalEntryAsync(carriedIn, ct);
+        }
+
+        await _ledgers.CommitAsync(ct);
+        return account.Id.Value;
     }
 
     public async Task<Guid> OpenDebtAccountAsync(OpenDebtAccountCommand cmd, CancellationToken ct = default)

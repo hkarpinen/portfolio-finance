@@ -27,6 +27,8 @@ internal sealed class LedgerJournalLineConsumer :
     IConsumer<ShareRemoved>,
     IConsumer<SettlementRecorded>,
     IConsumer<MemberTransferRecorded>,
+    IConsumer<ReceiptRecorded>,
+    IConsumer<ReceiptVoided>,
     IConsumer<SettlementReversed>,
     IConsumer<VendorPaid>,
     IConsumer<VendorPaymentReversed>
@@ -88,6 +90,16 @@ internal sealed class LedgerJournalLineConsumer :
             ct => _bookkeeping.ReverseBySourceAsync(
                 context.Message.GroupId.Value,
                 LedgerSources.Share(context.Message.ShareId.Value), ct),
+            context.CancellationToken);
+
+    public Task Consume(ConsumeContext<ReceiptRecorded> context) =>
+        HandleAsync(context.Message, nameof(ReceiptRecorded),
+            ct => _bookkeeping.ConvergeReceiptAsync(context.Message.ReceiptId.Value, ct),
+            context.CancellationToken);
+
+    public Task Consume(ConsumeContext<ReceiptVoided> context) =>
+        HandleAsync(context.Message, nameof(ReceiptVoided),
+            ct => _bookkeeping.ReverseReceiptAsync(context.Message.ReceiptId.Value, ct),
             context.CancellationToken);
 
     public Task Consume(ConsumeContext<MemberTransferRecorded> context) =>

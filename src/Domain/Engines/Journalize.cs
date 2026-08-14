@@ -104,6 +104,17 @@ public static class Journalize
             sourceMemberId: fromUserId, postedByUserId: fromUserId);
 
     /// <summary>
+    /// Money arriving from outside. Debits the account it landed in, credits where it came from —
+    /// the mirror of a cost, which debits what it was for and credits what paid.
+    /// </summary>
+    public static JournalEntry Received(
+        LedgerId ledger, AccountId into, AccountId incomeSource, Money amount,
+        DateTime receivedOn, string source, string ledgerSource, Guid? enteredBy) =>
+        JournalEntry.Movement(
+            ledger, debit: into, credit: incomeSource, amount, receivedOn,
+            $"{source} — received", ledgerSource, postedByUserId: enteredBy);
+
+    /// <summary>
     /// A balance that was carried in rather than posted. Without the offset the first card balance
     /// has nothing to credit against and the book does not balance from its first entry.
     /// </summary>
