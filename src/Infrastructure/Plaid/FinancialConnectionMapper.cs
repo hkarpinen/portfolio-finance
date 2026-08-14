@@ -1,3 +1,4 @@
+using Finance.Application.Ports;
 using Infrastructure.Plaid.Mirrors;
 using Finance.Application.Dtos;
 using Finance.Domain.Aggregates;
@@ -53,4 +54,16 @@ public static class FinancialConnectionMapper
 
     public static AcceptSuggestionDto ToAccepted(Guid suggestionId, Guid entityId, string linkedEntityType) =>
         new(suggestionId, entityId, linkedEntityType);
+
+    /// <summary>
+    /// A provider's account shape turned into the local mirror of it.
+    ///
+    /// Eleven arguments, transcribed identically in two places — the first sync and every one
+    /// after. Both directions of this file are mapping; only the outbound one had a home, which is
+    /// why the inbound one got written twice.
+    /// </summary>
+    public static FinancialAccount ToAccount(FinancialConnection connection, ExternalAccountDto dto) =>
+        FinancialAccount.Create(
+            connection.Id, connection.UserId, dto.AccountId, dto.Name, dto.OfficialName, dto.Mask,
+            dto.Type, dto.Subtype, dto.CurrencyCode, dto.CurrentBalance, dto.AvailableBalance);
 }

@@ -39,4 +39,13 @@ public static class IncomeMapper
         d.IsEmployerSponsored,
         d.Frequency,
         d.IsTaxExempt);
+
+    /// <summary>
+    /// A deduction as it arrives on the wire, turned into one. Seven fields, written out at both
+    /// the create and the add-later call site.
+    /// </summary>
+    public static PayrollDeduction ToDeduction(PayrollDeductionDto dto) =>
+        PayrollDeduction.Create(
+            dto.Type, dto.Label, dto.Method, dto.Value,
+            dto.IsEmployerSponsored, dto.Frequency, dto.IsTaxExempt);
 }

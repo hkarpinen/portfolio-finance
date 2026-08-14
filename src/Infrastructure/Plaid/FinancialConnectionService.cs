@@ -101,18 +101,7 @@ internal sealed class FinancialConnectionService : IBankConnections
         var persistedAccounts = new List<FinancialAccount>(accountsResult.Accounts.Count);
         foreach (var dto in accountsResult.Accounts)
         {
-            var account = FinancialAccount.Create(
-                connection.Id,
-                connection.UserId,
-                dto.AccountId,
-                dto.Name,
-                dto.OfficialName,
-                dto.Mask,
-                dto.Type,
-                dto.Subtype,
-                dto.CurrencyCode,
-                dto.CurrentBalance,
-                dto.AvailableBalance);
+            var account = FinancialConnectionMapper.ToAccount(connection, dto);
             await _repo.AddAccountAsync(account, cancellationToken);
             persistedAccounts.Add(account);
         }

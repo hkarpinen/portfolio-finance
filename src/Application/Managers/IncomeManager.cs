@@ -33,14 +33,7 @@ internal sealed class IncomeManager : IIncomeManager
         {
             foreach (var d in request.InitialDeductions)
             {
-                income.AddDeduction(PayrollDeduction.Create(
-                    d.Type,
-                    d.Label,
-                    d.Method,
-                    d.Value,
-                    d.IsEmployerSponsored,
-                    d.Frequency,
-                    d.IsTaxExempt));
+                income.AddDeduction(IncomeMapper.ToDeduction(d));
             }
         }
 
@@ -141,15 +134,7 @@ internal sealed class IncomeManager : IIncomeManager
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
 
-        var dto = request.Deduction;
-        income.AddDeduction(PayrollDeduction.Create(
-            dto.Type,
-            dto.Label,
-            dto.Method,
-            dto.Value,
-            dto.IsEmployerSponsored,
-            dto.Frequency,
-            dto.IsTaxExempt));
+        income.AddDeduction(IncomeMapper.ToDeduction(request.Deduction));
 
         await _incomeRepository.UpdateAsync(income, cancellationToken);
         await _incomeRepository.CommitAsync(cancellationToken);
