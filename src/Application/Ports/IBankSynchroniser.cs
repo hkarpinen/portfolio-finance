@@ -18,9 +18,6 @@ public interface IBankSynchroniser
         CancellationToken cancellationToken = default);
 
     // Also auto-links new suggestions to existing income / expense entities.
-    Task RefreshSuggestionsAsync(
-        FinancialConnection connection,
-        CancellationToken ct = default);
 
     /// <summary>
     /// Gives each of a connection's accounts a place in the owner's own books, carrying in the

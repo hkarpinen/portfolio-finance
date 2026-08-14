@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FinanceDbContext))]
-    [Migration("20260814215723_InitialSchema")]
+    [Migration("20260814220854_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -957,93 +957,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("processed_events", "finance");
                 });
 
-            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.BankSyncSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("amount");
-
-                    b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("connection_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("currency");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("direction");
-
-                    b.Property<bool>("Dismissed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("dismissed");
-
-                    b.Property<string>("ExternalTransactionId")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("external_transaction_id");
-
-                    b.Property<bool>("IsLinked")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_linked");
-
-                    b.Property<Guid?>("LinkedEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("linked_entity_id");
-
-                    b.Property<string>("LinkedEntityType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("linked_entity_type");
-
-                    b.Property<string>("MerchantName")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("merchant_name");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("name");
-
-                    b.Property<DateTime>("TransactionDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("transaction_date");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_bank_sync_suggestions");
-
-                    b.HasIndex("ExternalTransactionId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_bank_sync_suggestions_external_transaction_id");
-
-                    b.HasIndex("UserId", "Dismissed")
-                        .HasDatabaseName("ix_bank_sync_suggestions_user_id_dismissed");
-
-                    b.ToTable("bank_sync_suggestions", "finance");
-                });
-
             modelBuilder.Entity("Infrastructure.Plaid.Mirrors.FinancialAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1240,135 +1153,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_financial_transactions_financial_connection_id_date");
 
                     b.ToTable("financial_transactions", "finance");
-                });
-
-            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.RecurringSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("direction");
-
-                    b.Property<string>("ExternalStreamId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("external_stream_id");
-
-                    b.Property<Guid>("FinancialConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("financial_connection_id");
-
-                    b.Property<DateTime>("FirstDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("first_date");
-
-                    b.Property<string>("Frequency")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("frequency");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsLinked")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_linked");
-
-                    b.Property<DateTime>("LastDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_date");
-
-                    b.Property<Guid?>("LinkedEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("linked_entity_id");
-
-                    b.Property<string>("LinkedEntityType")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("linked_entity_type");
-
-                    b.Property<string>("MerchantName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("merchant_name");
-
-                    b.Property<DateTime?>("PredictedNextDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("predicted_next_date");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.ComplexProperty<Dictionary<string, object>>("AverageAmount", "Infrastructure.Plaid.Mirrors.RecurringSuggestion.AverageAmount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("average_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("average_currency");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("LastAmount", "Infrastructure.Plaid.Mirrors.RecurringSuggestion.LastAmount#Money", b1 =>
-                        {
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(18, 2)
-                                .HasColumnType("numeric(18,2)")
-                                .HasColumnName("last_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("last_currency");
-                        });
-
-                    b.HasKey("Id")
-                        .HasName("pk_recurring_suggestions");
-
-                    b.HasIndex("ExternalStreamId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_recurring_suggestions_external_stream_id");
-
-                    b.HasIndex("FinancialConnectionId")
-                        .HasDatabaseName("ix_recurring_suggestions_financial_connection_id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_recurring_suggestions_user_id");
-
-                    b.ToTable("recurring_suggestions", "finance");
                 });
 
             modelBuilder.Entity("Finance.Domain.Aggregates.IncomeSource", b =>
@@ -1581,16 +1365,6 @@ namespace Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_financial_transactions_financial_connections_financial_conn");
-                });
-
-            modelBuilder.Entity("Infrastructure.Plaid.Mirrors.RecurringSuggestion", b =>
-                {
-                    b.HasOne("Finance.Domain.Aggregates.FinancialConnection", null)
-                        .WithMany()
-                        .HasForeignKey("FinancialConnectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_recurring_suggestions_financial_connections_financial_conne");
                 });
 
             modelBuilder.Entity("Finance.Domain.Aggregates.JournalEntry", b =>

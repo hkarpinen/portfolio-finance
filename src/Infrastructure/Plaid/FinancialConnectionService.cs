@@ -19,7 +19,7 @@ internal sealed class FinancialConnectionService : IBankConnections
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
     private readonly IExpenseRepository _expenseRepository;
-    private readonly IIncomeSourceRepository _incomeRepository;
+    private readonly IReceiptRepository _receipts;
     private readonly IBankSynchroniser _syncService;
     private readonly ILogger<FinancialConnectionService> _logger;
 
@@ -29,7 +29,7 @@ internal sealed class FinancialConnectionService : IBankConnections
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
         IExpenseRepository expenseRepository,
-        IIncomeSourceRepository incomeRepository,
+        IReceiptRepository receipts,
         IBankSynchroniser syncService,
         ILogger<FinancialConnectionService> logger)
     {
@@ -38,7 +38,7 @@ internal sealed class FinancialConnectionService : IBankConnections
         _connectionQuery = connectionQuery;
         _tokenProtector = tokenProtector;
         _expenseRepository = expenseRepository;
-        _incomeRepository = incomeRepository;
+        _receipts = receipts;
         _syncService = syncService;
         _logger = logger;
     }
@@ -63,24 +63,9 @@ internal sealed class FinancialConnectionService : IBankConnections
 
         if (existing is not null)
         {
-            // Auto-created expenses/income must go BEFORE the connection does, since they are found through
-            // its suggestions.
-            var oldSuggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(existing.Id, cancellationToken);
-            foreach (var suggestion in oldSuggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
-            {
-                if (suggestion.LinkedEntityType == LinkedEntityType.Expense)
-                {
-                    var expense = await _expenseRepository.GetByIdAsync(
-                        ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
-                    if (expense is not null) await _expenseRepository.RemoveAsync(expense, cancellationToken);
-                }
-                else if (suggestion.LinkedEntityType == LinkedEntityType.IncomeSource)
-                {
-                    var income = await _incomeRepository.GetByIdAsync(
-                        IncomeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
-                    if (income is not null) await _incomeRepository.RemoveAsync(income, cancellationToken);
-                }
-            }
+            // Whatever the old connection's transactions became must come off the books before
+            // the connection does — afterwards there is nothing left to find them by.
+            await UnimportEverythingAsync(existing.Id, cancellationToken);
 
             // Re-link is modelled as remove + add because FinancialConnection has no public setter for
             // EncryptedAccessToken (intentionally invariant-protected).
@@ -121,6 +106,36 @@ internal sealed class FinancialConnectionService : IBankConnections
         return FinancialConnectionMapper.ToResponse(connection, persistedAccounts);
     }
 
+    /// <summary>
+    /// Takes every document a connection's transactions became off the books, before the
+    /// connection itself goes. An expense whose bank link is gone is still a real cost somebody
+    /// incurred, so it is deactivated rather than deleted — and a receipt voided — which lets the
+    /// ledger unwind what it posted instead of leaving entries pointing at nothing.
+    /// </summary>
+    private async Task UnimportEverythingAsync(FinancialConnectionId connectionId, CancellationToken ct)
+    {
+        var transactions = await _connectionQuery.ListImportedTransactionsAsync(connectionId, ct);
+
+        foreach (var txn in transactions)
+        {
+            if (txn.LinkedEntityId is not { } entityId) continue;
+
+            if (txn.LinkedEntityType == LinkedEntityType.Receipt)
+            {
+                var receipt = await _receipts.GetByIdAsync(ReceiptId.Create(entityId), ct);
+                if (receipt is null) continue;
+                receipt.Void();
+                await _receipts.UpdateAsync(receipt, ct);
+                continue;
+            }
+
+            var expense = await _expenseRepository.GetByIdAsync(ExpenseId.Create(entityId), ct);
+            if (expense is null) continue;
+            expense.TryDeactivate();
+            await _expenseRepository.UpdateAsync(expense, ct);
+        }
+    }
+
     public async Task DisconnectAsync(
         Guid userId, DisconnectCommand request, CancellationToken cancellationToken = default)
     {
@@ -139,24 +154,7 @@ internal sealed class FinancialConnectionService : IBankConnections
             _logger.LogWarning(ex, "Provider item removal failed for connection {ConnectionId}", connection.ExternalId);
         }
 
-        var suggestions = await _connectionQuery.ListSuggestionsForConnectionAsync(connection.Id, cancellationToken);
-        foreach (var suggestion in suggestions.Where(s => s.IsLinked && s.LinkedEntityId.HasValue))
-        {
-            if (suggestion.LinkedEntityType == LinkedEntityType.Expense)
-            {
-                var expense = await _expenseRepository.GetByIdAsync(
-                    ExpenseId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
-                if (expense is not null)
-                    await _expenseRepository.RemoveAsync(expense, cancellationToken);
-            }
-            else if (suggestion.LinkedEntityType == LinkedEntityType.IncomeSource)
-            {
-                var income = await _incomeRepository.GetByIdAsync(
-                    IncomeId.Create(suggestion.LinkedEntityId!.Value), cancellationToken);
-                if (income is not null)
-                    await _incomeRepository.RemoveAsync(income, cancellationToken);
-            }
-        }
+        await UnimportEverythingAsync(connection.Id, cancellationToken);
 
         // Removing the connection cascades to accounts, transactions and suggestions at the DB level.
         connection.MarkRevoked();
@@ -190,144 +188,6 @@ internal sealed class FinancialConnectionService : IBankConnections
         }
         connection.RecordWebhook();
         await _syncService.SyncConnectionAsync(connection, cancellationToken);
-    }
-
-    public async Task<RecurringSuggestionListDto> RefreshSuggestionsAsync(
-        Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default)
-    {
-        var connection = await _repo.GetConnectionAsync(
-            FinancialConnectionId.Create(request.ConnectionId), ct)
-            ?? throw new KeyNotFoundException("Financial connection not found.");
-        if (connection.UserId.Value != userId)
-            throw new UnauthorizedAccessException("Access denied.");
-
-        await _syncService.RefreshSuggestionsAsync(connection, ct);
-
-        var suggestions = await _connectionQuery.ListSuggestionsForUserAsync(UserId.Create(userId), ct);
-        return FinancialConnectionMapper.ToSuggestionList(suggestions);
-    }
-
-    public async Task<AcceptSuggestionDto> AcceptSuggestionAsync(
-        Guid userId, AcceptSuggestionCommand request, CancellationToken ct = default)
-    {
-        var suggestion = await _repo.GetSuggestionAsync(request.SuggestionId, ct)
-            ?? throw new KeyNotFoundException("Recurring suggestion not found.");
-
-        if (suggestion.UserId.Value != userId)
-            throw new UnauthorizedAccessException("Access denied.");
-
-        if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return FinancialConnectionMapper.ToAccepted(suggestion);
-
-        var schedule = RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate);
-        var sourceName = !string.IsNullOrWhiteSpace(suggestion.MerchantName) ? suggestion.MerchantName
-            : !string.IsNullOrWhiteSpace(suggestion.Description) ? suggestion.Description
-            : "Unknown";
-
-        if (suggestion.Direction == RecurringFlowDirection.Inflow)
-        {
-            var income = IncomeSource.Create(
-                UserId.Create(userId), suggestion.AverageAmount,
-                sourceName, schedule,
-                paymentFrequency: suggestion.Frequency,
-                lastPaymentDate: suggestion.LastDate);
-            await _incomeRepository.AddAsync(income, ct);
-            suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
-            await _repo.SaveSuggestionAsync(suggestion, ct);
-            await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
-        }
-        else
-        {
-            var nextDue = suggestion.PredictedNextDate ?? suggestion.LastDate.AddDays(1);
-            if (nextDue < DateTime.UtcNow.Date)
-                nextDue = DateTime.UtcNow.Date.AddDays(1);
-
-            var expense = Expense.CreateOwn(
-                UserId.Create(userId), sourceName, suggestion.AverageAmount,
-                ExpenseCategory.Other, nextDue);
-            await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
-            await _repo.SaveSuggestionAsync(suggestion, ct);
-            await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Expense);
-        }
-    }
-
-    public async Task<AcceptSuggestionDto> AcceptBankSyncSuggestionAsync(
-        Guid userId, AcceptBankSyncSuggestionCommand request, CancellationToken ct = default)
-    {
-        var suggestion = await _repo.GetBankSyncSuggestionAsync(request.SuggestionId, ct)
-            ?? throw new KeyNotFoundException("Bank sync suggestion not found.");
-
-        if (suggestion.UserId.Value != userId)
-            throw new UnauthorizedAccessException("Access denied.");
-
-        if (suggestion.IsLinked && suggestion.LinkedEntityId.HasValue && !string.IsNullOrEmpty(suggestion.LinkedEntityType))
-            return FinancialConnectionMapper.ToAccepted(suggestion);
-
-        var displayName = !string.IsNullOrWhiteSpace(suggestion.MerchantName)
-            ? suggestion.MerchantName : suggestion.Name;
-        var amount = Money.Create(suggestion.Amount, suggestion.Currency);
-
-        if (request.AsIncome)
-        {
-            var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, suggestion.TransactionDate);
-            var income = IncomeSource.Create(
-                UserId.Create(userId), amount, displayName, schedule,
-                paymentFrequency: RecurrenceFrequency.Monthly,
-                lastPaymentDate: suggestion.TransactionDate);
-            await _incomeRepository.AddAsync(income, ct);
-            suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
-            await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
-            await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, income.Id.Value, LinkedEntityType.IncomeSource);
-        }
-        else
-        {
-            var schedule = RecurrenceSchedule.Create(RecurrenceFrequency.Monthly, suggestion.TransactionDate);
-            var nextDue = suggestion.TransactionDate.AddMonths(1);
-            if (nextDue < DateTime.UtcNow.Date)
-                nextDue = DateTime.UtcNow.Date.AddDays(1);
-
-            Expense expense;
-            if (request.GroupId.HasValue)
-            {
-                expense = Expense.Create(
-                    AccountingEntity.Household(request.GroupId.Value),
-                    UserId.Create(userId),
-                    displayName, amount, ExpenseCategory.Other, nextDue);
-                expense.Activate();
-            }
-            else
-            {
-                expense = Expense.CreateOwn(
-                    UserId.Create(userId), displayName, amount,
-                    ExpenseCategory.Other, nextDue);
-            }
-
-            // No separate payment row: the expense posts on the day it belongs to, so accepting a
-            // suggestion for a transaction that already happened is on the books by that alone.
-            await _expenseRepository.AddAsync(expense, ct);
-            suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
-            await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
-            await _repo.CommitAsync(ct);
-            return FinancialConnectionMapper.ToAccepted(suggestion.Id, expense.Id.Value, LinkedEntityType.Expense);
-        }
-    }
-
-    public async Task DismissBankSyncSuggestionAsync(
-        Guid userId, DismissBankSyncSuggestionCommand request, CancellationToken ct = default)
-    {
-        var suggestion = await _repo.GetBankSyncSuggestionAsync(request.SuggestionId, ct)
-            ?? throw new KeyNotFoundException("Bank sync suggestion not found.");
-
-        if (suggestion.UserId.Value != userId)
-            throw new UnauthorizedAccessException("Access denied.");
-
-        suggestion.Dismiss();
-        await _repo.SaveBankSyncSuggestionAsync(suggestion, ct);
-        await _repo.CommitAsync(ct);
     }
 
 

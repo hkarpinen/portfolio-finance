@@ -92,62 +92,6 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
             .Where(a => a.FinancialConnectionId == connectionId)
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForConnectionAsync(
-        FinancialConnectionId connectionId, CancellationToken cancellationToken = default)
-        => await _db.RecurringSuggestions
-            .AsNoTracking()
-            .Where(s => s.FinancialConnectionId == connectionId)
-            .OrderByDescending(s => s.LastDate)
-            .ToListAsync(cancellationToken);
-
-    public async Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForUserAsync(
-        UserId userId, CancellationToken cancellationToken = default)
-        => await _db.RecurringSuggestions
-            .AsNoTracking()
-            .Where(s => s.UserId == userId)
-            .OrderByDescending(s => s.LastDate)
-            .ToListAsync(cancellationToken);
-
-    public async Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        var userIdVo = new UserId(userId);
-        var rows = await _db.RecurringSuggestions
-            .AsNoTracking()
-            .Where(s => s.UserId == userIdVo)
-            .OrderByDescending(s => s.LastDate)
-            .ToListAsync(cancellationToken);
-        var dtos = rows.Select(s => new RecurringSuggestionDto(
-            s.Id, s.FinancialConnectionId.Value, s.AccountId,
-            s.Direction.ToString(), s.Description, s.MerchantName,
-            s.Frequency, s.AverageAmount.Amount, s.LastAmount.Amount, s.AverageAmount.Currency,
-            s.FirstDate, s.LastDate, s.PredictedNextDate, s.IsActive, s.IsLinked)).ToList();
-        return new RecurringSuggestionListDto(dtos, dtos.Count);
-    }
-
-    public async Task<BankSyncSuggestionListDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default)
-    {
-        var userIdVo = new UserId(userId);
-        var query = _db.BankSyncSuggestions
-            .AsNoTracking()
-            .Where(s => s.UserId == userIdVo && !s.IsLinked);
-        if (!includeDismissed)
-            query = query.Where(s => !s.Dismissed);
-        var rows = await query
-            .OrderByDescending(s => s.TransactionDate)
-            .ToListAsync(cancellationToken);
-        var dtos = rows.Select(s => new BankSyncSuggestionDto(
-            s.Id,
-            s.Direction.ToString(),
-            s.Name,
-            s.MerchantName,
-            s.Amount,
-            s.Currency,
-            s.TransactionDate,
-            s.IsLinked,
-            s.Dismissed)).ToList();
-        return new BankSyncSuggestionListDto(dtos, dtos.Count);
-    }
-
     public async Task<AccountBalanceSummaryDto> GetForUserAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var userIdVo = new UserId(userId);
@@ -174,4 +118,10 @@ internal sealed class FinancialConnectionQuery : IFinancialConnectionQuery
 
         return new AccountBalanceSummaryDto(totalAvailable, currency, asOf, true, dtos);
     }
+
+    public async Task<IReadOnlyList<FinancialTransaction>> ListImportedTransactionsAsync(
+        FinancialConnectionId connectionId, CancellationToken ct = default)
+        => await _db.FinancialTransactions.AsNoTracking()
+            .Where(x => x.FinancialConnectionId == connectionId && x.LinkedEntityId != null)
+            .ToListAsync(ct);
 }

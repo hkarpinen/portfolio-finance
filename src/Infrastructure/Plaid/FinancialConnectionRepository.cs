@@ -71,35 +71,4 @@ internal sealed class FinancialConnectionRepository : IFinancialConnectionReposi
 
     public Task CommitAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 
-    public Task<RecurringSuggestion?> GetSuggestionByExternalIdAsync(string externalStreamId, CancellationToken ct = default)
-        => _db.RecurringSuggestions.FirstOrDefaultAsync(s => s.ExternalStreamId == externalStreamId, ct);
-
-    public Task<RecurringSuggestion?> GetSuggestionAsync(Guid id, CancellationToken ct = default)
-        => _db.RecurringSuggestions.FirstOrDefaultAsync(s => s.Id == id, ct);
-
-    public Task<RecurringSuggestion?> GetSuggestionByLinkedEntityIdAsync(Guid linkedEntityId, CancellationToken ct = default)
-        => _db.RecurringSuggestions.FirstOrDefaultAsync(s => s.LinkedEntityId == linkedEntityId, ct);
-
-    public async Task AddSuggestionAsync(RecurringSuggestion suggestion, CancellationToken ct = default)
-        => await _db.RecurringSuggestions.AddAsync(suggestion, ct);
-
-    public async Task SaveSuggestionAsync(RecurringSuggestion suggestion, CancellationToken ct = default)
-    {
-        _db.RecurringSuggestions.Update(suggestion);
-    }
-
-    public Task<BankSyncSuggestion?> GetBankSyncSuggestionByExternalTransactionIdAsync(string externalTransactionId, CancellationToken ct = default)
-        => _db.BankSyncSuggestions.FirstOrDefaultAsync(s => s.ExternalTransactionId == externalTransactionId, ct);
-
-    public Task<BankSyncSuggestion?> GetBankSyncSuggestionAsync(Guid id, CancellationToken ct = default)
-        => _db.BankSyncSuggestions.FirstOrDefaultAsync(s => s.Id == id, ct);
-
-    public async Task AddBankSyncSuggestionAsync(BankSyncSuggestion suggestion, CancellationToken ct = default)
-        => await _db.BankSyncSuggestions.AddAsync(suggestion, ct);
-
-    public Task SaveBankSyncSuggestionAsync(BankSyncSuggestion suggestion, CancellationToken ct = default)
-    {
-        _db.BankSyncSuggestions.Update(suggestion);
-        return Task.CompletedTask;
-    }
 }

@@ -22,9 +22,5 @@ public interface IBankConnections
     Task<SyncConnectionDto> SyncAsync(Guid userId, SyncConnectionCommand request, CancellationToken cancellationToken = default);
     Task SyncByExternalItemIdAsync(string externalItemId, CancellationToken cancellationToken = default);
 
-    Task<RecurringSuggestionListDto> RefreshSuggestionsAsync(Guid userId, RefreshSuggestionsCommand request, CancellationToken ct = default);
-    Task<AcceptSuggestionDto> AcceptSuggestionAsync(Guid userId, AcceptSuggestionCommand request, CancellationToken ct = default);
 
-    Task<AcceptSuggestionDto> AcceptBankSyncSuggestionAsync(Guid userId, AcceptBankSyncSuggestionCommand request, CancellationToken ct = default);
-    Task DismissBankSyncSuggestionAsync(Guid userId, DismissBankSyncSuggestionCommand request, CancellationToken ct = default);
 }

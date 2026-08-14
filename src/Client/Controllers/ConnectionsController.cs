@@ -79,33 +79,6 @@ public sealed class ConnectionsController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("{connectionId:guid}/suggestions/refresh")]
-    public async Task<IActionResult> RefreshSuggestions(Guid connectionId, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        var result = await _manager.RefreshSuggestionsAsync(
-            userId.Value, new RefreshSuggestionsCommand(connectionId), ct);
-        return Ok(result);
-    }
-
-    [HttpGet("suggestions")]
-    public async Task<IActionResult> ListSuggestions(CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        var result = await _connectionQuery.ListRecurringSuggestionsAsync(userId.Value, ct);
-        return Ok(result);
-    }
-
-    // Idempotent — calling twice returns the same linked entity.
-    [HttpPost("suggestions/{suggestionId:guid}/accept")]
-    public async Task<IActionResult> AcceptSuggestion(Guid suggestionId, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        var result = await _manager.AcceptSuggestionAsync(
-            userId.Value, new AcceptSuggestionCommand(suggestionId), ct);
-        return Ok(result);
-    }
-
     // The provider's remove endpoint is called best-effort; a failure there does not block removal.
     [HttpDelete("{connectionId:guid}")]
     public async Task<IActionResult> Disconnect(Guid connectionId, CancellationToken ct)
@@ -121,35 +94,6 @@ public sealed class ConnectionsController : ControllerBase
         var userId = User.GetUserId();
         var result = await _connectionQuery.GetForUserAsync(userId.Value, ct);
         return Ok(result);
-    }
-
-    [HttpGet("bank-sync-suggestions")]
-    public async Task<IActionResult> ListBankSyncSuggestions([FromQuery] bool includeDismissed = false, CancellationToken ct = default)
-    {
-        var userId = User.GetUserId();
-        var result = await _connectionQuery.ListForUserAsync(userId.Value, includeDismissed, ct);
-        return Ok(result);
-    }
-
-    [HttpPost("bank-sync-suggestions/{suggestionId:guid}/accept")]
-    public async Task<IActionResult> AcceptBankSyncSuggestion(Guid suggestionId, [FromBody] AcceptBankSyncSuggestionBody body, CancellationToken ct = default)
-    {
-        var userId = User.GetUserId();
-        var result = await _manager.AcceptBankSyncSuggestionAsync(
-            userId.Value,
-            new AcceptBankSyncSuggestionCommand(suggestionId, body.AsIncome, body.GroupId),
-            ct);
-        return Ok(result);
-    }
-
-    /// <summary>Dismisses a suggestion so it no longer appears in the default list.</summary>
-    [HttpPost("bank-sync-suggestions/{suggestionId:guid}/dismiss")]
-    public async Task<IActionResult> DismissBankSyncSuggestion(Guid suggestionId, CancellationToken ct = default)
-    {
-        var userId = User.GetUserId();
-        await _manager.DismissBankSyncSuggestionAsync(
-            userId.Value, new DismissBankSyncSuggestionCommand(suggestionId), ct);
-        return NoContent();
     }
 
     /// <summary>

@@ -41,30 +41,6 @@ public sealed record WebhookPayload(
     string? ItemId,
     string? Error);
 
-public sealed record RecurringSuggestionDto(
-    Guid SuggestionId,
-    Guid ConnectionId,
-    Guid AccountId,
-    string Direction,
-    string Description,
-    string? MerchantName,
-    RecurrenceFrequency Frequency,
-    decimal AverageAmount,
-    decimal LastAmount,
-    string Currency,
-    DateTime FirstDate,
-    DateTime LastDate,
-    DateTime? PredictedNextDate,
-    bool IsActive,
-    bool IsLinked);
-
-public sealed record RecurringSuggestionListDto(IReadOnlyList<RecurringSuggestionDto> Items, int TotalCount);
-
-public sealed record AcceptSuggestionDto(
-    Guid SuggestionId,
-    Guid LinkedEntityId,
-    string LinkedEntityType);
-
 public sealed record TransactionDto(
     Guid TransactionId,
     Guid AccountId,
@@ -80,16 +56,3 @@ public sealed record TransactionDto(
 public sealed record TransactionListDto(
     IReadOnlyCollection<TransactionDto> Items,
     int TotalCount);
-
-public sealed record BankSyncSuggestionDto(
-    Guid SuggestionId,
-    string Direction,
-    string Name,
-    string? MerchantName,
-    decimal Amount,
-    string Currency,
-    DateTime TransactionDate,
-    bool IsLinked,
-    bool Dismissed);
-
-public sealed record BankSyncSuggestionListDto(IReadOnlyList<BankSyncSuggestionDto> Items, int TotalCount);

@@ -30,8 +30,6 @@ public sealed class FinanceDbContext : DbContext
     public DbSet<FinancialConnection> FinancialConnections => Set<FinancialConnection>();
     public DbSet<FinancialAccount> FinancialAccounts => Set<FinancialAccount>();
     public DbSet<FinancialTransaction> FinancialTransactions => Set<FinancialTransaction>();
-    public DbSet<RecurringSuggestion> RecurringSuggestions => Set<RecurringSuggestion>();
-    public DbSet<BankSyncSuggestion> BankSyncSuggestions => Set<BankSyncSuggestion>();
 
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options) { }
 

@@ -17,10 +17,6 @@ internal sealed class BankSynchroniser : IBankSynchroniser
     private readonly IFinancialConnectionQuery _connectionQuery;
     private readonly IConnectionTokenProtector _tokenProtector;
     private readonly IExpenseRepository _expenseRepository;
-    private readonly IIncomeSourceRepository _incomeRepository;
-    private readonly IExpenseQuery _expenseQuery;
-    private readonly IIncomeQuery _incomeQuery;
-    private readonly IBankSyncMatchingEngine _matchingEngine;
     private readonly IReceiptRepository _receipts;
     private readonly IBookkeepingManager _bookkeeping;
     private readonly ILogger<BankSynchroniser> _logger;
@@ -31,10 +27,6 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         IFinancialConnectionQuery connectionQuery,
         IConnectionTokenProtector tokenProtector,
         IExpenseRepository expenseRepository,
-        IIncomeSourceRepository incomeRepository,
-        IExpenseQuery expenseQuery,
-        IIncomeQuery incomeQuery,
-        IBankSyncMatchingEngine matchingEngine,
         IReceiptRepository receipts,
         IBookkeepingManager bookkeeping,
         ILogger<BankSynchroniser> logger)
@@ -44,10 +36,6 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         _connectionQuery = connectionQuery;
         _tokenProtector = tokenProtector;
         _expenseRepository = expenseRepository;
-        _incomeRepository = incomeRepository;
-        _expenseQuery = expenseQuery;
-        _incomeQuery = incomeQuery;
-        _matchingEngine = matchingEngine;
         _receipts = receipts;
         _bookkeeping = bookkeeping;
         _logger = logger;
@@ -144,51 +132,10 @@ internal sealed class BankSynchroniser : IBankSynchroniser
             "Synced connection {ConnectionId}: +{Added} ~{Modified} -{Removed}",
             connection.ExternalId, totalAdded, totalModified, totalRemoved);
 
-        if (totalAdded > 0 || totalModified > 0)
-        {
-            try
-            {
-                await RefreshSuggestionsAsync(connection, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Auto recurring-suggestion detection failed for connection {ConnectionId}; can be refreshed manually.",
-                    connection.ExternalId);
-            }
-        }
-
-        if (addedOutflows.Count > 0)
-        {
-            try
-            {
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Auto-pay matching failed for connection {ConnectionId}; expenses can still be marked paid manually.",
-                    connection.ExternalId);
-            }
-        }
-
         return (totalAdded, totalModified, totalRemoved, false);
     }
 
-    public async Task RefreshSuggestionsAsync(
-        FinancialConnection connection, CancellationToken ct = default)
-    {
-        var accessToken = _tokenProtector.Unprotect(connection.EncryptedAccessToken);
-        var result = await _api.GetRecurringTransactionsAsync(accessToken, ct);
-
-        var accountsByExternalId = (await _connectionQuery.ListAccountsForConnectionAsync(connection.Id, ct))
-            .ToDictionary(a => a.ExternalAccountId, a => a);
-
-        await UpsertSuggestionsAsync(connection, result.Inflow,  RecurringFlowDirection.Inflow,  accountsByExternalId, ct);
-        await UpsertSuggestionsAsync(connection, result.Outflow, RecurringFlowDirection.Outflow, accountsByExternalId, ct);
-        await _repo.CommitAsync(ct);
-    }
-
-    /// <summary>
+/// <summary>
     /// Brings one transaction into the books: money out becomes an expense already paid from the
     /// account it left, money in becomes a receipt into the account it landed in.
     ///
@@ -283,94 +230,7 @@ internal sealed class BankSynchroniser : IBankSynchroniser
         await _repo.CommitAsync(ct);
     }
 
-    private async Task UpsertSuggestionsAsync(
-        FinancialConnection connection,
-        IReadOnlyList<RecurringStreamDto> streams,
-        RecurringFlowDirection direction,
-        IReadOnlyDictionary<string, FinancialAccount> accountsByExternalId,
-        CancellationToken ct)
-    {
-        foreach (var dto in streams)
-        {
-            if (!accountsByExternalId.TryGetValue(dto.AccountId, out var account)) continue;
-
-            var freq = dto.Frequency;
-            var avg  = Money.Create(Math.Abs(dto.AverageAmount), dto.Currency);
-            var last = Money.Create(Math.Abs(dto.LastAmount),    dto.Currency);
-
-            var existing = await _repo.GetSuggestionByExternalIdAsync(dto.StreamId, ct);
-            if (existing is null)
-            {
-                var suggestion = RecurringSuggestion.Create(
-                    connection.Id, account.Id, connection.UserId, dto.StreamId, direction,
-                    dto.Description, dto.MerchantName, freq, avg, last,
-                    dto.FirstDate, dto.LastDate, dto.PredictedNextDate, dto.IsActive);
-                await _repo.AddSuggestionAsync(suggestion, ct);
-                await AutoLinkSuggestionAsync(connection.UserId.Value, suggestion, ct);
-            }
-            else
-            {
-                existing.ApplyUpdate(
-                    dto.Description, dto.MerchantName, freq, avg, last,
-                    dto.FirstDate, dto.LastDate, dto.PredictedNextDate, dto.IsActive);
-                await _repo.SaveSuggestionAsync(existing, ct);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Turns what the policy proposes into a document, unless the person already has one like it.
-    /// The decision is SuggestionLinkPolicy's; what is left here is the exists-check and the write,
-    /// which are the only parts that need the database.
-    /// </summary>
-    private async Task AutoLinkSuggestionAsync(Guid userId, RecurringSuggestion suggestion, CancellationToken ct)
-    {
-        var proposal = SuggestionLinkPolicy.Propose(suggestion, DateTime.UtcNow.Date);
-        if (proposal.Document == SuggestedDocument.None) return;
-
-        var uid = UserId.Create(userId);
-
-        if (proposal.Document == SuggestedDocument.IncomeSource)
-        {
-            if (await _incomeQuery.ExistsForUserAsync(uid, proposal.SourceName, proposal.Amount.Amount, ct))
-            {
-                _logger.LogDebug(
-                    "Skipping auto-link for inflow suggestion {SuggestionId} — matching IncomeSource already exists.",
-                    suggestion.Id);
-                return;
-            }
-
-            var income = IncomeSource.Create(
-                uid, proposal.Amount, proposal.SourceName,
-                RecurrenceSchedule.Create(suggestion.Frequency, suggestion.FirstDate),
-                paymentFrequency: suggestion.Frequency,
-                lastPaymentDate: proposal.NextDue);
-            await _incomeRepository.AddAsync(income, ct);
-            suggestion.MarkLinked(income.Id.Value, LinkedEntityType.IncomeSource);
-            _logger.LogInformation(
-                "Auto-linked suggestion {SuggestionId} → IncomeSource {IncomeId} ({Source})",
-                suggestion.Id, income.Id.Value, proposal.SourceName);
-            return;
-        }
-
-        if (await _expenseQuery.ExistsForUserAsync(uid, proposal.SourceName, proposal.Amount.Amount, ct))
-        {
-            _logger.LogDebug(
-                "Skipping auto-link for outflow suggestion {SuggestionId} — matching Expense already exists.",
-                suggestion.Id);
-            return;
-        }
-
-        var expense = Expense.CreateOwn(
-            uid, proposal.SourceName, proposal.Amount, ExpenseCategory.Other, proposal.NextDue);
-        await _expenseRepository.AddAsync(expense, ct);
-        suggestion.MarkLinked(expense.Id.Value, LinkedEntityType.Expense);
-        _logger.LogInformation(
-            "Auto-linked suggestion {SuggestionId} → Expense {ExpenseId} ({Source})",
-            suggestion.Id, expense.Id.Value, proposal.SourceName);
-    }
-
-    private async Task<FinancialAccount?> EnsureAccountAsync(
+private async Task<FinancialAccount?> EnsureAccountAsync(
         FinancialConnection connection,
         string accessToken,
         string externalAccountId,

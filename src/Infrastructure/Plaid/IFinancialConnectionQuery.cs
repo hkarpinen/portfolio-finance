@@ -21,11 +21,12 @@ public interface IFinancialConnectionQuery
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<FinancialAccount>> ListAccountsForConnectionAsync(FinancialConnectionId connectionId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForConnectionAsync(FinancialConnectionId connectionId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RecurringSuggestion>> ListSuggestionsForUserAsync(UserId userId, CancellationToken cancellationToken = default);
 
-    Task<RecurringSuggestionListDto> ListRecurringSuggestionsAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<BankSyncSuggestionListDto> ListForUserAsync(Guid userId, bool includeDismissed, CancellationToken cancellationToken = default);
 
     Task<AccountBalanceSummaryDto> GetForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every transaction on a connection that became a document, so the documents can be
+    /// found when the connection goes.</summary>
+    Task<IReadOnlyList<FinancialTransaction>> ListImportedTransactionsAsync(
+        FinancialConnectionId connectionId, CancellationToken ct = default);
 }

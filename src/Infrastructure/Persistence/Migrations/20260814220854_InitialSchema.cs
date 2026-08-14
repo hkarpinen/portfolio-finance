@@ -34,32 +34,6 @@ namespace Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "bank_sync_suggestions",
-                schema: "finance",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    connection_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    external_transaction_id = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    name = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    merchant_name = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    amount = table.Column<decimal>(type: "numeric(18,4)", precision: 18, scale: 4, nullable: false),
-                    currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
-                    direction = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
-                    transaction_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    dismissed = table.Column<bool>(type: "boolean", nullable: false),
-                    is_linked = table.Column<bool>(type: "boolean", nullable: false),
-                    linked_entity_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    linked_entity_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_bank_sync_suggestions", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "debt_terms",
                 schema: "finance",
                 columns: table => new
@@ -432,46 +406,6 @@ namespace Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "recurring_suggestions",
-                schema: "finance",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    financial_connection_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    external_stream_id = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    direction = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    merchant_name = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
-                    frequency = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
-                    first_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    last_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    predicted_next_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    is_active = table.Column<bool>(type: "boolean", nullable: false),
-                    is_linked = table.Column<bool>(type: "boolean", nullable: false),
-                    linked_entity_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    linked_entity_type = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    average_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    average_currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
-                    last_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    last_currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_recurring_suggestions", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_recurring_suggestions_financial_connections_financial_conne",
-                        column: x => x.financial_connection_id,
-                        principalSchema: "finance",
-                        principalTable: "financial_connections",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "journal_lines",
                 schema: "finance",
                 columns: table => new
@@ -528,19 +462,6 @@ namespace Infrastructure.Persistence.Migrations
                 table: "accounts",
                 columns: new[] { "ledger_id", "code" },
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_bank_sync_suggestions_external_transaction_id",
-                schema: "finance",
-                table: "bank_sync_suggestions",
-                column: "external_transaction_id",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_bank_sync_suggestions_user_id_dismissed",
-                schema: "finance",
-                table: "bank_sync_suggestions",
-                columns: new[] { "user_id", "dismissed" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_debt_terms_account_id",
@@ -690,25 +611,6 @@ namespace Infrastructure.Persistence.Migrations
                 column: "created_by");
 
             migrationBuilder.CreateIndex(
-                name: "ix_recurring_suggestions_external_stream_id",
-                schema: "finance",
-                table: "recurring_suggestions",
-                column: "external_stream_id",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_recurring_suggestions_financial_connection_id",
-                schema: "finance",
-                table: "recurring_suggestions",
-                column: "financial_connection_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_recurring_suggestions_user_id",
-                schema: "finance",
-                table: "recurring_suggestions",
-                column: "user_id");
-
-            migrationBuilder.CreateIndex(
                 name: "ix_shares_expense_id",
                 schema: "finance",
                 table: "shares",
@@ -748,10 +650,6 @@ namespace Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "accounts",
-                schema: "finance");
-
-            migrationBuilder.DropTable(
-                name: "bank_sync_suggestions",
                 schema: "finance");
 
             migrationBuilder.DropTable(
@@ -807,10 +705,6 @@ namespace Infrastructure.Persistence.Migrations
                 schema: "finance");
 
             migrationBuilder.DropTable(
-                name: "recurring_suggestions",
-                schema: "finance");
-
-            migrationBuilder.DropTable(
                 name: "shares",
                 schema: "finance");
 
@@ -819,15 +713,15 @@ namespace Infrastructure.Persistence.Migrations
                 schema: "finance");
 
             migrationBuilder.DropTable(
+                name: "financial_connections",
+                schema: "finance");
+
+            migrationBuilder.DropTable(
                 name: "journal_entries",
                 schema: "finance");
 
             migrationBuilder.DropTable(
                 name: "recurring_expenses",
-                schema: "finance");
-
-            migrationBuilder.DropTable(
-                name: "financial_connections",
                 schema: "finance");
         }
     }

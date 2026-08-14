@@ -38,15 +38,6 @@ public interface IFinancialConnectionRepository
 
     Task CommitAsync(CancellationToken cancellationToken = default);
 
-    Task<RecurringSuggestion?> GetSuggestionByExternalIdAsync(string externalStreamId, CancellationToken cancellationToken = default);
 
-    Task<RecurringSuggestion?> GetSuggestionAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<RecurringSuggestion?> GetSuggestionByLinkedEntityIdAsync(Guid linkedEntityId, CancellationToken cancellationToken = default);
-    Task AddSuggestionAsync(RecurringSuggestion suggestion, CancellationToken cancellationToken = default);
-    Task SaveSuggestionAsync(RecurringSuggestion suggestion, CancellationToken cancellationToken = default);
 
-    Task<BankSyncSuggestion?> GetBankSyncSuggestionByExternalTransactionIdAsync(string externalTransactionId, CancellationToken cancellationToken = default);
-    Task<BankSyncSuggestion?> GetBankSyncSuggestionAsync(Guid id, CancellationToken cancellationToken = default);
-    Task AddBankSyncSuggestionAsync(BankSyncSuggestion suggestion, CancellationToken cancellationToken = default);
-    Task SaveBankSyncSuggestionAsync(BankSyncSuggestion suggestion, CancellationToken cancellationToken = default);
 }
