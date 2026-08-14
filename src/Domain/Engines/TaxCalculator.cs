@@ -435,8 +435,6 @@ public static class TaxCalculator
     /// NOT pre-tax: Roth 401(k) (after-tax contributions), Life Insurance above the
     /// §79 $50k exclusion, and Other (unknown — treated as taxable to avoid under-withholding).
     /// </summary>
-    public static bool IsPreTaxDeduction(DeductionType deductionType) => deductionType.IsPreTax();
-
     private static decimal Flat(decimal taxableIncome, decimal rate)
         => Math.Round(taxableIncome * rate, 2);
 

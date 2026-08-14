@@ -1,3 +1,4 @@
+using Finance.Domain.Aggregates;
 using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
@@ -9,38 +10,27 @@ namespace Finance.Domain.Engines;
 /// </summary>
 public interface IPayrollDeductionEngine
 {
-    NetPayBreakdown ComputeBreakdown(
-        Guid incomeId,
-        decimal grossAmount,
-        RecurrenceFrequency frequency,
-        string currency,
-        TaxWithholdingProfile? taxProfile,
-        IReadOnlyList<PayrollDeduction>? deductions,
-        int year,
-        int month);
+    /// <summary>
+    /// What is left of one month of this income after withholding and voluntary deductions.
+    ///
+    /// Takes the income rather than six of its fields. Callers used to unpack it and hand the
+    /// pieces back, which let them arrive at "this income's monthly gross" by two different routes
+    /// — both correct, and neither the source of truth.
+    /// </summary>
+    NetPayBreakdown ComputeBreakdown(IncomeSource income, int year, int month);
 
-    decimal ComputeMonthlyNetPay(
-        decimal grossAmount,
-        RecurrenceFrequency frequency,
-        TaxWithholdingProfile? taxProfile,
-        IReadOnlyList<PayrollDeduction>? deductions,
-        int year,
-        int month);
+    decimal ComputeMonthlyNetPay(IncomeSource income, int year, int month);
 }
 
 internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
 {
-    public NetPayBreakdown ComputeBreakdown(
-        Guid incomeId,
-        decimal grossAmount,
-        RecurrenceFrequency frequency,
-        string currency,
-        TaxWithholdingProfile? taxProfile,
-        IReadOnlyList<PayrollDeduction>? deductions,
-        int year,
-        int month)
+    public NetPayBreakdown ComputeBreakdown(IncomeSource income, int year, int month)
     {
-        var monthlyGross = UserBudgetCalculator.MonthlyEquivalent(grossAmount, frequency);
+        var incomeId = income.Id.Value;
+        var currency = income.Amount.Currency;
+        var taxProfile = income.TaxProfile;
+        var deductions = income.Deductions.Count > 0 ? income.Deductions : null;
+        var monthlyGross = income.MonthlyGross();
         var lineItems = new List<DeductionLineItem>();
 
         var monthlyPreTax = 0m;
@@ -48,7 +38,7 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
         {
             foreach (var d in deductions)
             {
-                if (!d.IsTaxExempt && !TaxCalculator.IsPreTaxDeduction(d.Type)) continue;
+                if (!d.IsTaxExempt && !d.Type.IsPreTax()) continue;
 
                 if (d.Method == DeductionCalculationMethod.PercentOfGross)
                     monthlyPreTax += Math.Round(monthlyGross * d.Value / 100m, 2);
@@ -116,12 +106,6 @@ internal sealed class PayrollDeductionEngine : IPayrollDeductionEngine
             Math.Round(netPay, 2));
     }
 
-    public decimal ComputeMonthlyNetPay(
-        decimal grossAmount,
-        RecurrenceFrequency frequency,
-        TaxWithholdingProfile? taxProfile,
-        IReadOnlyList<PayrollDeduction>? deductions,
-        int year,
-        int month)
-        => ComputeBreakdown(Guid.Empty, grossAmount, frequency, string.Empty, taxProfile, deductions, year, month).NetPay;
+    public decimal ComputeMonthlyNetPay(IncomeSource income, int year, int month)
+        => ComputeBreakdown(income, year, month).NetPay;
 }

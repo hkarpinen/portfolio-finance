@@ -202,6 +202,18 @@ public class IncomeSource : IAggregateRoot
             Amount.Amount, RecurrenceSchedule.Frequency, PaymentFrequency);
 
     /// <summary>
+    /// What this income comes to in a month, whichever way it is quoted — an annual salary, a
+    /// weekly wage, a monthly retainer all answer here.
+    ///
+    /// One answer, because callers were reaching this two ways: the quoted amount against its
+    /// quoting frequency in one place, per-paycheck gross against the payment frequency in
+    /// another. Both are right and they agree, which is exactly why a third route would not have
+    /// been noticed when it did not.
+    /// </summary>
+    public decimal MonthlyGross() =>
+        UserBudgetCalculator.MonthlyEquivalent(Amount.Amount, RecurrenceSchedule.Frequency);
+
+    /// <summary>
     /// Number of paychecks landing inside [<paramref name="from"/>,
     /// <paramref name="toExclusive"/>) using the real-world payment anchor.
     /// </summary>

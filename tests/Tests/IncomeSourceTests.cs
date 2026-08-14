@@ -143,4 +143,38 @@ public class IncomeSourceTests
         var income = CreateIncome();
         Assert.Throws<InvalidOperationException>(() => income.Activate());
     }
+
+    // One answer to "what does this come to in a month", whichever way it is quoted. Callers were
+    // reaching it two ways — the quoted amount against its quoting frequency, and per-paycheck
+    // gross against the payment frequency. Both are right and they agree, which is why a third
+    // route would not have been noticed when it did not.
+    [Theory]
+    [InlineData(60_000, RecurrenceFrequency.Annually, 5_000)]
+    [InlineData(5_000, RecurrenceFrequency.Monthly, 5_000)]
+    [InlineData(1_000, RecurrenceFrequency.Weekly, 4_333.33)]
+    public void MonthlyGross_IsTheSameWhicheverWayTheIncomeIsQuoted(
+        decimal amount, RecurrenceFrequency quotedAs, decimal expected)
+    {
+        var income = IncomeSource.Create(
+            UserId.New(), Money.Create(amount, "USD"), "Salary",
+            RecurrenceSchedule.Create(quotedAs, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        Assert.Equal(expected, Math.Round(income.MonthlyGross(), 2));
+    }
+
+    // The two routes agreeing is the point: per-paycheck gross spread over a month's paychecks is
+    // the same monthly figure as the quoted amount converted directly.
+    [Fact]
+    public void PerPaycheckGrossOverAMonth_AgreesWithMonthlyGross()
+    {
+        var income = IncomeSource.Create(
+            UserId.New(), Money.Create(78_000m, "USD"), "Salary",
+            RecurrenceSchedule.Create(RecurrenceFrequency.Annually, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            paymentFrequency: RecurrenceFrequency.BiWeekly);
+
+        var viaPaycheck = income.PerPaycheckGross()
+            * RecurrenceFrequency.BiWeekly.PeriodsPerYear() / 12m;
+
+        Assert.Equal(Math.Round(income.MonthlyGross(), 2), Math.Round(viaPaycheck, 2));
+    }
 }

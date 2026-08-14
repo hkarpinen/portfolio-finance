@@ -76,15 +76,7 @@ internal sealed class IncomeQuery : IIncomeQuery
         var income = await _incomeRepository.GetByIdAsync(IncomeId.Create(request.IncomeId), cancellationToken);
         if (income is null) return null;
 
-        var breakdown = _deductionEngine.ComputeBreakdown(
-            income.Id.Value,
-            income.Amount.Amount,
-            income.RecurrenceSchedule.Frequency,
-            income.Amount.Currency,
-            income.TaxProfile,
-            income.Deductions,
-            request.Year,
-            request.Month);
+        var breakdown = _deductionEngine.ComputeBreakdown(income, request.Year, request.Month);
 
         return new NetPayBreakdownDto(
             breakdown.IncomeId,
@@ -119,15 +111,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         foreach (var income in sources)
         {
-            var breakdown = _deductionEngine.ComputeBreakdown(
-                income.Id.Value,
-                income.Amount.Amount,
-                income.RecurrenceSchedule.Frequency,
-                income.Amount.Currency,
-                income.TaxProfile,
-                income.Deductions,
-                request.Year,
-                request.Month);
+            var breakdown = _deductionEngine.ComputeBreakdown(income, request.Year, request.Month);
 
             monthlyGross += breakdown.GrossPay;
             monthlyNet += breakdown.NetPay;

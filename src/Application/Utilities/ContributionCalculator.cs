@@ -114,12 +114,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
                 var paychecksThisMonth = src.PaychecksInRange(mStart, mEndExclusive);
                 if (paychecksThisMonth == 0) return 0m;
 
-                var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(
-                    src.PerPaycheckGross(),
-                    src.PaymentFrequency,
-                    src.TaxProfile,
-                    src.Deductions.Count > 0 ? src.Deductions : null,
-                    mStart.Year, mStart.Month);
+                var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(src, mStart.Year, mStart.Month);
                 var perPaycheckNet = monthlyNet * 12m / src.PaymentFrequency.PeriodsPerYear();
                 return perPaycheckNet * paychecksThisMonth;
             });
@@ -168,12 +163,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
             var received = src.PaychecksInRange(periodStart, cutoffExclusive);
             if (received == 0) continue;
 
-            var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(
-                src.PerPaycheckGross(),
-                src.PaymentFrequency,
-                src.TaxProfile,
-                src.Deductions.Count > 0 ? src.Deductions : null,
-                periodStart.Year, periodStart.Month);
+            var monthlyNet = _deductionEngine.ComputeMonthlyNetPay(src, periodStart.Year, periodStart.Month);
             var perPaycheckNet = monthlyNet * 12m / src.PaymentFrequency.PeriodsPerYear();
             total += perPaycheckNet * received;
         }
