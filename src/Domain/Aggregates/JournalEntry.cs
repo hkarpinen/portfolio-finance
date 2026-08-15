@@ -56,7 +56,7 @@ public sealed class JournalEntry : IAggregateRoot
     public Guid? ReversedByEntryId { get; private set; }
 
     // Opaque to the ledger. Lets a read model attribute an entry by column instead of
-    // parsing the free-text Source. Settlement entries set all of these; expense journal_lines
+    // parsing the free-text Source. Settlement entries set all of these; expense journal lines
     // carry only SourceExpenseId.
     public Guid? SourceExpenseId { get; private set; }
     public Guid? SourceShareId { get; private set; }
@@ -226,13 +226,13 @@ public sealed class JournalEntry : IAggregateRoot
     private static void Validate(IReadOnlyList<JournalLineDraft> lines)
     {
         if (lines.Count < 2)
-            throw new ArgumentException("A journal entry needs at least two journal_lines (double-entry).", nameof(lines));
+            throw new ArgumentException("A journal entry needs at least two journal lines (double-entry).", nameof(lines));
         if (lines.Any(l => l.Amount.Amount <= 0))
             throw new ArgumentException("JournalLine amounts must be positive — the direction carries the sign.", nameof(lines));
 
         var currency = lines[0].Amount.Currency;
         if (lines.Any(l => l.Amount.Currency != currency))
-            throw new InvalidOperationException("All journal_lines in an entry must share one currency (P10).");
+            throw new InvalidOperationException("All journal lines in an entry must share one currency (P10).");
 
         var debits = lines.Where(l => l.Direction == EntryDirection.Debit).Sum(l => l.Amount.Amount);
         var credits = lines.Where(l => l.Direction == EntryDirection.Credit).Sum(l => l.Amount.Amount);

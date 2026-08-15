@@ -51,7 +51,7 @@ public interface ILedgerQuery
 
     Task<AccountStatementDto?> GetAccountStatementAsync(Guid groupId, Guid accountId, CancellationToken ct = default);
 
-    // Groups where they have no journal_lines are omitted rather than reported as net 0.
+    // Groups where they have no journal lines are omitted rather than reported as net 0.
     Task<UserPositionDto> GetUserPositionAsync(Guid userId, CancellationToken ct = default);
 
     // The ledger is the single source of truth for settlement, which lets the expense context keep

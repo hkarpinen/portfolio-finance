@@ -670,7 +670,7 @@ internal sealed class BookkeepingManager : IBookkeepingManager
         await _ledgers.AddDebtTermsAsync(terms, ct);
 
         // Nothing owed yet needs no entry — a zero journalLine would not validate, and an account
-        // with no journal_lines already reads as a zero balance.
+        // with no journal lines already reads as a zero balance.
         if (cmd.OpeningBalance > 0m)
         {
             var opening = await _ledgers.GetOrOpenAccountAsync(ledger.Id, Chart.OpeningBalance(ledger.Id), ct);

@@ -5,7 +5,7 @@ namespace Infrastructure.Queries;
 
 // Derives "settled per (share, occurrence)" from settlement journal entries — the ledger is
 // the single source of truth and there is no reimbursements table. A settlement entry carries its
-// SourceShareId/SourceOccurrence provenance and two equal journal_lines; a reversal copies the
+// SourceShareId/SourceOccurrence provenance and two equal journal lines; a reversal copies the
 // provenance and negates, so the signed sum nets a reversed pair to zero.
 internal static class SettlementReads
 {
@@ -26,7 +26,7 @@ internal static class SettlementReads
                 Occurrence = e.SourceOccurrence!.Value,
                 ValueDate = e.Date,
                 IsReversal = e.ReversalOfEntryId != null,
-                // Both journal_lines of a settlement carry the same amount; either one gives the value.
+                // Both journal lines of a settlement carry the same amount; either one gives the value.
                 Amount = db.JournalLines.Where(p => p.EntryId == e.Id).Max(p => p.Amount.Amount),
             })
             .ToListAsync(ct);

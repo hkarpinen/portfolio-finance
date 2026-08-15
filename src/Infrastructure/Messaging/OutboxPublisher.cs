@@ -35,7 +35,7 @@ internal sealed class OutboxPublisher : BackgroundService
                 _logger.LogError(ex, "Error processing outbox messages");
             }
 
-            // Ledger journal_lines ride this loop (state change → outbox → consumer), so this interval is the
+            // Ledger journal lines ride this loop (state change → outbox → consumer), so this interval is the
             // ceiling on how stale a just-written balance can read.
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
