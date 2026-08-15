@@ -44,8 +44,13 @@ public sealed class UserProjection
     {
         if (userIds.Count == 0) return [];
 
+        // Compare the property EF knows, not `.Value` through it: UserId is value-converted, so
+        // the converted member translates and reaching inside it does not — the query then throws
+        // when it runs rather than failing to compile.
+        var ids = userIds.Select(id => new UserId(id)).ToList();
+
         return await projections.AsNoTracking()
-            .Where(p => userIds.Contains(p.UserId.Value))
+            .Where(p => ids.Contains(p.UserId))
             .ToDictionaryAsync(p => p.UserId.Value, p => p.GetFullName(), ct);
     }
 
@@ -55,8 +60,10 @@ public sealed class UserProjection
     {
         if (userIds.Count == 0) return [];
 
+        var ids = userIds.Select(id => new UserId(id)).ToList();
+
         return await projections.AsNoTracking()
-            .Where(p => userIds.Contains(p.UserId.Value))
+            .Where(p => ids.Contains(p.UserId))
             .ToDictionaryAsync(
                 p => p.UserId.Value,
                 p => new ValueTuple<string, string?>(p.GetFullName(), p.AvatarUrl), ct);
