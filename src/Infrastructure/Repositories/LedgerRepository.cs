@@ -94,15 +94,18 @@ internal sealed class LedgerRepository : ILedgerRepository
         return true;
     }
 
+    // Include by the FIELD name. It is a string, so a rename of the backing field leaves this
+    // compiling and throws at runtime — and this read runs before every convergence, so getting it
+    // wrong stops the books being written at all, not just read.
     public async Task<IReadOnlyList<JournalEntry>> GetEntriesBySourceAsync(LedgerId ledgerId, string source, CancellationToken ct = default)
         => await _db.JournalEntries
-            .Include("_journalLines")
+            .Include("_lines")
             .Where(e => e.LedgerId == ledgerId && e.Source == source)
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<JournalEntry>> GetEntriesByExpenseAsync(LedgerId ledgerId, Guid expenseId, CancellationToken ct = default)
         => await _db.JournalEntries
-            .Include("_journalLines")
+            .Include("_lines")
             .Where(e => e.LedgerId == ledgerId && e.SourceExpenseId == expenseId)
             .ToListAsync(ct);
 

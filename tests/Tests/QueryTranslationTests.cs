@@ -149,6 +149,38 @@ public class QueryTranslationTests
     }
 
     /// <summary>
+    /// The string-based Include the ledger reads depend on.
+    ///
+    /// JournalEntry keeps its lines in a private field, so the include names it as text. A rename
+    /// of that field leaves this compiling and fails only when the query runs — and because
+    /// ConvergeAsync reads the entries under a source BEFORE deciding what to write, a wrong name
+    /// here stops the books being written at all. It did: journal_entries sat at zero and every
+    /// balance in the product read as nothing.
+    /// </summary>
+    [Fact]
+    public void TheLedgerReadsCanIncludeAnEntrysLines()
+    {
+        using var db = NewContext();
+        var ledger = LedgerId.New();
+
+        var sql = db.JournalEntries
+            .Include("_lines")
+            .Where(e => e.LedgerId == ledger)
+            .ToQueryString();
+
+        Assert.Contains("SELECT", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IncludingANavigationThatDoesNotExistIsRefused()
+    {
+        using var db = NewContext();
+
+        Assert.Throws<InvalidOperationException>(
+            () => db.JournalEntries.Include("_journalLines").ToQueryString());
+    }
+
+    /// <summary>
     /// The bug itself, held in place. If someone reaches for the shorthand again — it is right
     /// there on the aggregate and reads perfectly — this says so here rather than in a page body.
     /// </summary>
