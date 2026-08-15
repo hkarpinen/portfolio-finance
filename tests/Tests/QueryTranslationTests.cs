@@ -118,6 +118,37 @@ public class QueryTranslationTests
     }
 
     /// <summary>
+    /// Entries matched to the expenses that caused them. SourceExpenseId is a plain nullable Guid
+    /// column and Expense.Id is value-converted, so joining the two in the database meant reaching
+    /// through the conversion — the ids are compared as raw Guids instead.
+    /// </summary>
+    [Fact]
+    public void EntriesCanBeFoundByTheExpensesThatCausedThem()
+    {
+        using var db = NewContext();
+        var ids = new List<Guid> { Guid.NewGuid() };
+
+        var sql = db.JournalEntries
+            .Where(e => e.SourceExpenseId != null && ids.Contains(e.SourceExpenseId.Value))
+            .ToQueryString();
+
+        // Producing SQL is the assertion. EF throws rather than silently evaluating a Where on
+        // the client, so "it translated" is exactly the property under test.
+        Assert.Contains("SELECT", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JoiningOnAValueConvertedIdIsNotTranslatable()
+    {
+        using var db = NewContext();
+
+        Assert.Throws<InvalidOperationException>(() => db.JournalEntries
+            .Where(e => e.SourceExpenseId != null)
+            .Join(db.Expenses, e => e.SourceExpenseId!.Value, x => x.Id.Value, (e, x) => e.Id)
+            .ToQueryString());
+    }
+
+    /// <summary>
     /// The bug itself, held in place. If someone reaches for the shorthand again — it is right
     /// there on the aggregate and reads perfectly — this says so here rather than in a page body.
     /// </summary>

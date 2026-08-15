@@ -244,29 +244,34 @@ internal sealed class IncomeQuery : IIncomeQuery
     private async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var expenseIds = await _db.Expenses
+        // Id and occurrence together — the occurrence is what the answer is keyed on, and fetching
+        // it here is what lets the entries be matched without a join.
+        var expenses = await _db.Expenses
             .AsNoTracking()
             .Where(b => b.Owner.Kind == EntityKind.Person && b.Owner.Id == userId.Value)
-            .Select(b => b.Id)
+            .Select(b => new { b.Id, b.OccurrenceDate })
             .ToListAsync(cancellationToken);
 
-        if (expenseIds.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
+        if (expenses.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
+
+        // Raw Guids: SourceExpenseId is a plain nullable Guid column, while Expense.Id is
+        // value-converted. Joining the two in the database meant reaching through that conversion
+        // with `c.Id.Value`, which EF cannot translate — so the ids come back first and the match
+        // happens here, over a list this caller already had to load anyway.
+        var ids = expenses.Select(b => b.Id.Value).ToList();
+        var occurrenceOf = expenses.ToDictionary(b => b.Id.Value, b => b.OccurrenceDate);
 
         // When a personal expense was paid IS when it was booked: it posts on the day it belongs
         // to, so the entry's own date answers this without a second record of the same fact.
-        // Method syntax deliberately: `from` is a query-expression keyword and this method's
-        // parameter is called `from`, which the query form cannot see past.
         var entries = await _db.JournalEntries.AsNoTracking()
             .Where(e => e.ReversalOfEntryId == null && e.ReversedByEntryId == null
-                        && e.Date >= from && e.Date <= to && e.SourceExpenseId != null)
-            .Join(_db.Expenses.AsNoTracking().Where(c => c.Owner.Kind == EntityKind.Person && c.Owner.Id == userId.Value),
-                  e => e.SourceExpenseId!.Value,
-                  c => c.Id.Value,
-                  (e, c) => new { ExpenseId = c.Id.Value, c.OccurrenceDate, e.RecordedAt })
+                        && e.Date >= from && e.Date <= to
+                        && e.SourceExpenseId != null && ids.Contains(e.SourceExpenseId.Value))
+            .Select(e => new { e.SourceExpenseId, e.RecordedAt })
             .ToListAsync(cancellationToken);
 
         return entries
-            .GroupBy(e => (e.ExpenseId, e.OccurrenceDate.Date))
+            .GroupBy(e => (ExpenseId: e.SourceExpenseId!.Value, occurrenceOf[e.SourceExpenseId!.Value].Date))
             .ToDictionary(g => g.Key, g => g.Max(e => e.RecordedAt));
     }
 }
