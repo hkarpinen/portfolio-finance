@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finance.Domain.ValueObjects;
 
 public record RecurrenceSchedule
@@ -8,6 +10,7 @@ public record RecurrenceSchedule
 
     private RecurrenceSchedule() { }
 
+    [JsonConstructor]
     private RecurrenceSchedule(RecurrenceFrequency frequency, DateTime startDate, DateTime? endDate)
     {
         if (endDate.HasValue && endDate.Value <= startDate)

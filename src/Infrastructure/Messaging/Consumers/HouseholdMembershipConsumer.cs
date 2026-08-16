@@ -61,12 +61,8 @@ internal sealed class HouseholdMembershipConsumer :
         where T : class
     {
         var messageId = context.MessageId ?? Guid.NewGuid();
-        if (await _db.ProcessedEvents.AnyAsync(e => e.EventId == messageId, context.CancellationToken))
-            return;
 
         await handler(context.CancellationToken);
-
-        _db.ProcessedEvents.Add(new ProcessedEvent(messageId, eventType, DateTime.UtcNow));
         try
         {
             await _db.SaveChangesAsync(context.CancellationToken);

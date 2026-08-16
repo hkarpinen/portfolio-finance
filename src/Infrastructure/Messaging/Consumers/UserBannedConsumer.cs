@@ -17,8 +17,6 @@ internal sealed class UserBannedConsumer : IConsumer<UserBanned>
     public async Task Consume(ConsumeContext<UserBanned> context)
     {
         var message = context.Message;
-        if (await _dbContext.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
-            return;
 
         var userId = new UserId(message.UserId);
         var existing = await _dbContext.UserProjections
@@ -39,12 +37,6 @@ internal sealed class UserBannedConsumer : IConsumer<UserBanned>
             await _dbContext.UserProjections.AddAsync(tombstone, context.CancellationToken);
         }
 
-        _dbContext.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(UserBanned), DateTime.UtcNow));
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(context.CancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) { }
+        await _dbContext.SaveChangesAsync(context.CancellationToken);
     }
 }

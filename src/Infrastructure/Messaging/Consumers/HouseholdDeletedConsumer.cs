@@ -24,12 +24,10 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
     {
         var ct = context.CancellationToken;
         var messageId = context.MessageId ?? Guid.NewGuid();
-        if (await _db.ProcessedEvents.AnyAsync(e => e.EventId == messageId, ct))
-            return;
 
         var groupId = context.Message.HouseholdId;
 
-        // JournalLines cascade from journal_entries (fk_journalLines_journal_entries_entry_id, ON DELETE CASCADE),
+        // JournalLines cascade from journal_entries (fk_journal_lines_journal_entries_entry_id, ON DELETE CASCADE),
         // so deleting entries removes their journal lines; accounts and the ledger row go explicitly.
         var ledger = await _db.Ledgers.FirstOrDefaultAsync(
             l => l.Owner.Kind == EntityKind.Group && l.Owner.Id == groupId, ct);
@@ -43,7 +41,7 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
 
         await _db.GroupMemberProjections.Where(p => p.GroupId == groupId).ExecuteDeleteAsync(ct);
 
-        // A share's group is its expense's, so the shares go first, matched through the bills
+        // A share's group is its expense's, so the shares go first, matched through the expenses
         // they are on. Owner.Kind/Owner.Id rather than the computed GroupId, which has no column
         // and cannot be translated — see GroupQuery.ExpenseBelongsToGroupAsync.
         await _db.Shares
@@ -53,8 +51,6 @@ internal sealed class HouseholdDeletedConsumer : IConsumer<HouseholdDeleted>
         await _db.Expenses
             .Where(e => e.Owner.Kind == EntityKind.Group && e.Owner.Id == groupId)
             .ExecuteDeleteAsync(ct);
-
-        _db.ProcessedEvents.Add(new ProcessedEvent(messageId, nameof(HouseholdDeleted), DateTime.UtcNow));
         try
         {
             await _db.SaveChangesAsync(ct);

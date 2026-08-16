@@ -4,6 +4,7 @@ using Infrastructure.Plaid.Mirrors;
 using Finance.Infrastructure.Persistence.Projections;
 using Finance.Domain.ValueObjects;
 using Infrastructure.Persistence.Configurations;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
@@ -22,10 +23,8 @@ public sealed class FinanceDbContext : DbContext
     public DbSet<JournalLine> JournalLines => Set<JournalLine>();
     public DbSet<UserProjection> UserProjections => Set<UserProjection>();
     public DbSet<GroupMemberProjection> GroupMemberProjections => Set<GroupMemberProjection>();
-    public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
     public DbSet<Receipt> Receipts => Set<Receipt>();
-    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<FinancialConnection> FinancialConnections => Set<FinancialConnection>();
     public DbSet<FinancialAccount> FinancialAccounts => Set<FinancialAccount>();
@@ -33,33 +32,16 @@ public sealed class FinanceDbContext : DbContext
 
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options) { }
 
-    // Drains domain events from every tracked aggregate root into the outbox BEFORE flushing, so the
-    // outbox row and the aggregate row are written in one transaction and no event can be lost.
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        DrainDomainEventsToOutbox();
-        return await base.SaveChangesAsync(cancellationToken);
-    }
-
-    private void DrainDomainEventsToOutbox()
-    {
-        var aggregatesWithEvents = ChangeTracker
-            .Entries<IAggregateRoot>()
-            .Where(e => e.Entity.GetDomainEvents().Count > 0)
-            .Select(e => e.Entity)
-            .ToList();
-
-        foreach (var aggregate in aggregatesWithEvents)
-        {
-            foreach (var domainEvent in aggregate.GetDomainEvents())
-                this.AddToOutbox(domainEvent);
-            aggregate.ClearDomainEvents();
-        }
-    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("finance");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FinanceDbContext).Assembly);
+
+        // MassTransit's transactional outbox and inbox. These replace the hand-rolled
+        // outbox_messages table and the processed_events dedup each consumer used to do for itself.
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.AddOutboxStateEntity();
     }
 }

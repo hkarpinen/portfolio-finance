@@ -1,3 +1,4 @@
+using Finance.Domain.Engines;
 using Finance.Application.Managers;
 using Finance.Domain.Events;
 using Infrastructure.Persistence;
@@ -9,13 +10,13 @@ namespace Infrastructure.Messaging.Consumers;
 
 // Keeps the double-entry ledger in step with the expense context by consuming finance's OWN domain
 // events off the bus. The aggregate write and its outbox row commit in one transaction, so once a
-// expense/share/settlement fact is saved its ledger journalLine is guaranteed to follow — a failed
-// journalLine is redelivered rather than lost.
+// expense/share/settlement fact is saved its ledger posting is guaranteed to follow — a failed
+// posting is redelivered rather than lost.
 //
 // A thin adapter: it dedups on the event id and dispatches. It does no expense or share I/O of
 // its own, only its processed-events bookkeeping. The handlers converge (re-read the aggregate,
 // sync the books to it), which makes processing idempotent and order-insensitive.
-internal sealed class LedgerJournalLineConsumer :
+internal sealed class LedgerJournalConsumer :
     IConsumer<ExpenseCreated>,
     IConsumer<ExpenseUpdated>,
     IConsumer<ExpenseActivated>,
@@ -36,7 +37,7 @@ internal sealed class LedgerJournalLineConsumer :
     private readonly FinanceDbContext _db;
     private readonly IBookkeepingManager _bookkeeping;
 
-    public LedgerJournalLineConsumer(FinanceDbContext db, IBookkeepingManager bookkeeping)
+    public LedgerJournalConsumer(FinanceDbContext db, IBookkeepingManager bookkeeping)
     {
         _db = db;
         _bookkeeping = bookkeeping;
@@ -107,18 +108,29 @@ internal sealed class LedgerJournalLineConsumer :
         {
             var m = context.Message;
             return _bookkeeping.RecordMemberTransferAsync(
-                m.GroupId.Value, m.FromUserId.Value, m.ToUserId.Value,
-                m.Amount.Amount, m.Amount.Currency, $"settleup:{m.TransferId.Value:N}", ct);
+                groupId: m.GroupId.Value,
+                fromUserId: m.FromUserId.Value,
+                toUserId: m.ToUserId.Value,
+                amount: m.Amount.Amount,
+                currency: m.Amount.Currency,
+                source: LedgerSources.SettleUp(m.TransferId.Value),
+                ct: ct);
         }, context.CancellationToken);
 
     public Task Consume(ConsumeContext<SettlementRecorded> context) =>
         HandleAsync(context.Message, nameof(SettlementRecorded), ct =>
         {
             var m = context.Message;
-            return _bookkeeping.RecordSettlementFromEventAsync(
-                m.GroupId.Value, m.ExpenseId.Value, m.ShareId.Value,
-                m.FromUserId.Value, m.ToUserId.Value, m.Amount.Amount, m.Amount.Currency,
-                m.OccurrenceDate, m.ValueDate, ct);
+            return _bookkeeping.RecordSettlementFromEventAsync(new SettlementFact(
+                GroupId: m.GroupId.Value,
+                ExpenseId: m.ExpenseId.Value,
+                ShareId: m.ShareId.Value,
+                FromUserId: m.FromUserId.Value,
+                ToUserId: m.ToUserId.Value,
+                Amount: m.Amount.Amount,
+                Currency: m.Amount.Currency,
+                Occurrence: m.OccurrenceDate,
+                ValueDate: m.ValueDate), ct);
         }, context.CancellationToken);
 
     public Task Consume(ConsumeContext<SettlementReversed> context) =>
@@ -149,8 +161,6 @@ internal sealed class LedgerJournalLineConsumer :
     // event, and the convergent handlers no-op.
     private async Task HandleAsync(DomainEvent message, string eventType, Func<CancellationToken, Task> handler, CancellationToken ct)
     {
-        if (await _db.ProcessedEvents.AnyAsync(e => e.EventId == message.EventId, ct))
-            return;
 
         try
         {
@@ -164,8 +174,6 @@ internal sealed class LedgerJournalLineConsumer :
             // context); the message is ACKed.
             return;
         }
-
-        _db.ProcessedEvents.Add(new ProcessedEvent(message.EventId, eventType, DateTime.UtcNow));
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -177,13 +185,14 @@ internal sealed class LedgerJournalLineConsumer :
         => ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 }
 
-// One queue, one message at a time: every ledger journalLine serializes through this endpoint, so
+// One queue, one message at a time: every ledger posting serializes through this endpoint, so
 // reverse-then-repost sequences from different events can never interleave into duplicate or
 // missing lines. Throughput is bounded by ledger volume, which is human-scale here.
-internal sealed class LedgerJournalLineConsumerDefinition : ConsumerDefinition<LedgerJournalLineConsumer>
+internal sealed class LedgerJournalConsumerDefinition : ConsumerDefinition<LedgerJournalConsumer>
 {
-    public LedgerJournalLineConsumerDefinition()
+    public LedgerJournalConsumerDefinition()
     {
         ConcurrentMessageLimit = 1;
     }
+
 }

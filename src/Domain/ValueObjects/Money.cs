@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finance.Domain.ValueObjects;
 
 // A SIGNED monetary amount. The sign is meaningful: balances go negative, refunds and ledger
@@ -10,6 +12,7 @@ public readonly record struct Money
     public decimal Amount { get; }
     public string Currency { get; }
 
+    [JsonConstructor]
     private Money(decimal amount, string currency)
     {
         if (string.IsNullOrWhiteSpace(currency))

@@ -23,16 +23,36 @@ public static class InfrastructureServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<FinanceDbContext>(options =>
+        services.AddScoped<DomainEventPublishingInterceptor>();
+        services.AddDbContext<FinanceDbContext>((sp, options) =>
             options.UseNpgsql(
                     configuration.GetConnectionString("Finance"),
                     npgsql => npgsql.MigrationsAssembly("Infrastructure"))
-                .UseSnakeCaseNamingConvention());
+                .UseSnakeCaseNamingConvention()
+                .AddInterceptors(sp.GetRequiredService<DomainEventPublishingInterceptor>()));
 
         var rabbitConfig = configuration.GetSection("RabbitMq");
         services.AddMassTransit(x =>
         {
             x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("finance", false));
+
+            // Replaces the hand-rolled outbox table, its polling BackgroundService, and the
+            // ProcessedEvents dedup every consumer used to repeat. UseBusOutbox routes a Publish
+            // made during SaveChanges into the outbox rather than the broker, so the event commits
+            // with the aggregate; the delivery service sends it. The inbox does consumer-side
+            // dedup, which is what a redelivered message used to hit a unique-violation catch for.
+            x.AddEntityFrameworkOutbox<FinanceDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
+
+            // Turns the inbox ON for every receive endpoint. AddEntityFrameworkOutbox on its own
+            // creates the tables and the send side only — without this the consumers have no dedup
+            // at all, which is precisely what the per-consumer ProcessedEvents check used to do.
+            // A redelivered message would re-run the handler.
+            x.AddConfigureEndpointsCallback((context, _, cfg) =>
+                cfg.UseEntityFrameworkOutbox<FinanceDbContext>(context));
 
             x.AddConsumer<UserRegisteredConsumer>();
             x.AddConsumer<UserProfileUpdatedConsumer>();
@@ -43,7 +63,7 @@ public static class InfrastructureServiceExtensions
             x.AddConsumer<GroupShareAssignedConsumer>();
             x.AddConsumer<HouseholdMembershipConsumer>();
             x.AddConsumer<HouseholdDeletedConsumer>();
-            x.AddConsumer<LedgerJournalLineConsumer, LedgerJournalLineConsumerDefinition>();
+            x.AddConsumer<LedgerJournalConsumer, LedgerJournalConsumerDefinition>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -67,6 +87,19 @@ public static class InfrastructureServiceExtensions
                         opts.Converters.Add(converter);
                     return opts;
                 });
+
+                // Stated rather than defaulted, because the failure mode is silent: a message that
+                // gives up leaves the aggregate saved and whatever it should have driven — a ledger
+                // entry, a projection row — missing, with nothing reading as broken.
+                //
+                // In-process retries only. Delayed redelivery would ride a longer outage but needs a
+                // message scheduler (the RabbitMQ delayed-exchange plugin) this deployment does not
+                // declare, and configuring it without the plugin fails the endpoint at startup.
+                //
+                // Safe for every consumer here: each is idempotent on a redelivery, and the ledger
+                // one is convergent — it re-reads the aggregate rather than replaying an instruction.
+                cfg.UseMessageRetry(r => r.Intervals(
+                    TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
 
                 cfg.ConfigureEndpoints(context);
             });
@@ -92,7 +125,6 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IRecurringExpenseRepository, RecurringExpenseRepository>();
         services.AddScoped<IFinancialConnectionQuery, FinancialConnectionQuery>();
 
-        services.AddHostedService<OutboxPublisher>();
 
         services.Configure<PlaidOptions>(configuration.GetSection("Plaid"));
         services.AddDataProtection();
@@ -106,7 +138,7 @@ public static class InfrastructureServiceExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddHttpClient<IPlaidWebhookVerifier, PlaidWebhookVerifier>(http =>
+        services.AddHttpClient<IBankWebhookVerifier, PlaidWebhookVerifier>(http =>
         {
             http.Timeout = TimeSpan.FromSeconds(10);
         });

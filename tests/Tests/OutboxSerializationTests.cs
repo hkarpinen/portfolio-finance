@@ -127,4 +127,17 @@ public class OutboxSerializationTests
             Assert.True((bool)tryResolve.Invoke(null, args)!, $"{ev.Name} is outboxed but has no wire type");
         }
     }
+
+    /// <summary>
+    /// Money and RecurrenceSchedule bind through their own constructors ([JsonConstructor] on the
+    /// private one) rather than a hand-written converter. That deleted 115 lines and closed a hole:
+    /// the old MoneyConverter defaulted a missing currency to "USD", so a truncated payload
+    /// deserialised into a plausible-looking amount in the wrong currency.
+    /// </summary>
+    [Fact]
+    public void MoneyWithNoCurrencyIsRefused_NotQuietlyMadeDollars()
+    {
+        Assert.ThrowsAny<Exception>(() =>
+            JsonSerializer.Deserialize<Money>("""{"amount":50}""", Options));
+    }
 }

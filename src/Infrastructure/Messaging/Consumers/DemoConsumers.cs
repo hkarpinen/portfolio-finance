@@ -17,8 +17,6 @@ internal sealed class DemoUserCreatedConsumer(
     public async Task Consume(ConsumeContext<DemoUserCreated> context)
     {
         var message = context.Message;
-        if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
-            return;
 
         var userId = new UserId(message.UserId);
         var nameParts = (message.DisplayName ?? "").Split(' ', 2);
@@ -44,13 +42,7 @@ internal sealed class DemoUserCreatedConsumer(
 
         await demoSeedManager.SeedAsync(message.UserId, context.CancellationToken);
 
-        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserCreated), DateTime.UtcNow));
-
-        try
-        {
-            await db.SaveChangesAsync(context.CancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) { }
+        await db.SaveChangesAsync(context.CancellationToken);
     }
 }
 
@@ -61,18 +53,10 @@ internal sealed class DemoHouseholdSeededConsumer(
     public async Task Consume(ConsumeContext<DemoHouseholdSeededEvent> context)
     {
         var message = context.Message;
-        if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
-            return;
 
         await demoSeedManager.SeedGroupExpensesAsync(message.UserId, message.HouseholdId, context.CancellationToken);
 
-        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoHouseholdSeededEvent), DateTime.UtcNow));
-
-        try
-        {
-            await db.SaveChangesAsync(context.CancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) { }
+        await db.SaveChangesAsync(context.CancellationToken);
     }
 }
 
@@ -83,8 +67,6 @@ internal sealed class DemoUserExpiredConsumer(
     public async Task Consume(ConsumeContext<DemoUserExpired> context)
     {
         var message = context.Message;
-        if (await db.ProcessedEvents.AnyAsync(e => e.EventId == message.Id, context.CancellationToken))
-            return;
 
         var userId = new UserId(message.UserId);
 
@@ -95,12 +77,6 @@ internal sealed class DemoUserExpiredConsumer(
         if (projection is not null)
             db.UserProjections.Remove(projection);
 
-        db.ProcessedEvents.Add(new ProcessedEvent(message.Id, nameof(DemoUserExpired), DateTime.UtcNow));
-
-        try
-        {
-            await db.SaveChangesAsync(context.CancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) { }
+        await db.SaveChangesAsync(context.CancellationToken);
     }
 }
