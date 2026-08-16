@@ -9,7 +9,7 @@ namespace Tests;
 
 /// <summary>
 /// Generation is driven by somebody acting, not by a clock, and it must be safe to call twice —
-/// two people paying the same month at once must not produce two bills.
+/// two people paying the same month at once must not produce two expenses.
 /// </summary>
 public class RecurringExpenseManagerTests
 {
@@ -84,7 +84,7 @@ public class RecurringExpenseManagerTests
     }
 
     [Fact]
-    public async Task Forecast_ReportsWhatWasBilled_ForRecordedMonthsAndTheScheduleForTherest()
+    public async Task Forecast_ReportsWhatWasRecorded_ForRecordedMonthsAndTheScheduleForTherest()
     {
         var manager = NewManager(out _, out _);
         var schedule = await manager.CreateAsync(Rent());
@@ -96,7 +96,7 @@ public class RecurringExpenseManagerTests
         var forecast = await manager.ForecastAsync(schedule.RecurringExpenseId, User, Jan3, Jan3.AddMonths(3));
 
         Assert.Equal(3, forecast.Count);
-        // January was billed at 1,000 and says so; the months not yet recorded quote the schedule.
+        // January was recorded at 1,000 and says so; the months not yet recorded quote the schedule.
         Assert.Equal(1000m, forecast[0].Amount);
         Assert.NotNull(forecast[0].ExpenseId);
         Assert.Equal(1100m, forecast[1].Amount);
@@ -118,7 +118,7 @@ public class RecurringExpenseManagerTests
 
     // The route this arrives on carries no {groupId}, so the membership filter never fires and the
     // group is whatever the body says. Without this check a signed-in stranger could open a
-    // standing charge against any group whose id they had.
+    // standing cost against any group whose id they had.
     [Fact]
     public async Task Create_RefusesAGroupTheCallerIsNotIn()
     {
@@ -201,7 +201,7 @@ public class RecurringExpenseManagerTests
     }
 
     [Fact]
-    public async Task CatchUp_IsIdempotent_SoTwoLoadsDoNotDoubleBill()
+    public async Task CatchUp_IsIdempotent_SoTwoLoadsDoNotWriteTwice()
     {
         var manager = NewManager(out _, out var expenses);
         await manager.CreateAsync(Rent());
@@ -214,7 +214,7 @@ public class RecurringExpenseManagerTests
     }
 
     [Fact]
-    public async Task CatchUp_BillsEachPeriodAtWhatWasAgreedThen()
+    public async Task CatchUp_WritesEachPeriodAtWhatWasAgreedThen()
     {
         var manager = NewManager(out _, out var expenses);
         var schedule = await manager.CreateAsync(Rent());

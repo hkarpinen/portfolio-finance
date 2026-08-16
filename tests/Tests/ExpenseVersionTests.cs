@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Tests;
 
 /// <summary>
-/// The version is what stops two people re-cutting one bill at once. Shares are their own rows, so
+/// The version is what stops two people re-cutting one expense at once. Shares are their own rows, so
 /// "they must not exceed the total" is read-then-write: both writers see the same total, both fit,
 /// and the sum lands above it. Every write that could break that moves the version, so the second
 /// one is rejected instead.
@@ -27,7 +27,7 @@ public class ExpenseVersionTests
     }
 
     // The total is what the shares have to fit inside, so changing it has to be serialised against
-    // them too — otherwise shrinking a bill races a share being added and strands the shares above it.
+    // them too — otherwise shrinking an expense races a share being added and strands the shares above it.
     [Fact]
     public void TheTotalChanging_MovesTheVersionAsWell()
     {
@@ -64,13 +64,16 @@ public class ExpenseVersionTests
         Assert.Empty(expense.GetDomainEvents());
     }
 
-    // The rule about how much an expense can be divided into is the EXPENSE's — it used to be a
-    // static taking the total as an argument, so nothing stopped a caller handing it one that was
-    // not this expense's.
+    // How much an expense can be divided into is the EXPENSE's rule, asked of the expense itself
+    // so no caller can supply a total that is not its own.
     [Theory]
-    [InlineData(600, 300, true)]    // room left
-    [InlineData(600, 300.00, true)] // to the penny
-    [InlineData(600, 300.01, false)]// a penny over
+    // Rent is 900. 600 + 300.00 was written as a separate "to the penny" case, but it is the same
+    // decimal as 600 + 300 — xUnit skipped it as a duplicate id, so the boundary went untested.
+    [InlineData(600, 200, true)]        // room left
+    [InlineData(600, 300, true)]        // exactly the total
+    [InlineData(599.99, 300.01, true)]  // exactly the total, to the penny
+    [InlineData(600, 300.01, false)]    // a penny over
+    [InlineData(899.99, 0.02, false)]   // a penny over, from the other side
     public void AnExpenseKnows_WhatMoreItCanBear(decimal others, decimal newShare, bool expected)
     {
         // Rent is 900.
@@ -98,10 +101,23 @@ public class ExpenseVersionTests
             sharesAlreadyOn: 600m);
     }
 
-    // Whoever fronted a shared bill has already borne their part; their share never gets settled.
-    // Read in three places from two fields before this, which is one rule able to drift twice.
+    // Fronting covers your own part ONLY when you fronted it. Under GroupCash the money came from
+    // the pot, so the payer owes their share into it like everyone else — and a read that says
+    // otherwise reports the payer as settled with no settlement entry behind it.
     [Fact]
-    public void TheFronterOfASharedBill_CoversTheirOwnShare()
+    public void UnderGroupCash_TheFronterCoversNobodysShare_NotEvenTheirOwn()
+    {
+        var payer = Guid.NewGuid();
+        var pooled = Expense.Create(
+            AccountingEntity.Group(Guid.NewGuid()), UserId.New(), "Rent",
+            Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow.Date,
+            payerUserId: payer, fundingSource: FundingSource.GroupCash);
+
+        Assert.False(pooled.CoversOwnShare(payer));
+    }
+
+    [Fact]
+    public void TheFronterOfASharedExpense_CoversTheirOwnShare()
     {
         var payer = Guid.NewGuid();
         var expense = Expense.Create(
@@ -113,7 +129,7 @@ public class ExpenseVersionTests
         Assert.False(expense.CoversOwnShare(Guid.NewGuid()));
     }
 
-    // A personal expense has no fronting and nobody to reimburse.
+    // A personal expense has no fronting and nobody to settle with.
     [Fact]
     public void AnExpenseOfYourOwn_CoversNobodysShare()
     {

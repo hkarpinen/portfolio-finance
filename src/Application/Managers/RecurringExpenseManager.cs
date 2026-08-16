@@ -35,21 +35,21 @@ public interface IRecurringExpenseManager
     /// Writes every occurrence that has come due and is not on the books yet, for one group or one
     /// person, and returns how many that was.
     ///
-    /// This is how a period passing turns into an expense without a clock: nobody needs the bill to
+    /// This is how a period passing turns into an expense without a clock: nobody needs the expense to
     /// exist until somebody looks at the money, and by the time they do, it does. Never writes
     /// past <paramref name="asOf"/> — a cost that has not happened does not belong in the books.
     /// </summary>
     Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default);
 
     /// <summary>
-    /// Opens the agreement and bills the occurrence the caller was entering, so somebody adding a
+    /// Opens the agreement and materialises the occurrence the caller was entering, so somebody adding a
     /// repeating cost gets an expense back exactly as if they had entered a one-off — the agreement
     /// sits behind it, and every later period comes from it.
     /// </summary>
-    Task<Expense> OpenAndBillFirstAsync(CreateRecurringExpenseCommand cmd, CancellationToken ct = default);
+    Task<Expense> OpenAndMaterialiseFirstAsync(CreateRecurringExpenseCommand cmd, CancellationToken ct = default);
 
     /// <summary>
-    /// Both halves of one person's catch-up: write the bills whose period has come round, then post
+    /// Both halves of one person's catch-up: write the expenses whose period has come round, then post
     /// anything now due — including a one-off entered ahead of its date. Paired here so the
     /// controller does not have to know that the second half is bookkeeping.
     /// </summary>
@@ -66,7 +66,7 @@ internal sealed class RecurringExpenseManager(
     {
         // The group is named by the body — this route has no {groupId} for the membership
         // filter to read — so the one check standing between a signed-in stranger and a standing
-        // charge on somebody else's group is this one.
+        // cost on somebody else's group is this one.
         if (cmd.GroupId is { } named && !await groups.IsCurrentMemberAsync(named, cmd.CallerUserId, ct))
             throw new UnauthorizedAccessException("Access denied.");
 
@@ -154,13 +154,13 @@ internal sealed class RecurringExpenseManager(
         return (generated, posted);
     }
 
-    public async Task<Expense> OpenAndBillFirstAsync(
+    public async Task<Expense> OpenAndMaterialiseFirstAsync(
         CreateRecurringExpenseCommand cmd, CancellationToken ct = default)
     {
         var schedule = await CreateAsync(cmd, ct);
 
         return await MaterialiseAsync(schedule.RecurringExpenseId, cmd.CallerUserId, cmd.AnchorDate, ct)
-            ?? throw new InvalidOperationException("The agreement was opened but its first bill was not written.");
+            ?? throw new InvalidOperationException("The agreement was opened but its first expense was not written.");
     }
 
     public async Task<int> CatchUpAsync(Guid? groupId, Guid userId, DateTime asOf, CancellationToken ct = default)
@@ -173,7 +173,7 @@ internal sealed class RecurringExpenseManager(
         var written = 0;
         foreach (var schedule in active)
         {
-            // Inclusive of today: a bill due this morning has come due.
+            // Inclusive of today: an expense due this morning has come due.
             var dates = schedule.OccurrencesIn(schedule.Recurrence.StartDate, due.AddDays(1));
             if (dates.Count == 0) continue;
 
@@ -197,7 +197,7 @@ internal sealed class RecurringExpenseManager(
         var schedule = await schedules.GetByIdAsync(RecurringExpenseId.Create(recurringExpenseId), ct);
         if (schedule is null) return null;
 
-        // Writing a bill into somebody's books. Anyone who can see the agreement may bill a period
+        // Writing an expense into somebody's books. Anyone who can see the agreement may materialise a period
         // that has come round — that is how paying a share generates the expense — but a stranger
         // must not be able to put a cost on a group they are not in.
         var isMember = schedule.GroupId is { } g

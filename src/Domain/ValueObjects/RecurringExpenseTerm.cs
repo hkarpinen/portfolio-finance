@@ -1,7 +1,7 @@
 namespace Finance.Domain.ValueObjects;
 
 /// <summary>
-/// What a schedule expensed from a given date onward.
+/// What a schedule holds from a given date onward.
 ///
 /// A rent rise is a new version, not an edit. That is how an agreement actually changes, and it
 /// means an expense generated for a date in the past picks up what was true THEN even if nobody had

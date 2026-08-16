@@ -104,22 +104,22 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
             if (callerShares.Count > 0)
             {
-                var splitIds = callerShares.Select(s => s.Id.Value).ToList();
+                var shareIds = callerShares.Select(s => s.Id.Value).ToList();
                 var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(
-                    _db, splitIds, cancellationToken);
+                    _db, shareIds, cancellationToken);
 
                 foreach (var expense in items)
                 {
                     var occurrence = expense.OccurrenceDate;
-                    var split = callerShares.FirstOrDefault(s => s.ExpenseId == expense.Id);
-                    if (split is null) continue;
+                    var share = callerShares.FirstOrDefault(s => s.ExpenseId == expense.Id);
+                    if (share is null) continue;
 
                     // The payer's own share counts as covered only once the VENDOR is paid.
                     // Everyone else's is covered when settlements reach the share — summed
                     // signed, so a reversal nets its original to zero.
                     var callerIsPayer = expense.CoversOwnShare(callerUserId.Value);
-                    var settled = settledMap.TryGetValue((split.Id.Value, occurrence.Date), out var sv) ? sv.Settled : 0m;
-                    if ((callerIsPayer && VendorPaidFor(expense.Id.Value)) || settled >= split.Amount.Amount)
+                    var settled = settledMap.TryGetValue((share.Id.Value, occurrence.Date), out var sv) ? sv.Settled : 0m;
+                    if ((callerIsPayer && VendorPaidFor(expense.Id.Value)) || settled >= share.Amount.Amount)
                         paidExpenseIds.Add(expense.Id.Value);
                 }
             }
@@ -151,12 +151,12 @@ internal sealed class ExpenseQuery : IExpenseQuery
     public async Task<IReadOnlyCollection<ShareDto>> ListSharesAsync(ListSharesParams request, CancellationToken cancellationToken = default)
     {
         var expenseId = ExpenseId.Create(request.ExpenseId);
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => s.ExpenseId == expenseId)
             .ToListAsync(cancellationToken);
 
-        return splits.Select(ExpenseMapper.ToShareResponse).ToArray();
+        return shares.Select(ExpenseMapper.ToShareResponse).ToArray();
     }
 
     public async Task<GroupExpenseDetailDto?> GetGroupExpenseDetailAsync(Guid expenseId, Guid callerUserId, CancellationToken cancellationToken = default)
@@ -164,20 +164,20 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var expense = await GetGroupDetailAsync(new GroupExpenseDetailParams(expenseId), cancellationToken);
         if (expense is null) return null;
 
-        var splits = await ListSharesAsync(new ListSharesParams(expenseId), cancellationToken);
+        var shares = await ListSharesAsync(new ListSharesParams(expenseId), cancellationToken);
 
         var occurrenceDate = expense.CurrentOccurrenceDate ?? expense.DueDate;
         var paidShareIds = await GetPaidShareIdsForExpenseAsync(expenseId, occurrenceDate, cancellationToken);
         var payerGuid = expense.PayerUserId;
 
         var names = await UserProjection.NamesAsync(
-            _db.UserProjections, splits.Select(s => s.UserId).Distinct().ToList(), cancellationToken);
+            _db.UserProjections, shares.Select(s => s.UserId).Distinct().ToList(), cancellationToken);
 
         var roles = expense.Scope == ExpenseScope.Group
             ? await GroupMemberProjection.RolesAsync(_db.GroupMemberProjections, expense.OwnerId, cancellationToken)
             : [];
 
-        var enrichedShares = splits.Select(s =>
+        var enrichedShares = shares.Select(s =>
         {
             return new ShareDetailDto(
                 s.ShareId,
@@ -193,39 +193,39 @@ internal sealed class ExpenseQuery : IExpenseQuery
         return new GroupExpenseDetailDto(expense, enrichedShares);
     }
 
-    public async Task<ShareDetailDto?> GetShareDetailAsync(Guid splitId, CancellationToken cancellationToken = default)
+    public async Task<ShareDetailDto?> GetShareDetailAsync(Guid shareId, CancellationToken cancellationToken = default)
     {
-        var id = ShareId.Create(splitId);
-        var split = await _db.Shares
+        var id = ShareId.Create(shareId);
+        var share = await _db.Shares
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
-        if (split is null) return null;
+        if (share is null) return null;
 
         var expense = await _db.Expenses
             .AsNoTracking()
-            .FirstOrDefaultAsync(e => e.Id == split.ExpenseId, cancellationToken);
+            .FirstOrDefaultAsync(e => e.Id == share.ExpenseId, cancellationToken);
         if (expense is null) return null;
 
         var occurrenceDate = expense.OccurrenceDate;
-        var paidShareIds = await GetPaidShareIdsForExpenseAsync(split.ExpenseId.Value, occurrenceDate, cancellationToken);
+        var paidShareIds = await GetPaidShareIdsForExpenseAsync(share.ExpenseId.Value, occurrenceDate, cancellationToken);
 
-        var profiles = await UserProjection.ProfilesAsync(_db.UserProjections, [split.UserId.Value], cancellationToken);
-        profiles.TryGetValue(split.UserId.Value, out var profile);
+        var profiles = await UserProjection.ProfilesAsync(_db.UserProjections, [share.UserId.Value], cancellationToken);
+        profiles.TryGetValue(share.UserId.Value, out var profile);
 
         var membershipRole = expense.Owner.IsGroup
             ? (await GroupMemberProjection.RolesAsync(_db.GroupMemberProjections, expense.Owner.Id, cancellationToken))
-                .GetValueOrDefault(split.UserId.Value)
+                .GetValueOrDefault(share.UserId.Value)
             : null;
 
         return new ShareDetailDto(
-            split.Id.Value,
-            split.UserId.Value,
+            share.Id.Value,
+            share.UserId.Value,
             profile.Name,
             profile.AvatarUrl,
             membershipRole ?? "Member",
-            split.Amount.Amount,
-            split.Amount.Currency,
-            paidShareIds.Contains(split.Id.Value));
+            share.Amount.Amount,
+            share.Amount.Currency,
+            paidShareIds.Contains(share.Id.Value));
     }
 
     public Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default)
@@ -249,25 +249,25 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
         var expenseIds = relevantExpenses.Select(b => b.Id).ToList();
 
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => expenseIds.Contains(s.ExpenseId))
             .ToListAsync(cancellationToken);
 
-        if (splits.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
+        if (shares.Count == 0) return BuildEmptyMonths(windowStart, windowEnd);
 
         var expenseById = relevantExpenses.ToDictionary(b => b.Id);
         var nameById = await UserProjection.NamesAsync(
-            _db.UserProjections, splits.Select(s => s.UserId.Value).Distinct().ToList(), cancellationToken);
+            _db.UserProjections, shares.Select(s => s.UserId.Value).Distinct().ToList(), cancellationToken);
 
-        var splitIds = splits.Select(s => s.Id.Value).ToList();
+        var shareIds = shares.Select(s => s.Id.Value).ToList();
 
         // Settled total per (share, occurrence) from the ledger — signed so reversals net to
         // zero. A share is "paid" when settled ≥ share (partial-aware).
         var settledByShareOccurrence = await SettlementReads.GetSettledByShareOccurrenceAsync(
-            _db, splitIds, cancellationToken);
+            _db, shareIds, cancellationToken);
 
-        // The payer's own share counts as covered only once the bill itself is paid.
+        // The payer's own share counts as covered only once the expense itself is paid.
         var owedToVendor = await VendorPaymentReads.GetOwedToVendorByExpenseAsync(
             _db, expenseIds.Select(e => e.Value).ToList(), cancellationToken);
         bool vendorPaidFor(Guid expenseId) =>
@@ -277,25 +277,25 @@ internal sealed class ExpenseQuery : IExpenseQuery
 
         var projected = new List<(int Year, int Month, Guid UserId, bool IsPaid, decimal Amount, string Currency, ContributionItemDto Item)>();
 
-        foreach (var split in splits)
+        foreach (var share in shares)
         {
-            if (!expenseById.TryGetValue(split.ExpenseId, out var expense)) continue;
+            if (!expenseById.TryGetValue(share.ExpenseId, out var expense)) continue;
 
             IEnumerable<DateTime> occurrenceDates = [expense.OccurrenceDate];
 
-            // Before the vendor is paid the bill is upcoming and no share is settled.
-            var isPayerOwnShare = expense.CoversOwnShare(split.UserId.Value) && vendorPaidFor(expense.Id.Value);
+            // Before the vendor is paid the expense is upcoming and no share is settled.
+            var isPayerOwnShare = expense.CoversOwnShare(share.UserId.Value) && vendorPaidFor(expense.Id.Value);
 
             foreach (var date in occurrenceDates)
             {
-                var settled = settledByShareOccurrence.TryGetValue((split.Id.Value, date.Date), out var sv) ? sv.Settled : 0m;
-                var isPaid = isPayerOwnShare || settled >= split.Amount.Amount;
-                projected.Add((date.Year, date.Month, split.UserId.Value, isPaid,
-                    split.Amount.Amount, split.Amount.Currency,
+                var settled = settledByShareOccurrence.TryGetValue((share.Id.Value, date.Date), out var sv) ? sv.Settled : 0m;
+                var isPaid = isPayerOwnShare || settled >= share.Amount.Amount;
+                projected.Add((date.Year, date.Month, share.UserId.Value, isPaid,
+                    share.Amount.Amount, share.Amount.Currency,
                     new ContributionItemDto(
-                        split.Id.Value, expense.Id.Value,
+                        share.Id.Value, expense.Id.Value,
                         expense.Title, expense.Category.ToString(),
-                        split.Amount.Amount, split.Amount.Currency,
+                        share.Amount.Amount, share.Amount.Currency,
                         date, isPaid)));
             }
         }
@@ -334,7 +334,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
         return result;
     }
 
-    /// <summary>Share IDs whose share is fully settled (Σ reimbursements ≥ share) for the
+    /// <summary>Share IDs whose share is fully settled (Σ settlements ≥ share) for the
     /// given occurrence. Does NOT include payer-covered shares — callers that know the
     /// payer apply that separately.</summary>
     private async Task<IReadOnlySet<Guid>> GetPaidShareIdsForExpenseAsync(
@@ -343,33 +343,33 @@ internal sealed class ExpenseQuery : IExpenseQuery
         var occ = DateTime.SpecifyKind(occurrenceDate.Date, DateTimeKind.Utc);
         var eid = ExpenseId.Create(expenseId);
 
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => s.ExpenseId == eid)
             .ToListAsync(cancellationToken);
-        if (splits.Count == 0) return new HashSet<Guid>();
+        if (shares.Count == 0) return new HashSet<Guid>();
 
-        var splitIds = splits.Select(s => s.Id.Value).ToList();
-        var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(_db, splitIds, cancellationToken);
+        var shareIds = shares.Select(s => s.Id.Value).ToList();
+        var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(_db, shareIds, cancellationToken);
 
         var settledBy = settledMap
             .Where(kv => kv.Key.Occurrence.Date == occ.Date)
             .ToDictionary(kv => kv.Key.ShareId, kv => kv.Value.Settled);
 
-        return splits
+        return shares
             .Where(s => settledBy.TryGetValue(s.Id.Value, out var st) && st >= s.Amount.Amount)
             .Select(s => s.Id.Value)
             .ToHashSet();
     }
 
     /// <summary>
-    /// Per-member net balance within a group. Computes total owed/owed-to-caller from claimed splits.
+    /// Per-member net balance within a group. Computes total owed/owed-to-caller from shares net of settlement.
     /// NetSettlement is positive when the member owes the caller, negative when the caller owes them.
     /// </summary>
     public async Task<MemberBalanceListDto> ListMemberBalancesAsync(
         GroupId groupId, Guid callerUserId, CancellationToken cancellationToken = default)
     {
-        // Gather all active expenses in this group along with their splits.
+        // Gather all active expenses in this group along with their shares.
         var expenses = await _db.Expenses
             .AsNoTracking()
             // Owner.Kind/Owner.Id rather than the computed GroupId, which has no column and
@@ -381,50 +381,50 @@ internal sealed class ExpenseQuery : IExpenseQuery
             return new MemberBalanceListDto([], 0);
 
         var expenseIds = expenses.Select(e => e.Id).ToList();
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => expenseIds.Contains(s.ExpenseId))
             .ToListAsync(cancellationToken);
 
-        if (splits.Count == 0)
+        if (shares.Count == 0)
             return new MemberBalanceListDto([], 0);
 
-        // Settled total per split (signed sum across occurrences — reversals net to
-        // zero). Outstanding = share − settled; partial reimbursements reduce the debt.
-        var splitIds = splits.Select(s => s.Id.Value).ToList();
-        var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(_db, splitIds, cancellationToken);
+        // Settled total per share (signed sum across occurrences — reversals net to
+        // zero). Outstanding = share − settled; partial settlements reduce the debt.
+        var shareIds = shares.Select(s => s.Id.Value).ToList();
+        var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(_db, shareIds, cancellationToken);
         var settledByShare = settledMap
             .GroupBy(kv => kv.Key.ShareId)
             .ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value.Settled));
 
-        // A debt to the payer exists only once the vendor has actually been paid (the bill was
-        // fronted/funded). Upcoming, unpaid bills create no balances. Derived from the ledger.
+        // A debt to the payer exists only once the vendor has actually been paid (the expense was
+        // fronted/funded). Upcoming, unpaid expenses create no balances. Derived from the ledger.
         var owedToVendor = await VendorPaymentReads.GetOwedToVendorByExpenseAsync(_db, expenseIds.Select(e => e.Value).ToList(), cancellationToken);
         bool vendorPaidFor(Guid expenseId) =>
             !owedToVendor.TryGetValue(expenseId, out var owed) || owed <= 0.005m;
 
-        // Naive balance model: for each split, the debtor owes the expense's payer the
+        // Naive balance model: for each share, the debtor owes the expense's payer the
         // OUTSTANDING amount. Group expenses always have a payer (set at creation).
         var membersById = new Dictionary<Guid, MemberBalanceAccumulator>();
 
-        foreach (var split in splits)
+        foreach (var share in shares)
         {
-            var expense = expenses.First(e => e.Id == split.ExpenseId);
+            var expense = expenses.First(e => e.Id == share.ExpenseId);
             var payerUserId = expense.PayerUserId;
             if (payerUserId is null) continue;
 
-            // No debts until the bill is actually paid (the payer has fronted it / pot funded it).
+            // No debts until the expense is actually paid (the payer has fronted it / pot funded it).
             if (!vendorPaidFor(expense.Id.Value)) continue;
 
-            var debtorUserId = split.UserId.Value;
+            var debtorUserId = share.UserId.Value;
 
-            // Skip self-payer splits (the payer's own share is covered, not a debt).
+            // Skip self-payer shares (the payer's own share is covered, not a debt).
             if (payerUserId == debtorUserId) continue;
 
-            var settled = settledByShare.TryGetValue(split.Id.Value, out var st) ? st : 0m;
-            var amount = split.Amount.Amount - settled;   // outstanding
+            var settled = settledByShare.TryGetValue(share.Id.Value, out var st) ? st : 0m;
+            var amount = share.Amount.Amount - settled;   // outstanding
             if (amount <= 0) continue;                     // fully settled
-            var currency = split.Amount.Currency;
+            var currency = share.Amount.Currency;
 
             if (payerUserId == callerUserId)
             {
@@ -466,7 +466,7 @@ internal sealed class ExpenseQuery : IExpenseQuery
     }
 
     /// <summary>
-    /// Returns the most recent fully-settled period (last day of the latest month where every split is claimed)
+    /// Returns the most recent fully-settled period (last day of the latest month where every share is settled)
     /// or null when no period in the past 12 months is fully settled.
     /// </summary>
     public async Task<SettlementSummaryDto?> GetLastSettlementAsync(GroupId groupId, CancellationToken cancellationToken = default)

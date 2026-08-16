@@ -11,9 +11,8 @@ public sealed class CreateExpenseRequestValidator : AbstractValidator<CreateExpe
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
-        // Category stays a free string on the DTO for API compatibility, but must name a real
-        // ExpenseCategory (case-insensitive). The manager already falls back to Other, so this rule only
-        // rejects genuinely bogus input instead of silently coercing it.
+        // Category stays a free string on the DTO for API compatibility. This rule is load-bearing:
+        // ExpenseCategories.Parse THROWS on an unknown one, so without it bad input is a 500.
         RuleFor(x => x.Category).NotEmpty().Must(BeAExpenseCategory)
             .WithMessage("Category must be a valid expense category.");
         RuleFor(x => x.DueDate).NotEmpty();

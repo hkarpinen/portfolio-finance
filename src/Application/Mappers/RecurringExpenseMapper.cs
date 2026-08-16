@@ -21,7 +21,7 @@ public static class RecurringExpenseMapper
         IsActive: schedule.IsActive);
 
     /// <summary>
-    /// One date the schedule covers. A recorded occurrence reports what it was BILLED at; one with
+    /// One date the schedule covers. A recorded occurrence reports what it was RECORDED at; one with
     /// nothing behind it quotes the schedule as it stood on that date, which is the forecast.
     /// </summary>
     public static ScheduledOccurrenceDto ToOccurrence(RecurringExpense schedule, DateTime date, Expense? recorded) =>

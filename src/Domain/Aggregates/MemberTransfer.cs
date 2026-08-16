@@ -1,3 +1,4 @@
+using Finance.Domain.Engines;
 using Finance.Domain.Events;
 using Finance.Domain.ValueObjects;
 
@@ -62,5 +63,5 @@ public sealed class MemberTransfer : IAggregateRoot
     /// between the same two people, so anything derived from the pair would make the second payment
     /// look like a redelivery of the first and swallow it.
     /// </summary>
-    public string LedgerSource => $"settleup:{Id.Value:N}";
+    public string LedgerSource => LedgerSources.SettleUp(Id.Value);
 }

@@ -29,9 +29,9 @@ public sealed class SettleUpTransferBodyValidator : AbstractValidator<SettleUpTr
     }
 }
 
-public sealed class AllocateEvenlyBodyValidator : AbstractValidator<AllocateEvenlyBody>
+public sealed class SplitEvenlyBodyValidator : AbstractValidator<SplitEvenlyBody>
 {
-    public AllocateEvenlyBodyValidator()
+    public SplitEvenlyBodyValidator()
     {
         // An empty list divides a cost among nobody; a repeated id gives one member two shares.
         RuleFor(x => x.UserIds).NotEmpty();

@@ -5,10 +5,10 @@ namespace Finance.Application.Repositories;
 
 public interface IShareRepository
 {
-    Task AddAsync(Share split, CancellationToken cancellationToken = default);
-    Task UpdateAsync(Share split, CancellationToken cancellationToken = default);
-    Task RemoveAsync(Share split, CancellationToken cancellationToken = default);
-    Task<Share?> GetByIdAsync(ShareId splitId, CancellationToken cancellationToken = default);
+    Task AddAsync(Share share, CancellationToken cancellationToken = default);
+    Task UpdateAsync(Share share, CancellationToken cancellationToken = default);
+    Task RemoveAsync(Share share, CancellationToken cancellationToken = default);
+    Task<Share?> GetByIdAsync(ShareId shareId, CancellationToken cancellationToken = default);
     Task<Share?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Share>> ListByExpenseAsync(ExpenseId expenseId, CancellationToken cancellationToken = default);
 

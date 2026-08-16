@@ -40,7 +40,7 @@ public sealed class JournalEntry : IAggregateRoot
     public LedgerId LedgerId { get; private set; }
     public DateTime Date { get; private set; }          // value date — when the event economically occurred
     public string Description { get; private set; } = string.Empty;
-    public string? Source { get; private set; }         // originating document (expenseId, reimbursement, bank txn) — P9
+    public string? Source { get; private set; }         // originating document (expenseId, settlement, bank txn) — P9
     public DateTime RecordedAt { get; private set; }    // booking date — when entered into the system
 
     /// <summary>
@@ -52,7 +52,7 @@ public sealed class JournalEntry : IAggregateRoot
     public JournalEntryId? ReversalOfEntryId { get; private set; }
 
     // Makes "active" a DECLARED state — in effect iff neither a reversal nor itself
-    // reversed — so a partial unique index can forbid a second active journalLine per source.
+    // reversed — so a partial unique index can forbid a second active entry per source.
     public Guid? ReversedByEntryId { get; private set; }
 
     // Opaque to the ledger. Lets a read model attribute an entry by column instead of

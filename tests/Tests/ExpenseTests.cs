@@ -10,7 +10,7 @@ public class ExpenseTests
         UserId? userId = null,
         decimal amount = 75m,
         ExpenseCategory category = ExpenseCategory.Utilities,
-        string title = "Phone Bill")
+        string title = "Phone Expense")
     {
         return Expense.CreateOwn(
             userId ?? UserId.New(),
@@ -27,24 +27,24 @@ public class ExpenseTests
         var dueDate = DateTime.UtcNow.Date.AddDays(7);
         var amount = Money.Create(120m, "USD");
 
-        var bill = Expense.CreateOwn(userId, "Netflix", amount, ExpenseCategory.Other, dueDate, description: "Streaming");
+        var expense = Expense.CreateOwn(userId, "Netflix", amount, ExpenseCategory.Other, dueDate, description: "Streaming");
 
-        Assert.Equal(userId, bill.EnteredBy);
-        Assert.Equal("Netflix", bill.Title);
-        Assert.Equal(120m, bill.Amount.Amount);
-        Assert.Equal(ExpenseCategory.Other, bill.Category);
-        Assert.Equal(dueDate, bill.DueDate);
-        Assert.Equal("Streaming", bill.Description);
-        Assert.True(bill.IsActive);
+        Assert.Equal(userId, expense.EnteredBy);
+        Assert.Equal("Netflix", expense.Title);
+        Assert.Equal(120m, expense.Amount.Amount);
+        Assert.Equal(ExpenseCategory.Other, expense.Category);
+        Assert.Equal(dueDate, expense.DueDate);
+        Assert.Equal("Streaming", expense.Description);
+        Assert.True(expense.IsActive);
     }
 
     [Fact]
     public void Create_ShouldRaise_ExpenseCreatedEvent()
     {
-        var bill = CreateValidExpense();
+        var expense = CreateValidExpense();
 
-        Assert.Single(bill.GetDomainEvents());
-        Assert.IsType<ExpenseCreated>(bill.GetDomainEvents()[0]);
+        Assert.Single(expense.GetDomainEvents());
+        Assert.IsType<ExpenseCreated>(expense.GetDomainEvents()[0]);
     }
 
     [Fact]
@@ -66,102 +66,102 @@ public class ExpenseTests
     [Fact]
     public void Update_ShouldChangeTitleAmountCategoryAndDueDate()
     {
-        var bill = CreateValidExpense();
-        bill.ClearDomainEvents();
+        var expense = CreateValidExpense();
+        expense.ClearDomainEvents();
         var newDueDate = DateTime.UtcNow.Date.AddDays(14);
 
-        bill.Update("Updated Bill", Money.Create(200m, "USD"), ExpenseCategory.Rent, newDueDate, description: "New desc");
+        expense.Update("Updated Expense", Money.Create(200m, "USD"), ExpenseCategory.Rent, newDueDate, description: "New desc");
 
-        Assert.Equal("Updated Bill", bill.Title);
-        Assert.Equal(200m, bill.Amount.Amount);
-        Assert.Equal(ExpenseCategory.Rent, bill.Category);
-        Assert.Equal(newDueDate, bill.DueDate);
-        Assert.Equal("New desc", bill.Description);
+        Assert.Equal("Updated Expense", expense.Title);
+        Assert.Equal(200m, expense.Amount.Amount);
+        Assert.Equal(ExpenseCategory.Rent, expense.Category);
+        Assert.Equal(newDueDate, expense.DueDate);
+        Assert.Equal("New desc", expense.Description);
     }
 
     [Fact]
     public void Update_ShouldRaise_ExpenseUpdatedEvent()
     {
-        var bill = CreateValidExpense();
-        bill.ClearDomainEvents();
+        var expense = CreateValidExpense();
+        expense.ClearDomainEvents();
 
-        bill.Update("New Title", Money.Create(50m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(5));
+        expense.Update("New Title", Money.Create(50m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(5));
 
-        Assert.Single(bill.GetDomainEvents());
-        Assert.IsType<ExpenseUpdated>(bill.GetDomainEvents()[0]);
+        Assert.Single(expense.GetDomainEvents());
+        Assert.IsType<ExpenseUpdated>(expense.GetDomainEvents()[0]);
     }
 
     [Fact]
     public void Update_EmptyTitle_ShouldThrow()
     {
-        var bill = CreateValidExpense();
+        var expense = CreateValidExpense();
 
         Assert.Throws<ArgumentException>(() =>
-            bill.Update("", Money.Create(50m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
+            expense.Update("", Money.Create(50m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date.AddDays(1)));
     }
 
     [Fact]
     public void Deactivate_ShouldSetIsActiveFalse()
     {
-        var bill = CreateValidExpense();
+        var expense = CreateValidExpense();
 
-        bill.Deactivate();
+        expense.Deactivate();
 
-        Assert.False(bill.IsActive);
+        Assert.False(expense.IsActive);
     }
 
     [Fact]
     public void Deactivate_ShouldRaise_ExpenseDeactivatedEvent()
     {
-        var bill = CreateValidExpense();
-        bill.ClearDomainEvents();
+        var expense = CreateValidExpense();
+        expense.ClearDomainEvents();
 
-        bill.Deactivate();
+        expense.Deactivate();
 
-        Assert.Single(bill.GetDomainEvents());
-        Assert.IsType<ExpenseDeactivated>(bill.GetDomainEvents()[0]);
+        Assert.Single(expense.GetDomainEvents());
+        Assert.IsType<ExpenseDeactivated>(expense.GetDomainEvents()[0]);
     }
 
     [Fact]
     public void Deactivate_WhenAlreadyInactive_ShouldThrow()
     {
-        var bill = CreateValidExpense();
-        bill.Deactivate();
+        var expense = CreateValidExpense();
+        expense.Deactivate();
 
-        Assert.Throws<InvalidOperationException>(() => bill.Deactivate());
+        Assert.Throws<InvalidOperationException>(() => expense.Deactivate());
     }
 
     [Fact]
     public void TryDeactivate_WhenActive_ShouldReturnTrue_AndSetInactive()
     {
-        var bill = CreateValidExpense();
+        var expense = CreateValidExpense();
 
-        var result = bill.TryDeactivate();
+        var result = expense.TryDeactivate();
 
         Assert.True(result);
-        Assert.False(bill.IsActive);
+        Assert.False(expense.IsActive);
     }
 
     [Fact]
     public void TryDeactivate_WhenAlreadyInactive_ShouldReturnFalse()
     {
-        var bill = CreateValidExpense();
-        bill.Deactivate();
+        var expense = CreateValidExpense();
+        expense.Deactivate();
 
-        var result = bill.TryDeactivate();
+        var result = expense.TryDeactivate();
 
         Assert.False(result);
-        Assert.False(bill.IsActive);
+        Assert.False(expense.IsActive);
     }
 
     [Fact]
     public void ClearDomainEvents_ShouldEmptyEvents()
     {
-        var bill = CreateValidExpense();
-        Assert.NotEmpty(bill.GetDomainEvents());
+        var expense = CreateValidExpense();
+        Assert.NotEmpty(expense.GetDomainEvents());
 
-        bill.ClearDomainEvents();
+        expense.ClearDomainEvents();
 
-        Assert.Empty(bill.GetDomainEvents());
+        Assert.Empty(expense.GetDomainEvents());
     }
 }

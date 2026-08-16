@@ -94,7 +94,7 @@ public sealed class DebtTerms
     }
 
     /// <summary>
-    /// One month's rate. A card really expenses a daily periodic rate against the average daily
+    /// One month's rate. A card really applies a daily periodic rate against the average daily
     /// balance; this is the monthly approximation, which is why an accrual posted from it is an
     /// estimate until a statement says otherwise.
     /// </summary>

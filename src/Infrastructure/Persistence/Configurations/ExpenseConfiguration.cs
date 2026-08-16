@@ -15,8 +15,6 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(b => b.Id)
             .HasConversion(id => id.Value, v => new ExpenseId(v));
 
-        // Whose books this lands in. group_id and user_id used to say it between them, with
-        // user_id meaning two different things depending on the other.
         builder.Ignore(b => b.GroupId);
         builder.ComplexProperty(b => b.Owner, owner =>
         {
@@ -44,7 +42,7 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsUnique()
             .HasFilter("recurring_expense_id IS NOT NULL");
 
-        // The IDENTITY userId of the person who fronted the bill — not a membership id. Null on personal.
+        // The IDENTITY userId of the person who fronted the expense — not a membership id. Null on personal.
         builder.Property(b => b.PayerUserId).IsRequired(false);
 
         builder.Property(b => b.FundingSource).HasConversion<string>().HasMaxLength(20).IsRequired();

@@ -77,8 +77,7 @@ internal sealed class BankSynchroniser : IBankSynchroniser
                     if (account is null) continue;
                 }
 
-                // Signed as the provider reported it. Both call sites used to abs() here, which
-                // made IsInflow permanently false and every deposit read as a payment.
+                // Signed as the provider reported it — see FinancialTransaction. Do not abs().
                 var txn = FinancialTransaction.Create(
                     connection.Id, account.Id, connection.UserId,
                     dto.TransactionId,
@@ -212,7 +211,7 @@ internal sealed class BankSynchroniser : IBankSynchroniser
                 CallerUserId: connection.UserId.Value,
                 Name: account.Name,
                 Currency: account.CurrencyCode,
-                IsCredit: account.IsCredit,
+                Kind: account.IsCredit ? BankAccountKind.Debt : BankAccountKind.Cash,
                 // A card reports what you owe as a positive number and so does a current account
                 // report what you hold, so the figure carries in as given and its side comes from
                 // the account's kind.

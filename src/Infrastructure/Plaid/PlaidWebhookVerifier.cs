@@ -1,3 +1,4 @@
+using Finance.Application.Ports;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,13 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Infrastructure.Plaid;
 
-public interface IPlaidWebhookVerifier
-{
-    // Returns false — never throws — on a missing header, an invalid JWT, or a body-hash mismatch.
-    Task<bool> VerifyAsync(string verificationJwt, byte[] rawBody, CancellationToken ct = default);
-}
-
-internal sealed class PlaidWebhookVerifier : IPlaidWebhookVerifier
+internal sealed class PlaidWebhookVerifier : IBankWebhookVerifier
 {
     private readonly HttpClient _http;
     private readonly PlaidOptions _options;

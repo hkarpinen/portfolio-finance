@@ -7,7 +7,7 @@ namespace Infrastructure.Plaid;
 ///
 /// Their taxonomy is theirs and changes when they say so, which is exactly why it does not reach
 /// the domain: an expense is filed under one of our categories or under Other, and a category we
-/// have never heard of costs nothing more than a bill somebody has not sorted yet.
+/// have never heard of costs nothing more than an expense somebody has not sorted yet.
 /// </summary>
 internal static class BankCategories
 {

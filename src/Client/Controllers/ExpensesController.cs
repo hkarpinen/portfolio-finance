@@ -1,3 +1,4 @@
+using Finance.Application.Dtos;
 using Finance.Application.Commands;
 using Finance.Application.Queries;
 using Finance.Application.Managers;
@@ -13,7 +14,7 @@ namespace Client.Controllers;
 /// <summary>
 /// Personal and group-scoped expense routes, both over the same aggregate.
 ///
-/// No ledger journalLine is coordinated here. Each mutation commits its aggregate change
+/// No ledger posting is coordinated here. Each mutation commits its aggregate change
 /// and the events it raised in one transaction, and the books follow from those events
 /// — so the response returns BEFORE the ledger moves.
 ///
@@ -39,6 +40,7 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(ExpenseListDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -47,6 +49,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpGet("{expenseId:guid}")]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDetail(Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -55,6 +59,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateExpenseCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -63,6 +69,10 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPut("{expenseId:guid}")]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(Guid expenseId, [FromBody] UpdateExpenseCommand request, CancellationToken ct = default)
     {
         // From the token, OVERWRITING the body — it is bindable, so a client could
@@ -73,6 +83,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpDelete("{expenseId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -81,6 +93,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost("{expenseId:guid}/payments")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> MarkPaid(Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -89,6 +103,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpDelete("{expenseId:guid}/payments")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> MarkUnpaid(Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -97,6 +113,7 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses")]
+    [ProducesResponseType(typeof(GroupExpenseListDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListByGroup(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -106,6 +123,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetGroupDetail(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var result = await _query.GetGroupDetailAsync(new GroupExpenseDetailParams(expenseId), ct);
@@ -113,6 +132,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/detail")]
+    [ProducesResponseType(typeof(GroupExpenseDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetGroupFullDetail(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -121,6 +142,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/expenses")]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateGroup(Guid groupId, [FromBody] CreateGroupExpenseCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -131,6 +154,10 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPut("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    [ProducesResponseType(typeof(ExpenseResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateGroup(Guid groupId, Guid expenseId, [FromBody] UpdateGroupExpenseCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -140,6 +167,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateGroup(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -150,6 +179,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/payments")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PayShare(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -158,6 +189,8 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/payments")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UnpayShare(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -169,6 +202,8 @@ public sealed class ExpensesController : ControllerBase
     /// a member fronted it (FundingSource=PayerMember) or it came from the shared pot (GroupCash).
     /// Posts Dr Vendor Payable / Cr funding. "Is it paid" is then derived from the ledger.</summary>
     [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/vendor-payment")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PayVendor(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -181,6 +216,8 @@ public sealed class ExpensesController : ControllerBase
 
     /// <summary>Undo a vendor payment — VendorPaymentReversed drives the contra entry.</summary>
     [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/vendor-payment")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UnpayVendor(Guid groupId, Guid expenseId, [FromBody] PaymentOccurrenceBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -191,6 +228,8 @@ public sealed class ExpensesController : ControllerBase
     /// <summary>The caller records a direct settle-up payment to another member (squaring what they
     /// owe). Self-service — the caller is always the payer (from). Posts Dr Member:to / Cr Member:from.</summary>
     [HttpPost("/api/finance/groups/{groupId:guid}/settlements/transfer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SettleUpTransfer(Guid groupId, [FromBody] SettleUpTransferBody body, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -199,11 +238,18 @@ public sealed class ExpensesController : ControllerBase
         if (body.ToUserId == userId.Value) return BadRequest(new { error = "Can't settle up with yourself." });
         if (body.Amount <= 0) return BadRequest(new { error = "Amount must be positive." });
 
-        await _manager.SettleUpAsync(groupId, userId.Value, body.ToUserId, body.Amount, body.Currency, ct);
+        await _manager.SettleUpAsync(
+            groupId: groupId,
+            fromUserId: userId.Value,
+            toUserId: body.ToUserId,
+            amount: body.Amount,
+            currency: body.Currency,
+            ct: ct);
         return NoContent();
     }
 
     [HttpGet("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ShareDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListShares(Guid groupId, Guid expenseId, CancellationToken ct = default)
     {
         var result = await _query.ListSharesAsync(new ListSharesParams(expenseId), ct);
@@ -211,6 +257,10 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits")]
+    [ProducesResponseType(typeof(ShareDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpsertShare(Guid groupId, Guid expenseId, [FromBody] UpsertShareCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -225,7 +275,7 @@ public sealed class ExpensesController : ControllerBase
         try
         {
             // ShareCreated/ShareUpdated, committed with the upsert, drive the share's ledger
-            // journalLine — reverse-then-repost on re-amounting.
+            // posting — reverse-then-repost on re-amounting.
             var written = await _manager.UpsertShareAsync(
                 request with { ExpenseId = expenseId, GroupId = groupId, MemberUserId = userId.Value, CallerUserId = userId.Value }, ct);
 
@@ -239,21 +289,27 @@ public sealed class ExpensesController : ControllerBase
     }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits/even")]
-    public async Task<IActionResult> AllocateEvenly(Guid groupId, Guid expenseId, [FromBody] AllocateEvenlyBody body, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SplitEvenly(Guid groupId, Guid expenseId, [FromBody] SplitEvenlyBody body, CancellationToken ct = default)
     {
-        // Each touched share commits an ShareCreated/ShareUpdated event; the
-        // LedgerJournalLineConsumer re-journals every one (reverse then post, since amounts change).
-        await _manager.AllocateEvenlyAsync(expenseId, body.UserIds, ct);
+        // Each touched share commits a ShareCreated/ShareUpdated event; the
+        // LedgerJournalConsumer re-journals every one (reverse then post, since amounts change).
+        await _manager.SplitEvenlyAsync(expenseId, body.UserIds, ct);
         return NoContent();
     }
 
-    [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits/{splitId:guid}")]
-    public async Task<IActionResult> RemoveShare(Guid groupId, Guid expenseId, Guid splitId, CancellationToken ct = default)
+    [HttpDelete("/api/finance/groups/{groupId:guid}/expenses/{expenseId:guid}/splits/{shareId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RemoveShare(Guid groupId, Guid expenseId, Guid shareId, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
-        // ShareRemoved drives the reversal of the share's journalLine via the LedgerJournalLineConsumer.
-        var result = await _manager.RemoveShareAsync(new RemoveShareCommand(splitId, userId.Value), ct);
-        if (result is null) return NotFound();
+        // ShareRemoved drives the reversal of the share's posting via the LedgerJournalConsumer.
+        var removed = await _manager.RemoveShareAsync(new RemoveShareCommand(shareId, userId.Value), ct);
+        if (removed is null) return NotFound();
         return NoContent();
     }
 
@@ -262,6 +318,7 @@ public sealed class ExpensesController : ControllerBase
     /// Window: 3 past months + current month + 8 future months (12 total).
     /// </summary>
     [HttpGet("/api/finance/groups/{groupId:guid}/contributions")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<GroupMonthlyContributionsDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetContributions(Guid groupId, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
@@ -277,6 +334,7 @@ public sealed class ExpensesController : ControllerBase
     /// Per-member balance ("YOU OWE / YOU'RE OWED") for the caller within a group.
     /// </summary>
     [HttpGet("/api/finance/groups/{groupId:guid}/balances")]
+    [ProducesResponseType(typeof(MemberBalanceListDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMemberBalances(Guid groupId, CancellationToken ct = default)
     {
         var callerUserId = User.GetUserId().Value;
@@ -286,6 +344,8 @@ public sealed class ExpensesController : ControllerBase
 
     /// <summary>Most recent fully-settled period or null if none.</summary>
     [HttpGet("/api/finance/groups/{groupId:guid}/last-settlement")]
+    [ProducesResponseType(typeof(SettlementSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> GetLastSettlement(Guid groupId, CancellationToken ct = default)
     {
         var result = await _query.GetLastSettlementAsync(GroupId.Create(groupId), ct);

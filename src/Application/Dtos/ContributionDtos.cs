@@ -4,9 +4,9 @@ namespace Finance.Application.Dtos;
 // per-group member breakdowns, where the group is implied by the enclosing dto.
 public sealed record ContributionItemDto(
     Guid ShareId,
-    Guid BillId,
-    string BillTitle,
-    string BillCategory,
+    Guid ExpenseId,
+    string Title,
+    string Category,
     decimal Amount,
     string Currency,
     DateTime DueDate,
@@ -32,25 +32,25 @@ public sealed record ContributionPeriodSummaryDto(
     string PeriodLabel,
     DateTime PeriodStart,
     DateTime PeriodEnd,
-    // Claimed and unclaimed alike.
+    // Settled and unsettled alike.
     decimal TotalDue,
     decimal TotalPaid,
     decimal ProjectedIncome,
     IReadOnlyCollection<ContributionItemDto> Contributions,
     // Normalised by frequency.
-    decimal PersonalBillsDue,
-    IReadOnlyCollection<PersonalBillItemDto> PersonalBills,
+    decimal PersonalExpensesDue,
+    IReadOnlyCollection<PersonalExpenseItemDto> PersonalExpenses,
     // Equals ProjectedIncome when no deductions are configured.
     decimal ProjectedNetIncome = 0m,
-    decimal PersonalBillsPaid = 0m,
-    // Past/current months without a bank connection: ProjectedNetIncome − TotalDue − PersonalBillsDue.
+    decimal PersonalExpensesPaid = 0m,
+    // Past/current months without a bank connection: ProjectedNetIncome − TotalDue − PersonalExpensesDue.
     // Current month with a bank connection: sum(checking AvailableBalance) − unpaid obligations.
     // Future months: null.
     decimal? DisposableIncome = null,
     // "balance" | "estimate" | null.
     string? DisposableIncomeSource = null);
 
-public sealed record PersonalBillItemDto(
+public sealed record PersonalExpenseItemDto(
     Guid ExpenseId,
     string Title,
     string Category,

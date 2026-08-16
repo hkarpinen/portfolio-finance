@@ -178,27 +178,27 @@ internal sealed class IncomeQuery : IIncomeQuery
             .OrderBy(e => e.DueDate)
             .ToListAsync(cancellationToken);
 
-        var splits = await FetchSharesWithBillDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var shares = await FetchSharesWithExpenseDetailsAsync(uid, windowStart, queryWindowEnd, cancellationToken);
         var paidShares = await FetchPaidShareOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
-        var paidPersonal = await FetchPaidPersonalBillOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
+        var paidPersonal = await FetchPaidPersonalExpenseOccurrencesAsync(uid, windowStart, queryWindowEnd, cancellationToken);
 
         return _contributionCalculator.BuildSummaries(
             now, monthCount, pastMonths,
             incomeEntities, personalExpenses,
-            splits, paidShares, paidPersonal);
+            shares, paidShares, paidPersonal);
     }
 
-    private async Task<IReadOnlyList<(Share Share, Expense Expense)>> FetchSharesWithBillDetailsAsync(
+    private async Task<IReadOnlyList<(Share Share, Expense Expense)>> FetchSharesWithExpenseDetailsAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        if (splits.Count == 0) return [];
+        if (shares.Count == 0) return [];
 
-        var expenseIds = splits.Select(s => s.ExpenseId).Distinct().ToList();
+        var expenseIds = shares.Select(s => s.ExpenseId).Distinct().ToList();
 
         // One expense is one occurrence, so the window is a plain date filter the database can run.
         var relevantExpenses = (await _db.Expenses
@@ -210,7 +210,7 @@ internal sealed class IncomeQuery : IIncomeQuery
 
         if (relevantExpenses.Count == 0) return [];
 
-        return splits
+        return shares
             .Where(s => relevantExpenses.ContainsKey(s.ExpenseId))
             .Select(s => (s, relevantExpenses[s.ExpenseId]))
             .ToList();
@@ -219,29 +219,29 @@ internal sealed class IncomeQuery : IIncomeQuery
     private async Task<IReadOnlyDictionary<(Guid ShareId, DateTime OccurrenceDate), DateTime>> FetchPaidShareOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
-        var splits = await _db.Shares
+        var shares = await _db.Shares
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        if (splits.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
+        if (shares.Count == 0) return new Dictionary<(Guid, DateTime), DateTime>();
 
-        var splitIds = splits.Select(s => s.Id.Value).ToList();
-        var shareByShare = splits.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
+        var shareIds = shares.Select(s => s.Id.Value).ToList();
+        var amountByShareId = shares.ToDictionary(s => s.Id.Value, s => s.Amount.Amount);
 
-        // An (share, occurrence) counts as paid when ledger settlements cover the share — a signed,
+        // A (share, occurrence) counts as paid when ledger settlements cover the share — a signed,
         // partial-aware sum. The representative timestamp is the latest value date, i.e. when the money
         // actually moved.
         var settledMap = await SettlementReads.GetSettledByShareOccurrenceAsync(
-            _db, splitIds, cancellationToken);
+            _db, shareIds, cancellationToken);
 
         return settledMap
             .Where(kv => kv.Key.Occurrence >= from && kv.Key.Occurrence <= to
-                      && kv.Value.Settled >= (shareByShare.TryGetValue(kv.Key.ShareId, out var share) ? share : 0m))
+                      && kv.Value.Settled >= (amountByShareId.TryGetValue(kv.Key.ShareId, out var amount) ? amount : 0m))
             .ToDictionary(kv => kv.Key, kv => kv.Value.LatestValueDate);
     }
 
-    private async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalBillOccurrencesAsync(
+    private async Task<IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime>> FetchPaidPersonalExpenseOccurrencesAsync(
         UserId userId, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
         // Id and occurrence together — the occurrence is what the answer is keyed on, and fetching

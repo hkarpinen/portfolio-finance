@@ -4,9 +4,8 @@ using Finance.Domain.ValueObjects;
 namespace Tests;
 
 /// <summary>
-/// Settling up is a document now, not a call into the bookkeeper from an HTTP handler. That is
-/// what gives these two rules somewhere to live: they used to be controller BadRequests, so
-/// anything arriving another way went straight past them.
+/// Settling up is a document, not a call into the bookkeeper from an HTTP handler — which is what
+/// gives these two rules somewhere to live where nothing can arrive past them.
 /// </summary>
 public class SettleUpTests
 {

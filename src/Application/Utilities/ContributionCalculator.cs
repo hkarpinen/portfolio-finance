@@ -12,7 +12,7 @@ namespace Finance.Application.Utilities;
 //   schedule projection, NOT a ledger read, and cannot be derived from the ledger.
 //
 //   Settled/paid status always comes from the ledger. The lone exception is the payer's own share,
-//   which is implicitly covered by fronting the bill and so has no payment row.
+//   which is implicitly covered by fronting the expense and so has no payment row.
 internal sealed class ContributionCalculator : IContributionCalculator
 {
     private readonly IPayrollDeductionEngine _deductionEngine;
@@ -28,9 +28,9 @@ internal sealed class ContributionCalculator : IContributionCalculator
         int pastMonths,
         IReadOnlyList<IncomeSource> incomeSources,
         IReadOnlyList<Expense> personalExpenses,
-        IReadOnlyList<(Share Share, Expense Expense)> splits,
+        IReadOnlyList<(Share Share, Expense Expense)> shares,
         IReadOnlyDictionary<(Guid ShareId, DateTime OccurrenceDate), DateTime> paidShareOccurrences,
-        IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalBillOccurrences)
+        IReadOnlyDictionary<(Guid ExpenseId, DateTime OccurrenceDate), DateTime> paidPersonalExpenseOccurrences)
     {
         var windowStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-pastMonths);
         var windowEndExclusive = windowStart.AddMonths(monthCount);
@@ -39,16 +39,16 @@ internal sealed class ContributionCalculator : IContributionCalculator
         var activePersonal = personalExpenses.Where(e => e.IsActive).ToList();
 
         var projected = new List<(DateTime OccurrenceDate, ContributionItemDto Item)>();
-        foreach (var s in splits)
+        foreach (var s in shares)
         {
-            // One expense, one occurrence. A repeating bill arrives here as a row per period,
+            // One expense, one occurrence. A repeating expense arrives here as a row per period,
             // generated when that period came round, so nothing is projected.
             IEnumerable<DateTime> occurrenceDates =
                 s.Expense.OccurrenceDate >= windowStart && s.Expense.OccurrenceDate < windowEndExclusive
                     ? [s.Expense.OccurrenceDate]
                     : [];
 
-            // Fronting the bill covers your own part of it, so there is no payment record and
+            // Fronting the expense covers your own part of it, so there is no payment record and
             // hence no PaidAt. The expense answers this rather than two of its fields being
             // compared here, which is how the same rule ended up spelled out in three places.
             var isPayerOwnShare = s.Expense.CoversOwnShare(s.Share.UserId.Value);
@@ -66,7 +66,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
             }
         }
 
-        var projectedPersonal = new List<(DateTime OccurrenceDate, PersonalBillItemDto Item)>();
+        var projectedPersonal = new List<(DateTime OccurrenceDate, PersonalExpenseItemDto Item)>();
         foreach (var e in activePersonal)
         {
             IEnumerable<DateTime> occurrenceDates =
@@ -76,8 +76,8 @@ internal sealed class ContributionCalculator : IContributionCalculator
 
             foreach (var date in occurrenceDates)
             {
-                var isPaid = paidPersonalBillOccurrences.ContainsKey((e.Id.Value, date.Date));
-                projectedPersonal.Add((date, new PersonalBillItemDto(
+                var isPaid = paidPersonalExpenseOccurrences.ContainsKey((e.Id.Value, date.Date));
+                projectedPersonal.Add((date, new PersonalExpenseItemDto(
                     e.Id.Value, e.Title, e.Category.ToString(),
                     e.Amount.Amount, e.Amount.Currency, date, isPaid)));
             }

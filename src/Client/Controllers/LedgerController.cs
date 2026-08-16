@@ -1,3 +1,4 @@
+using Finance.Application.Dtos;
 using Finance.Application.Queries;
 using Client.Extensions;
 using Client.Filters;
@@ -21,6 +22,8 @@ public sealed class LedgerController : ControllerBase
     public LedgerController(ILedgerQuery query) => _query = query;
 
     [HttpGet]
+    [ProducesResponseType(typeof(LedgerViewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetGroupLedger(Guid groupId, CancellationToken ct = default)
     {
         var ledger = await _query.GetGroupLedgerAsync(groupId, ct);
@@ -29,6 +32,8 @@ public sealed class LedgerController : ControllerBase
 
     // Absolute route: it hangs off /accounts, not /ledger.
     [HttpGet("/api/finance/groups/{groupId:guid}/accounts/{accountId:guid}/statement")]
+    [ProducesResponseType(typeof(AccountStatementDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAccountStatement(Guid groupId, Guid accountId, CancellationToken ct = default)
     {
         var statement = await _query.GetAccountStatementAsync(groupId, accountId, ct);
@@ -38,6 +43,7 @@ public sealed class LedgerController : ControllerBase
     // Absolute route because it is user-scoped, not group-scoped — which also means the class-level
     // membership filter does not apply to it.
     [HttpGet("/api/finance/me/position")]
+    [ProducesResponseType(typeof(UserPositionDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyPosition(CancellationToken ct = default)
     {
         var userId = User.GetUserId();

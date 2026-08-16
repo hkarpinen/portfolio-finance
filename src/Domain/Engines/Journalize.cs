@@ -4,12 +4,8 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Engines;
 
 /// <summary>
-/// What each thing that happens MEANS in debits and credits.
-///
-/// These used to be written inline in the manager, between the account lookups and the repository
-/// calls, and two of them were written twice — a cost incurred and a payable cleared each had a
-/// group version and a personal one that had to agree by memory. Here they are named once, and
-/// the group and personal paths call the same rule.
+/// What each thing that happens MEANS in debits and credits. The group and personal paths call
+/// the same rule.
 ///
 /// Which accounts to use is the caller's job: resolving "the groceries account for this ledger"
 /// is a database round trip, so it cannot live in here. What these own is the DIRECTION — which
@@ -42,7 +38,7 @@ public static class Journalize
 
     /// <summary>
     /// One member taking on their part of a shared cost — it moves off the nominal expense account
-    /// and onto that member's standing. Keyed per share, so a split changed later is corrected on
+    /// and onto that member's standing. Keyed per share, so a share changed later is corrected on
     /// its own without disturbing the cost it belongs to.
     /// </summary>
     public static JournalEntry ShareBorne(

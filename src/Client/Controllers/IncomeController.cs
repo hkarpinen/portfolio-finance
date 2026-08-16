@@ -1,3 +1,4 @@
+using Finance.Application.Dtos;
 using Finance.Application.Commands;
 using Finance.Application.Queries;
 using Finance.Application.Managers;
@@ -28,6 +29,7 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(IncomeListDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var result = await _incomeQuery.ListAsync(new ListIncomeParams(groupId, page, pageSize, ActiveOnly: true), ct);
@@ -35,6 +37,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet("{incomeId:guid}")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDetail(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
         var result = await _incomeQuery.GetDetailAsync(new IncomeDetailParams(incomeId, User.GetUserId().Value), ct);
@@ -42,6 +46,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateIncomeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -50,6 +56,10 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPut("{incomeId:guid}")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(Guid groupId, Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
         var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
@@ -57,6 +67,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpDelete("{incomeId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Deactivate(Guid groupId, Guid incomeId, CancellationToken ct = default)
     {
         var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId, User.GetUserId().Value), ct);
@@ -64,6 +76,7 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet("/api/finance/income")]
+    [ProducesResponseType(typeof(IncomeListDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListByUser([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -72,6 +85,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPost("/api/finance/income")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateForUser([FromBody] CreateIncomeCommand request, CancellationToken ct = default)
     {
         var userId = User.GetUserId();
@@ -80,6 +95,9 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPut("/api/finance/income/{incomeId:guid}")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateForUser(Guid incomeId, [FromBody] UpdateIncomeCommand request, CancellationToken ct = default)
     {
         var result = await _manager.UpdateAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
@@ -87,6 +105,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpDelete("/api/finance/income/{incomeId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateForUser(Guid incomeId, CancellationToken ct = default)
     {
         var result = await _manager.DeactivateAsync(new DeactivateIncomeCommand(incomeId, User.GetUserId().Value), ct);
@@ -94,6 +114,9 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPut("/api/finance/income/{incomeId:guid}/tax-profile")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SetTaxProfile(Guid incomeId, [FromBody] SetTaxProfileCommand request, CancellationToken ct = default)
     {
         var result = await _manager.SetTaxProfileAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
@@ -101,6 +124,9 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpPost("/api/finance/income/{incomeId:guid}/deductions")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AddDeduction(Guid incomeId, [FromBody] AddDeductionCommand request, CancellationToken ct = default)
     {
         var result = await _manager.AddDeductionAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
@@ -108,6 +134,9 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpDelete("/api/finance/income/{incomeId:guid}/deductions")]
+    [ProducesResponseType(typeof(IncomeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RemoveDeduction(Guid incomeId, [FromBody] RemoveDeductionCommand request, CancellationToken ct = default)
     {
         var result = await _manager.RemoveDeductionAsync(request with { IncomeId = incomeId, CallerUserId = User.GetUserId().Value }, ct);
@@ -115,6 +144,8 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet("/api/finance/income/{incomeId:guid}/net-pay")]
+    [ProducesResponseType(typeof(NetPayBreakdownDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetNetPayBreakdown(Guid incomeId, [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
@@ -125,6 +156,7 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet("/api/finance/income/net-pay/summary")]
+    [ProducesResponseType(typeof(NetPaySummaryDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetNetPaySummary([FromQuery] int? year, [FromQuery] int? month, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
@@ -135,6 +167,7 @@ public sealed class IncomeController : ControllerBase
     }
 
     [HttpGet("/api/finance/contribution-summary")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<ContributionPeriodSummaryDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetContributionSummary(
         [FromQuery] int months = 13,
         [FromQuery] int past = 3,

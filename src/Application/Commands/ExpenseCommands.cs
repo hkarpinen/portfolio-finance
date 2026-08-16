@@ -37,8 +37,8 @@ public sealed record UpdateExpenseCommand(
     string Currency,
     string Category,
     DateTime DueDate,
-    // No cadence here. Amending a bill amends that one bill; how often it comes round is the
-    // schedule's business, and a copy on the bill is what let the two disagree.
+    // No cadence here. Amending an expense amends that one expense; how often it comes round is the
+    // schedule's business, and a copy on the expense is what let the two disagree.
     string? Description = null);
 
 public sealed record DeleteExpenseCommand(Guid ExpenseId, Guid CallerUserId);
@@ -101,7 +101,7 @@ public sealed record MarkExpenseUnpaidCommand(
     [property: JsonIgnore] Guid CallerUserId,
     DateTime OccurrenceDate);
 
-// Owner-only: the bill's owner pays the vendor from the shared pot (collect-first).
+// Owner-only: the expense's owner pays the vendor from the shared pot (collect-first).
 public sealed record MarkVendorPaidCommand(
     Guid ExpenseId,
     [property: JsonIgnore] Guid CallerUserId,
@@ -114,4 +114,4 @@ public sealed record MarkVendorUnpaidCommand(
 
 public sealed record PaymentOccurrenceBody(DateTime OccurrenceDate);
 public sealed record SettleUpTransferBody(Guid ToUserId, decimal Amount, string Currency);
-public sealed record AllocateEvenlyBody(IReadOnlyList<Guid> UserIds);
+public sealed record SplitEvenlyBody(IReadOnlyList<Guid> UserIds);

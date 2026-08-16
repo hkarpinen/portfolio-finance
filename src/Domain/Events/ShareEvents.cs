@@ -21,7 +21,7 @@ public record ShareRemoved(
     GroupId GroupId) : DomainEvent;
 
 // A settlement is the member FromUserId (the debtor) settling their share into the funding account
-// that fronted the bill, held by ToUserId (the payer). It is one journal entry in the group ledger;
+// that fronted the expense, held by ToUserId (the payer). It is one journal entry in the group ledger;
 // a reversal is a contra entry.
 
 public record SettlementRecorded(

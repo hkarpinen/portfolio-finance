@@ -35,7 +35,7 @@ public interface IExpenseQuery
 
     Task<GroupExpenseDetailDto?> GetGroupExpenseDetailAsync(Guid expenseId, Guid callerUserId, CancellationToken cancellationToken = default);
 
-    Task<ShareDetailDto?> GetShareDetailAsync(Guid splitId, CancellationToken cancellationToken = default);
+    Task<ShareDetailDto?> GetShareDetailAsync(Guid shareId, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsForUserAsync(UserId userId, string title, decimal amount, CancellationToken cancellationToken = default);
 
@@ -47,7 +47,7 @@ public interface IExpenseQuery
     Task<MemberBalanceListDto> ListMemberBalancesAsync(
         GroupId groupId, Guid callerUserId, CancellationToken cancellationToken = default);
 
-    // A settlement here is a period in which every split is claimed; null when no period is fully settled.
+    // A settlement here is a period in which every share is settled; null when no period is fully settled.
     Task<SettlementSummaryDto?> GetLastSettlementAsync(
         GroupId groupId, CancellationToken cancellationToken = default);
 }

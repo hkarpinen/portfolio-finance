@@ -13,7 +13,7 @@ namespace Finance.Application.Managers;
 internal sealed class ExpenseManager : IExpenseManager
 {
     private readonly IExpenseRepository _repository;
-    private readonly IShareRepository _splitRepository;
+    private readonly IShareRepository _shares;
     private readonly ILedgerQuery _ledgerQuery;
     private readonly IRecurringExpenseManager _schedules;
     private readonly IMemberTransferRepository _transfers;
@@ -21,14 +21,14 @@ internal sealed class ExpenseManager : IExpenseManager
 
     public ExpenseManager(
         IExpenseRepository repository,
-        IShareRepository splitRepository,
+        IShareRepository shares,
         ILedgerQuery ledgerQuery,
         IRecurringExpenseManager schedules,
         IMemberTransferRepository transfers,
         ILogger<ExpenseManager> logger)
     {
         _repository = repository;
-        _splitRepository = splitRepository;
+        _shares = shares;
         _ledgerQuery = ledgerQuery;
         _schedules = schedules;
         _transfers = transfers;
@@ -42,7 +42,7 @@ internal sealed class ExpenseManager : IExpenseManager
         var recurrence = RecurrenceSchedule.ParseOrNone(
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
-        // A repeating personal cost is an agreement, same as a repeating group bill. Only the
+        // A repeating personal cost is an agreement, same as a repeating group expense. Only the
         // one-off is an expense somebody typed straight in.
         if (recurrence is not null)
         {
@@ -111,9 +111,6 @@ internal sealed class ExpenseManager : IExpenseManager
         if (expense.TryDeactivate())
             await _repository.UpdateAsync(expense, cancellationToken);
 
-        // A bank suggestion that produced this expense is freed by SuggestionUnlinkConsumer,
-        // listening for the deactivation — reaching into the bank side from here is what put
-        // another company's data in the middle of an expense use case.
         await _repository.CommitAsync(cancellationToken);
         return ExpenseMapper.ToResponse(expense);
     }
@@ -126,7 +123,7 @@ internal sealed class ExpenseManager : IExpenseManager
         var recurrence = RecurrenceSchedule.CreateOrNone(
             request.RecurrenceFrequency, request.RecurrenceStartDate ?? request.DueDate, request.RecurrenceEndDate);
 
-        // A cost that comes round again is an agreement, and the bill for one month is generated
+        // A cost that comes round again is an agreement, and the expense for one month is generated
         // from it. Creating a repeating Expense instead would put the cadence back on the document
         // and every month would be derived from it again.
         var expense = recurrence is null
@@ -134,7 +131,7 @@ internal sealed class ExpenseManager : IExpenseManager
                 AccountingEntity.Group(request.GroupId), UserId.Create(request.CallerUserId), request.Title,
                 Money.Create(request.Amount, request.Currency), request.Category, request.DueDate,
                 request.Description, payerUserId: payerUserId, fundingSource: request.FundingSource)
-            : await _schedules.OpenAndBillFirstAsync(new CreateRecurringExpenseCommand(
+            : await _schedules.OpenAndMaterialiseFirstAsync(new CreateRecurringExpenseCommand(
                 GroupId: request.GroupId,
                 CallerUserId: request.CallerUserId,
                 Title: request.Title,
@@ -155,13 +152,13 @@ internal sealed class ExpenseManager : IExpenseManager
         // membership — one financial identity across all of that person's groups.
         if (request.Shares is { Count: > 0 })
         {
-            foreach (var split in request.Shares)
+            foreach (var share in request.Shares)
             {
                 var entity = Share.Create(
                     expense,
-                    UserId.Create(split.MemberUserId),
-                    Money.Create(split.Amount, split.Currency));
-                await _splitRepository.AddAsync(entity, cancellationToken);
+                    UserId.Create(share.MemberUserId),
+                    Money.Create(share.Amount, share.Currency));
+                await _shares.AddAsync(entity, cancellationToken);
             }
         }
 
@@ -175,7 +172,7 @@ internal sealed class ExpenseManager : IExpenseManager
         if (expense is null) return null;
 
         // Summed here because shares are their own rows; Update refuses the shrink itself.
-        var allocated = await _splitRepository.SumForExpenseAsync(expense.Id, null, cancellationToken);
+        var sharesSoFar = await _shares.SumForExpenseAsync(expense.Id, null, cancellationToken);
 
         expense.Update(
             request.Title,
@@ -184,7 +181,7 @@ internal sealed class ExpenseManager : IExpenseManager
             request.DueDate,
             request.Description,
             request.PayerUserId,
-            sharesAlreadyOn: allocated);
+            sharesAlreadyOn: sharesSoFar);
 
         await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
@@ -210,75 +207,75 @@ internal sealed class ExpenseManager : IExpenseManager
         var expense = await _repository.GetByIdAsync(expenseId, cancellationToken)
             ?? throw new KeyNotFoundException("Expense not found.");
 
-        // Your own share, or you entered the bill. Being in the group lets you settle what you owe;
-        // it does not let you re-cut how somebody else's bill was divided.
+        // Your own share, or you entered the expense. Being in the group lets you settle what you owe;
+        // it does not let you re-cut how somebody else's expense was divided.
         if (request.MemberUserId != request.CallerUserId && !expense.IsManagedBy(request.CallerUserId))
-            throw new UnauthorizedAccessException("Only the bill's owner can set another member's share.");
+            throw new UnauthorizedAccessException("Only the expense's owner can set another member's share.");
 
         var expenseTotal = expense.Amount.Amount;
 
         if (request.ShareId.HasValue)
         {
-            var existing = await _splitRepository.GetByIdAsync(ShareId.Create(request.ShareId.Value), cancellationToken);
+            var existing = await _shares.GetByIdAsync(ShareId.Create(request.ShareId.Value), cancellationToken);
             if (existing is not null)
             {
-                var others = await _splitRepository.SumForExpenseAsync(expenseId, existing.Id, cancellationToken);
-                if (!expense.CanBear(others, money.Amount))
+                var otherSharesTotal = await _shares.SumForExpenseAsync(expenseId, existing.Id, cancellationToken);
+                if (!expense.CanBear(otherSharesTotal, money.Amount))
                     throw new InvalidOperationException(
                         $"Shares would exceed the expense total of {expenseTotal:0.##}.");
 
                 existing.Update(expense, money);
-                await _splitRepository.UpdateAsync(existing, cancellationToken);
+                await _shares.UpdateAsync(existing, cancellationToken);
                 // Touches the expense so this write goes through its version check — the reason
                 // two people setting a share at once cannot both fit under the same total.
                 expense.RecordShareChange();
                 await _repository.UpdateAsync(expense, cancellationToken);
-                await _splitRepository.CommitAsync(cancellationToken);
+                await _shares.CommitAsync(cancellationToken);
                 return ExpenseMapper.ToShareResponse(existing);
             }
         }
 
-        var duplicate = await _splitRepository.GetByExpenseAndUserAsync(
+        var duplicate = await _shares.GetByExpenseAndUserAsync(
             expenseId,
             UserId.Create(request.MemberUserId),
             cancellationToken);
 
         if (duplicate is not null)
-            throw new InvalidOperationException("A split for this member already exists on this expense.");
+            throw new InvalidOperationException("A share for this member already exists on this expense.");
 
-        var existingTotal = await _splitRepository.SumForExpenseAsync(expenseId, null, cancellationToken);
+        var existingTotal = await _shares.SumForExpenseAsync(expenseId, null, cancellationToken);
         if (!expense.CanBear(existingTotal, money.Amount))
             throw new InvalidOperationException(
                 $"Shares would exceed the expense total of {expenseTotal:0.##}.");
 
         // The group comes off the expense, not off the request — a caller naming a different one
-        // was never a share of this bill.
-        var split = Share.Create(expense, UserId.Create(request.MemberUserId), money);
+        // was never a share of this expense.
+        var share = Share.Create(expense, UserId.Create(request.MemberUserId), money);
 
-        await _splitRepository.AddAsync(split, cancellationToken);
+        await _shares.AddAsync(share, cancellationToken);
         expense.RecordShareChange();
         await _repository.UpdateAsync(expense, cancellationToken);
-        await _splitRepository.CommitAsync(cancellationToken);
-        return ExpenseMapper.ToShareResponse(split);
+        await _shares.CommitAsync(cancellationToken);
+        return ExpenseMapper.ToShareResponse(share);
     }
 
     public async Task<ShareDto?> RemoveShareAsync(RemoveShareCommand request, CancellationToken cancellationToken = default)
     {
-        var split = await _splitRepository.GetByIdAsync(ShareId.Create(request.ShareId), cancellationToken);
-        if (split is null) return null;
+        var share = await _shares.GetByIdAsync(ShareId.Create(request.ShareId), cancellationToken);
+        if (share is null) return null;
 
-        var expense = await _repository.GetByIdAsync(split.ExpenseId, cancellationToken)
+        var expense = await _repository.GetByIdAsync(share.ExpenseId, cancellationToken)
             ?? throw new InvalidOperationException("Expense not found.");
 
-        split.Remove(expense);
-        await _splitRepository.RemoveAsync(split, cancellationToken);
+        share.Remove(expense);
+        await _shares.RemoveAsync(share, cancellationToken);
         expense.RecordShareChange();
         await _repository.UpdateAsync(expense, cancellationToken);
-        await _splitRepository.CommitAsync(cancellationToken);
-        return ExpenseMapper.ToShareResponse(split);
+        await _shares.CommitAsync(cancellationToken);
+        return ExpenseMapper.ToShareResponse(share);
     }
 
-    public async Task AllocateEvenlyAsync(Guid expenseId, IReadOnlyList<Guid> userIds, CancellationToken cancellationToken = default)
+    public async Task SplitEvenlyAsync(Guid expenseId, IReadOnlyList<Guid> userIds, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(expenseId), cancellationToken)
             ?? throw new InvalidOperationException("Expense not found.");
@@ -291,71 +288,66 @@ internal sealed class ExpenseManager : IExpenseManager
 
         // Round each share to 2 decimals with the last member absorbing the remainder so the shares
         // sum EXACTLY to the expense total (e.g. 100 / 3 → 33.33, 33.33, 33.34) — never overshooting.
-        var shares = ShareMath.SplitEvenly(expense.Amount.Amount, userIds.Count);
+        var amounts = ShareMath.SplitEvenly(expense.Amount.Amount, userIds.Count);
 
         for (var i = 0; i < userIds.Count; i++)
         {
             var uid = UserId.Create(userIds[i]);
-            var money = Money.Create(shares[i], expense.Amount.Currency);
-            var existing = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, uid, cancellationToken);
+            var money = Money.Create(amounts[i], expense.Amount.Currency);
+            var existing = await _shares.GetByExpenseAndUserAsync(expense.Id, uid, cancellationToken);
             if (existing is not null)
             {
                 existing.Update(expense, money);
-                await _splitRepository.UpdateAsync(existing, cancellationToken);
+                await _shares.UpdateAsync(existing, cancellationToken);
             }
             else
             {
-                var split = Share.Create(expense, uid, money);
-                await _splitRepository.AddAsync(split, cancellationToken);
+                var share = Share.Create(expense, uid, money);
+                await _shares.AddAsync(share, cancellationToken);
             }
         }
         expense.RecordShareChange();
         await _repository.UpdateAsync(expense, cancellationToken);
-        await _splitRepository.CommitAsync(cancellationToken);
+        await _shares.CommitAsync(cancellationToken);
     }
 
-    public async Task<ShareDto?> AssignShareAsync(Guid groupId, Guid expenseId, Guid userId, decimal amount, string currency, CancellationToken cancellationToken = default)
+    public async Task AssignShareAsync(Guid groupId, Guid expenseId, Guid userId, decimal amount, string currency, CancellationToken cancellationToken = default)
     {
         var id = ExpenseId.Create(expenseId);
         var expense = await _repository.GetByIdAsync(id, cancellationToken);
-        if (expense?.GroupId is null) return null; // unknown or personal expense — nothing to allocate
+        if (expense?.GroupId is null) return; // unknown or personal expense — nothing to share out
 
         var money = Money.Create(amount, currency);
         var uid = UserId.Create(userId);
 
         // Upsert by (expense, user): the event is authoritative and may be redelivered, so this is
         // idempotent on amount. The userId came from a group-authorized event — no caller override.
-        Share result;
-        var existing = await _splitRepository.GetByExpenseAndUserAsync(id, uid, cancellationToken);
+        var existing = await _shares.GetByExpenseAndUserAsync(id, uid, cancellationToken);
 
         // Enforce the Σ shares ≤ expense total invariant. This arrives via an authoritative,
         // redeliverable group event, so a violation must NOT throw (that would dead-letter and
         // redeliver forever) — log and skip instead.
-        var others = await _splitRepository.SumForExpenseAsync(id, existing?.Id, cancellationToken);
-        if (!expense.CanBear(others, money.Amount))
+        var otherSharesTotal = await _shares.SumForExpenseAsync(id, existing?.Id, cancellationToken);
+        if (!expense.CanBear(otherSharesTotal, money.Amount))
         {
             _logger.LogWarning(
                 "Skipping GroupShareAssigned for expense {ExpenseId} user {UserId}: amount {Amount} would push shares past the expense total {Total}.",
                 expenseId, userId, money.Amount, expense.Amount.Amount);
-            return null;
+            return;
         }
 
         if (existing is not null)
         {
             existing.Update(expense, money);
-            await _splitRepository.UpdateAsync(existing, cancellationToken);
-            result = existing;
+            await _shares.UpdateAsync(existing, cancellationToken);
         }
         else
         {
-            result = Share.Create(expense, uid, money);
-            await _splitRepository.AddAsync(result, cancellationToken);
+            await _shares.AddAsync(Share.Create(expense, uid, money), cancellationToken);
         }
         expense.RecordShareChange();
         await _repository.UpdateAsync(expense, cancellationToken);
-        await _splitRepository.CommitAsync(cancellationToken);
-        // The committed event drives the share journalLine (Dr Member / Cr Expense).
-        return ExpenseMapper.ToShareResponse(result);
+        await _shares.CommitAsync(cancellationToken);
     }
 
     public async Task SettleUpAsync(
@@ -369,7 +361,7 @@ internal sealed class ExpenseManager : IExpenseManager
         await _transfers.CommitAsync(ct);
     }
 
-    public async Task<SettlementOutcome?> MarkPaidAsync(MarkExpensePaidCommand request, CancellationToken cancellationToken = default)
+    public async Task MarkPaidAsync(MarkExpensePaidCommand request, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken)
             ?? throw new InvalidOperationException("Expense not found.");
@@ -378,47 +370,42 @@ internal sealed class ExpenseManager : IExpenseManager
 
         if (expense.GroupId.HasValue)
         {
-            // The share settles into whichever account funded the bill: PayerMember pays the
+            // The share settles into whichever account funded the expense: PayerMember pays the
             // payer back (Dr Member:payer / Cr Member:debtor), GroupCash pays into the pot
-            // (Dr Cash / Cr Member:debtor). The committed fact drives the journalLine.
+            // (Dr Cash / Cr Member:debtor). The committed fact drives the posting.
             var userId = UserId.Create(request.CallerUserId);
-            var split = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken)
+            var share = await _shares.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken)
                 ?? throw new InvalidOperationException("No share found for this user on this expense.");
 
             // Idempotent on the ledger: if already settled for this occurrence, no-op.
-            if (await _ledgerQuery.IsShareSettledAsync(split.Id.Value, occurrenceDate, cancellationToken))
-                return null;
+            if (await _ledgerQuery.IsShareSettledAsync(share.Id.Value, occurrenceDate, cancellationToken))
+                return;
 
             // The fact names the payer as nominal payee; the funding account is resolved
             // downstream from the expense's FundingSource.
             var nominalTo = UserId.Create(expense.PayerUserId ?? expense.EnteredBy.Value);
             var valueDate = DateTime.UtcNow.Date;
-            split.Settle(expense, nominalTo, occurrenceDate, valueDate);
-            await _splitRepository.CommitAsync(cancellationToken);
+            share.Settle(expense, nominalTo, occurrenceDate, valueDate);
+            await _shares.CommitAsync(cancellationToken);
 
-            return new SettlementOutcome(
-                expense.GroupId.Value.Value, expense.Id.Value, split.Id.Value,
-                userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
-                occurrenceDate, valueDate,
-                LedgerSources.Settlement(request.ExpenseId, occurrenceDate, request.CallerUserId),
-                expense.FundingSource);
+            return;
         }
 
         // Personal expense: record direct payment (no group ledger involved).
         if (!expense.IsOwnedBy(request.CallerUserId))
             throw new InvalidOperationException("Access denied.");
 
-        // Raises the fact; the journalLine consumer settles the payable from whatever funded it.
+        // Raises the fact; the posting consumer settles the payable from whatever funded it.
         expense.RecordPersonalPayment(request.FundingAccountId, DateTime.UtcNow);
         await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
-        return null;
+        return;
     }
 
-    public async Task<SettlementOutcome?> MarkUnpaidAsync(MarkExpenseUnpaidCommand request, CancellationToken cancellationToken = default)
+    public async Task MarkUnpaidAsync(MarkExpenseUnpaidCommand request, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
-        if (expense is null) return null;
+        if (expense is null) return;
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
 
@@ -426,44 +413,39 @@ internal sealed class ExpenseManager : IExpenseManager
         {
             // The reversal fact drives the contra entry, keyed by the same source.
             var userId = UserId.Create(request.CallerUserId);
-            var split = await _splitRepository.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken);
-            if (split is null) return null;
+            var share = await _shares.GetByExpenseAndUserAsync(expense.Id, userId, cancellationToken);
+            if (share is null) return;
 
             // Idempotent: nothing to reverse if the ledger shows no active settlement.
-            if (!await _ledgerQuery.IsShareSettledAsync(split.Id.Value, occurrenceDate, cancellationToken))
-                return null;
+            if (!await _ledgerQuery.IsShareSettledAsync(share.Id.Value, occurrenceDate, cancellationToken))
+                return;
 
-            split.ReverseSettlement(expense, occurrenceDate);
-            await _splitRepository.CommitAsync(cancellationToken);
+            share.ReverseSettlement(expense, occurrenceDate);
+            await _shares.CommitAsync(cancellationToken);
 
             var nominalTo = UserId.Create(expense.PayerUserId ?? expense.EnteredBy.Value);
-            return new SettlementOutcome(
-                expense.GroupId.Value.Value, expense.Id.Value, split.Id.Value,
-                userId.Value, nominalTo.Value, split.Amount.Amount, split.Amount.Currency,
-                occurrenceDate, DateTime.UtcNow.Date,
-                LedgerSources.Settlement(request.ExpenseId, occurrenceDate, request.CallerUserId),
-                expense.FundingSource);
+            return;
         }
 
         expense.ReversePersonalPayment();
         await _repository.UpdateAsync(expense, cancellationToken);
         await _repository.CommitAsync(cancellationToken);
-        return null;
+        return;
     }
 
-    public async Task<VendorPaymentOutcome?> MarkVendorPaidAsync(MarkVendorPaidCommand request, CancellationToken cancellationToken = default)
+    public async Task MarkVendorPaidAsync(MarkVendorPaidCommand request, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
-        if (expense is null || expense.GroupId is null) return null;
+        if (expense is null || expense.GroupId is null) return;
 
         if (!expense.IsManagedBy(request.CallerUserId))
-            throw new InvalidOperationException("Only the bill's owner can mark it paid to the vendor.");
+            throw new InvalidOperationException("Only the expense's owner can mark it paid to the vendor.");
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        // Idempotent: if the bill owes the vendor nothing it's already paid (or legacy cash-basis).
+        // Idempotent: if the expense owes the vendor nothing it's already paid (or legacy cash-basis).
         if (await _ledgerQuery.IsVendorPaidAsync(request.ExpenseId, cancellationToken))
-            return null;
+            return;
 
         // Dr Vendor Payable / Cr funding — Cr Member:payer when a member fronted it,
         // Cr Cash from the pot. The committed fact carries the funding source.
@@ -471,34 +453,28 @@ internal sealed class ExpenseManager : IExpenseManager
         expense.RecordVendorPayment(occurrenceDate, expense.FundingSource, paidByUserId);
         await _repository.CommitAsync(cancellationToken);
 
-        return new VendorPaymentOutcome(
-            expense.GroupId.Value.Value, expense.Id.Value, expense.Amount.Amount, expense.Amount.Currency,
-            expense.FundingSource, paidByUserId, occurrenceDate, DateTime.UtcNow.Date,
-            LedgerSources.VendorPayment(request.ExpenseId, occurrenceDate));
+        return;
     }
 
-    public async Task<VendorPaymentOutcome?> MarkVendorUnpaidAsync(MarkVendorUnpaidCommand request, CancellationToken cancellationToken = default)
+    public async Task MarkVendorUnpaidAsync(MarkVendorUnpaidCommand request, CancellationToken cancellationToken = default)
     {
         var expense = await _repository.GetByIdAsync(ExpenseId.Create(request.ExpenseId), cancellationToken);
-        if (expense is null || expense.GroupId is null) return null;
+        if (expense is null || expense.GroupId is null) return;
 
         if (!expense.IsManagedBy(request.CallerUserId))
-            throw new InvalidOperationException("Only the bill's owner can undo the vendor payment.");
+            throw new InvalidOperationException("Only the expense's owner can undo the vendor payment.");
 
         var occurrenceDate = DateTime.SpecifyKind(request.OccurrenceDate.Date, DateTimeKind.Utc);
 
-        // Idempotent: if the bill still owes the vendor it was never marked paid — nothing to undo.
+        // Idempotent: if the expense still owes the vendor it was never marked paid — nothing to undo.
         if (!await _ledgerQuery.IsVendorPaidAsync(request.ExpenseId, cancellationToken))
-            return null;
+            return;
 
         expense.ReverseVendorPayment(occurrenceDate);
         await _repository.CommitAsync(cancellationToken);
 
         // VendorPaymentReversed drives the ledger contra entry (a no-op for legacy expenses
         // with no such entry).
-        return new VendorPaymentOutcome(
-            expense.GroupId.Value.Value, expense.Id.Value, expense.Amount.Amount, expense.Amount.Currency,
-            expense.FundingSource, expense.PayerUserId, occurrenceDate, DateTime.UtcNow.Date,
-            LedgerSources.VendorPayment(request.ExpenseId, occurrenceDate));
+        return;
     }
 }

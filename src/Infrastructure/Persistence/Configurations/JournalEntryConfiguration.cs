@@ -48,7 +48,7 @@ internal sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journ
         builder.HasIndex(e => new { e.SourceShareId, e.SourceOccurrence });
         builder.HasIndex(e => e.SourceExpenseId);
 
-        // DB-level backstop against a duplicate ACTIVE journalLine under one source: at most one entry
+        // DB-level backstop against a duplicate ACTIVE entry under one source: at most one entry
         // per (ledger, source) may be neither a reversal nor itself reversed. A reverse+repost is
         // still allowed — the reversed original has reversed_by_entry_id set, so it drops out of the
         // filter. NOTE: HasFilter strings are NOT translated by the snake_case convention — column

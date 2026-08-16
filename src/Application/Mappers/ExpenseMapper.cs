@@ -23,19 +23,19 @@ public static class ExpenseMapper
             IsPaid: isPaid,
             CurrentOccurrenceDate: expense.OccurrenceDate,
             RecurringExpenseId: expense.RecurringExpenseId?.Value,
-            // Only a shared bill has a payer or a funding side; on somebody's own there is nobody
+            // Only a shared expense has a payer or a funding side; on somebody's own there is nobody
             // to be paid back and nothing to pool.
             PayerUserId: expense.Owner.IsGroup ? expense.PayerUserId : null,
             FundingSource: expense.Owner.IsGroup ? expense.FundingSource : null,
             VendorPaid: expense.Owner.IsGroup && vendorPaid);
 
-    public static ShareDto ToShareResponse(Share split) => new(
-        split.Id.Value,
-        split.ExpenseId.Value,
-        split.UserId.Value,
-        split.Amount.Amount,
-        split.Amount.Currency,
+    public static ShareDto ToShareResponse(Share share) => new(
+        share.Id.Value,
+        share.ExpenseId.Value,
+        share.UserId.Value,
+        share.Amount.Amount,
+        share.Amount.Currency,
         false,
-        split.CreatedAt,
-        split.UpdatedAt);
+        share.CreatedAt,
+        share.UpdatedAt);
 }

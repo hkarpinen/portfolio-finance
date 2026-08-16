@@ -7,11 +7,9 @@ namespace Finance.Application.Ports;
 /// Everything the app asks of a bank link: make one, sync it, offer what it noticed, drop it.
 ///
 /// A port. Behind it is an adapter in Infrastructure holding the provider client and local mirrors
-/// of what the provider said — accounts, transactions, suggestions. Those mirrors used to sit in
-/// Domain, which put another company's shapes in the middle of the accounting model; nothing about
-/// them is a domain concept, and none of them posts to the books.
-///
-/// Only DTOs cross this, which is what let the whole vertical move without the app noticing.
+/// of what the provider said — accounts, transactions, suggestions. Those mirrors stay in
+/// Infrastructure: they are another company's shapes, not domain concepts, and none of them posts
+/// to the books. Only DTOs cross this line.
 /// </summary>
 public interface IBankConnections
 {

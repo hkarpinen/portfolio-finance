@@ -16,14 +16,8 @@ internal sealed class LedgerRepository : ILedgerRepository
     public Task<Ledger?> GetLedgerByOwnerAsync(AccountingEntity owner, CancellationToken ct = default)
         => _db.Ledgers.FirstOrDefaultAsync(l => l.Owner.Kind == owner.Kind && l.Owner.Id == owner.Id, ct);
 
-    public async Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default)
-        => await _db.Ledgers.AddAsync(ledger, ct);
-
     public async Task<IReadOnlyList<Account>> GetAccountsAsync(LedgerId ledgerId, CancellationToken ct = default)
         => await _db.Accounts.Where(a => a.LedgerId == ledgerId).ToListAsync(ct);
-
-    public Task<Account?> GetAccountByCodeAsync(LedgerId ledgerId, string code, CancellationToken ct = default)
-        => _db.Accounts.FirstOrDefaultAsync(a => a.LedgerId == ledgerId && a.Code == code, ct);
 
     public async Task AddAccountAsync(Account account, CancellationToken ct = default)
         => await _db.Accounts.AddAsync(account, ct);
@@ -71,10 +65,16 @@ internal sealed class LedgerRepository : ILedgerRepository
     public async Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default)
         => await _db.JournalEntries.AddAsync(entry, ct);
 
-    public async Task<bool> ConvergeAsync(JournalEntry candidate, bool postOnce = false, CancellationToken ct = default)
+    public Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default)
+        => WriteAsync(candidate, firstWriteWins: false, ct);
+
+    public Task<bool> RecordOnceAsync(JournalEntry candidate, CancellationToken ct = default)
+        => WriteAsync(candidate, firstWriteWins: true, ct);
+
+    private async Task<bool> WriteAsync(JournalEntry candidate, bool firstWriteWins, CancellationToken ct)
     {
         var inEffect = (await GetEntriesBySourceAsync(candidate.LedgerId, candidate.Source!, ct)).InEffect();
-        if (postOnce && inEffect.Count > 0) return false;
+        if (firstWriteWins && inEffect.Count > 0) return false;
 
         var plan = ConvergencePlan.For(candidate, inEffect);
         if (plan.AlreadyThere) return false;
@@ -111,16 +111,6 @@ internal sealed class LedgerRepository : ILedgerRepository
 
     public async Task<IReadOnlyList<JournalLine>> GetJournalLinesByAccountAsync(AccountId accountId, CancellationToken ct = default)
         => await _db.JournalLines.AsNoTracking().Where(p => p.AccountId == accountId).ToListAsync(ct);
-
-    public async Task<IReadOnlyList<JournalLine>> GetJournalLinesByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
-    {
-        var query =
-            from p in _db.JournalLines.AsNoTracking()
-            join e in _db.JournalEntries.AsNoTracking() on p.EntryId equals e.Id
-            where e.LedgerId == ledgerId
-            select p;
-        return await query.ToListAsync(ct);
-    }
 
     public Task CommitAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

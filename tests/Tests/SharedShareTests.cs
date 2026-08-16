@@ -17,20 +17,20 @@ public class SharedShareTests
         var userId = UserId.New();
         var amount = Money.Create(50m, "USD");
 
-        var split = Share.Create(expense, userId, amount);
+        var share = Share.Create(expense, userId, amount);
 
-        Assert.Equal(expense.Id, split.ExpenseId);
-        Assert.Equal(userId, split.UserId);
-        Assert.Equal(50m, split.Amount.Amount);
+        Assert.Equal(expense.Id, share.ExpenseId);
+        Assert.Equal(userId, share.UserId);
+        Assert.Equal(50m, share.Amount.Amount);
     }
 
     [Fact]
     public void Create_ShouldRaise_ShareCreatedEvent()
     {
-        var split = Share.Create(GroupExpense(), UserId.New(), Money.Create(25m, "USD"));
+        var share = Share.Create(GroupExpense(), UserId.New(), Money.Create(25m, "USD"));
 
-        Assert.Single(split.GetDomainEvents());
-        Assert.IsType<ShareCreated>(split.GetDomainEvents()[0]);
+        Assert.Single(share.GetDomainEvents());
+        Assert.IsType<ShareCreated>(share.GetDomainEvents()[0]);
     }
 
     // The group is the expense's. It is named on the event only because a reversal can outlive the
@@ -39,28 +39,28 @@ public class SharedShareTests
     public void TheGroupOnTheEvent_IsTheExpensesGroup()
     {
         var expense = GroupExpense();
-        var split = Share.Create(expense, UserId.New(), Money.Create(25m, "USD"));
-        split.ClearDomainEvents();
+        var share = Share.Create(expense, UserId.New(), Money.Create(25m, "USD"));
+        share.ClearDomainEvents();
 
-        split.Update(expense, Money.Create(30m, "USD"));
+        share.Update(expense, Money.Create(30m, "USD"));
 
-        var updated = Assert.IsType<ShareUpdated>(split.GetDomainEvents()[0]);
+        var updated = Assert.IsType<ShareUpdated>(share.GetDomainEvents()[0]);
         Assert.Equal(expense.GroupId, updated.GroupId);
     }
 
     [Fact]
     public void ASplit_RefusesAExpense_ItIsNotOn()
     {
-        var split = Share.Create(GroupExpense(), UserId.New(), Money.Create(25m, "USD"));
+        var share = Share.Create(GroupExpense(), UserId.New(), Money.Create(25m, "USD"));
         var somebodyElses = GroupExpense();
 
         Assert.Throws<InvalidOperationException>(
-            () => split.Update(somebodyElses, Money.Create(30m, "USD")));
-        Assert.Throws<InvalidOperationException>(() => split.Remove(somebodyElses));
+            () => share.Update(somebodyElses, Money.Create(30m, "USD")));
+        Assert.Throws<InvalidOperationException>(() => share.Remove(somebodyElses));
     }
 
     [Fact]
-    public void APersonalExpense_HasNoSharesToAllocate()
+    public void APersonalExpense_HasNoSharesToSplit()
     {
         var personal = Expense.CreateOwn(UserId.New(), "Gym", Money.Create(40m, "USD"), ExpenseCategory.Other, DateTime.UtcNow.Date);
 

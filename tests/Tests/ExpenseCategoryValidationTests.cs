@@ -6,9 +6,8 @@ namespace Tests;
 
 /// <summary>
 /// The Category stays a free string on the wire (API compatibility) but must name a real
-/// ExpenseCategory, case-insensitively. The validator and the manager used to disagree about what
-/// an unknown one means — the validator rejected, the manager quietly filed it under Other, which
-/// loses what the person meant. One parser now, and rejection is the answer.
+/// ExpenseCategory, case-insensitively. One parser, and an unknown category is rejected rather
+/// than quietly filed under Other — which would lose what the person meant.
 /// </summary>
 public class ExpenseCategoryValidationTests
 {

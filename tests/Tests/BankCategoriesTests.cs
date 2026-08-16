@@ -5,7 +5,7 @@ namespace Tests;
 
 /// <summary>
 /// The provider's taxonomy is theirs and changes when they say so, which is why it stops at the
-/// boundary. A category we have never heard of costs nothing more than a bill somebody has not
+/// boundary. A category we have never heard of costs nothing more than an expense somebody has not
 /// sorted yet.
 /// </summary>
 public class BankCategoriesTests

@@ -130,12 +130,12 @@ public class RequestValidatorTests
     [Fact]
     public void SplittingAmongNobodyOrAmongTheSamePersonTwiceIsRejected()
     {
-        var v = new AllocateEvenlyBodyValidator();
+        var v = new SplitEvenlyBodyValidator();
         var hank = Guid.NewGuid();
 
-        Assert.True(v.Validate(new AllocateEvenlyBody([hank, Guid.NewGuid()])).IsValid);
-        Assert.False(v.Validate(new AllocateEvenlyBody([])).IsValid);
-        Assert.False(v.Validate(new AllocateEvenlyBody([hank, hank])).IsValid);
+        Assert.True(v.Validate(new SplitEvenlyBody([hank, Guid.NewGuid()])).IsValid);
+        Assert.False(v.Validate(new SplitEvenlyBody([])).IsValid);
+        Assert.False(v.Validate(new SplitEvenlyBody([hank, hank])).IsValid);
     }
 
     [Fact]

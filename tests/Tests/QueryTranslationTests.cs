@@ -205,4 +205,5 @@ public class QueryTranslationTests
         Assert.Throws<InvalidOperationException>(
             () => db.RecurringExpenses.Where(s => s.GroupId == group).ToQueryString());
     }
+
 }

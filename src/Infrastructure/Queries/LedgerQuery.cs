@@ -67,7 +67,7 @@ internal sealed class LedgerQuery : ILedgerQuery
         var lines = new List<StatementLineDto>(rows.Count);
         foreach (var r in rows)
         {
-            // Per-journalLine contribution to the oriented balance: a debit raises a debit-normal account and
+            // Per-line contribution to the oriented balance: a debit raises a debit-normal account and
             // lowers a credit-normal one, and vice-versa.
             var signed = r.JournalLine.Direction == EntryDirection.Debit
                 ? r.JournalLine.Amount.Amount

@@ -61,7 +61,7 @@ public class LedgerTests
     [Fact]
     public void Post_NegativeAmount_Throws()
     {
-        // Money is signed, but a journalLine amount must be positive — the direction carries the sign.
+        // Money is signed, but a journal line amount must be positive — the direction carries the sign.
         Assert.Throws<ArgumentException>(() =>
             JournalEntry.Post(L, DateTime.UtcNow, "neg", new[]
             {

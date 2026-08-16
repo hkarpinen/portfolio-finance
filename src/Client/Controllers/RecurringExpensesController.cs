@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Client.Controllers;
 
 /// <summary>
-/// Repeating costs — the agreement, not the individual bills.
+/// Repeating costs — the agreement, not the individual expenses.
 ///
 /// A schedule posts nothing. It says which expenses should exist; the forecast every screen draws
 /// is <c>occurrences</c>, and an expense is written only when somebody acts on one.
@@ -22,15 +22,19 @@ public sealed class RecurringExpensesController(
     IRecurringExpenseManager schedules) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<RecurringExpenseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListMine(CancellationToken ct = default)
         => Ok(await schedules.ListForUserAsync(User.GetUserId().Value, ct));
 
     [HttpGet("/api/finance/groups/{groupId:guid}/schedules")]
+    [ProducesResponseType(typeof(IReadOnlyList<RecurringExpenseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListForGroup(Guid groupId, CancellationToken ct = default)
         => Ok(await schedules.ListForGroupAsync(groupId, ct));
 
     [HttpPost]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(typeof(RecurringExpenseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateRecurringExpenseCommand request, CancellationToken ct = default)
     {
         var result = await schedules.CreateAsync(request with { CallerUserId = User.GetUserId().Value }, ct);
@@ -39,6 +43,9 @@ public sealed class RecurringExpensesController(
 
     [HttpPut("{recurringExpenseId:guid}")]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(typeof(RecurringExpenseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Amend(Guid recurringExpenseId, [FromBody] AmendRecurringExpenseCommand request, CancellationToken ct = default)
     {
         var result = await schedules.AmendAsync(
@@ -48,6 +55,8 @@ public sealed class RecurringExpensesController(
 
     [HttpDelete("{recurringExpenseId:guid}")]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Deactivate(Guid recurringExpenseId, CancellationToken ct = default)
         => await schedules.DeactivateAsync(recurringExpenseId, User.GetUserId().Value, ct) ? NoContent() : NotFound();
 
@@ -56,6 +65,8 @@ public sealed class RecurringExpensesController(
     /// Most will be null — that is the forecast, and nothing is written until somebody acts.
     /// </summary>
     [HttpGet("{recurringExpenseId:guid}/occurrences")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScheduledOccurrenceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Occurrences(
         Guid recurringExpenseId, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct = default)
     {
@@ -66,10 +77,11 @@ public sealed class RecurringExpensesController(
     /// <summary>
     /// Writes every occurrence that has come due and is not recorded yet. What turns a period
     /// passing into an expense: the money screens call it before they read, so by the time anyone
-    /// looks, the bills that came due are on the books.
+    /// looks, the expenses that came due are on the books.
     /// </summary>
     [HttpPost("catch-up")]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> CatchUpMine(CancellationToken ct = default)
     {
         var userId = User.GetUserId().Value;
@@ -81,12 +93,15 @@ public sealed class RecurringExpensesController(
 
     [HttpPost("/api/finance/groups/{groupId:guid}/schedules/catch-up")]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> CatchUpForGroup(Guid groupId, CancellationToken ct = default)
         => Ok(new { generated = await schedules.CatchUpAsync(groupId, User.GetUserId().Value, DateTime.UtcNow, ct) });
 
     /// <summary>Writes the expense for one occurrence. Idempotent — the second call returns the first.</summary>
     [HttpPost("{recurringExpenseId:guid}/occurrences/{occurrenceDate:datetime}")]
     [EnableRateLimiting("write")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Materialise(Guid recurringExpenseId, DateTime occurrenceDate, CancellationToken ct = default)
     {
         var expense = await schedules.MaterialiseAsync(

@@ -122,9 +122,9 @@ public class RecurringExpenseTests
     }
 
     [Fact]
-    public void GenerateFrom_BillsAMonthRecordedLateAtWhatWasAgreedThen()
+    public void GenerateFrom_WritesAMonthRecordedLateAtWhatWasAgreedThen()
     {
-        // Nobody got round to recording May until August. It still bills May's rent.
+        // Nobody got round to recording May until August. It still records May's rent at May's amount.
         var schedule = Rent();
         schedule.Amend("Rent", Money.Create(1100m, "USD"), ExpenseCategory.Rent, null,
             effectiveFrom: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));

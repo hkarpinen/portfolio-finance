@@ -4,7 +4,7 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Aggregates;
 
 /// <summary>
-/// The standing agreement behind a repeating cost — rent, a subscription, the internet bill.
+/// The standing agreement behind a repeating cost — rent, a subscription, the internet.
 ///
 /// It says which <see cref="Expense"/>s SHOULD exist and when: an anchor date stepped by an
 /// interval. It never posts anything itself. An expense only becomes real when somebody acts on
@@ -24,7 +24,6 @@ public sealed class RecurringExpense : IAggregateRoot
     /// <see cref="Expense"/> carries.</summary>
     public AccountingEntity Owner { get; private set; }
 
-    /// <summary>The group when this is one of theirs, null when it is somebody's own.</summary>
     public GroupId? GroupId => Owner.AsGroup;
 
     /// <summary>
@@ -42,7 +41,7 @@ public sealed class RecurringExpense : IAggregateRoot
     private readonly List<RecurringExpenseTerm> _amounts = new();
 
     /// <summary>
-    /// Every amount this schedule has expensed, each from the date it took effect. A rise is a new
+    /// Every amount this schedule has held, each from the date it took effect. A rise is a new
     /// version rather than an edit, so generating an expense for a month in the past uses what was
     /// true then — not today's figure.
     /// </summary>
@@ -51,7 +50,7 @@ public sealed class RecurringExpense : IAggregateRoot
     /// <summary>Fixed at creation — an agreement does not change currency halfway through.</summary>
     public string Currency { get; private set; } = "USD";
 
-    /// <summary>What it expenses today. Shorthand for <see cref="AmountOn"/> with today's date.</summary>
+    /// <summary>The amount in force today. Shorthand for <see cref="AmountOn"/> with today's date.</summary>
     public Money Amount => AmountOn(DateTime.UtcNow);
 
     public ExpenseCategory Category { get; private set; }
@@ -156,7 +155,7 @@ public sealed class RecurringExpense : IAggregateRoot
     /// Whether this person may change the agreement — amend its terms or stop it.
     ///
     /// Whoever opened it, matching the rule <see cref="Expense.IsManagedBy"/> already enforces on
-    /// the bills it generates. Membership is not enough: being in the group lets you see what the
+    /// the expenses it generates. Membership is not enough: being in the group lets you see what the
     /// rent agreement says, not raise it.
     /// </summary>
     public bool IsManagedBy(Guid userId) => CreatedBy.Value == userId;
@@ -170,7 +169,7 @@ public sealed class RecurringExpense : IAggregateRoot
         Owner.IsGroup ? isMember : Owner.Is(userId);
 
     /// <summary>
-    /// What this schedule expensed on a given date — the latest version in force by then. Before
+    /// What this schedule held on a given date — the latest version in force by then. Before
     /// the first version (a back-dated occurrence) the earliest one applies, because that is the
     /// only figure anybody ever agreed.
     /// </summary>

@@ -165,7 +165,7 @@ A personal book with expenses and no income cannot answer the only question peop
 
 ### F6 — Personal charges do not post
 
-`LedgerPostingConsumer` skips `GroupId == null`. Correct as written — personal costs must not touch
+`LedgerJournalConsumer` skips `GroupId == null`. Correct as written — personal costs must not touch
 the group's books — but now that a personal ledger exists there is somewhere for them to go, and
 until they go there the personal book contains only opening balances.
 

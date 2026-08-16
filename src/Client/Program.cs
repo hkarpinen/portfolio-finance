@@ -1,3 +1,4 @@
+using Infrastructure.Persistence;
 using System.Text;
 using System.Threading.RateLimiting;
 using Finance.Application;
@@ -81,16 +82,21 @@ try
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+        // Limits are configuration, not constants. The defaults below are the production posture;
+        // a parallel e2e run drives far more traffic per minute than any real user and would
+        // otherwise be rejected, which surfaces as the frontend's error boundary rather than as
+        // anything resembling a rate-limit message. Override per environment with
+        // RateLimiting__<policy>, e.g. RateLimiting__standard=2000.
         options.AddFixedWindowLimiter("api", opt =>
         {
-            opt.PermitLimit = 120;
+            opt.PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:api") ?? 120;
             opt.Window = TimeSpan.FromMinutes(1);
             opt.QueueLimit = 0;
         });
 
         options.AddFixedWindowLimiter("write", opt =>
         {
-            opt.PermitLimit = 30;
+            opt.PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:write") ?? 30;
             opt.Window = TimeSpan.FromMinutes(1);
             opt.QueueLimit = 0;
         });
@@ -102,7 +108,6 @@ try
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-    // RFC 7807 problem details.
     builder.Services.AddProblemDetails(options =>
     {
         options.CustomizeProblemDetails = ctx =>
@@ -115,7 +120,7 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new() { Title = "Bills API", Version = "v1" });
+        c.SwaggerDoc("v1", new() { Title = "Finance API", Version = "v1" });
         c.AddSecurityDefinition("Bearer", new()
         {
             Name = "Authorization",
@@ -155,6 +160,9 @@ try
                 ArgumentException or ArgumentNullException => StatusCodes.Status400BadRequest,
                 UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
                 KeyNotFoundException => StatusCodes.Status404NotFound,
+                // The Expense.Version token exists to catch exactly this: two people re-cutting one
+                // expense at once. It is the caller's to retry, not a fault — 409, never 500.
+                DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
                 InvalidOperationException => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError
             };
@@ -196,7 +204,7 @@ try
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {
-    Log.Fatal(ex, "Bills API terminated unexpectedly");
+    Log.Fatal(ex, "Finance API terminated unexpectedly");
 }
 finally
 {

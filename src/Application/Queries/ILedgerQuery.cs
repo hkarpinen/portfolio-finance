@@ -59,7 +59,7 @@ public interface ILedgerQuery
     Task<bool> IsShareSettledAsync(Guid shareId, DateTime occurrence, CancellationToken ct = default);
 
     // Derived from the Vendor Payable balance (owed == 0). Member settlement is gated on this: a
-    // share can only be settled once the bill itself is funded. Legacy cash-basis expenses never
+    // share can only be settled once the expense itself is funded. Legacy cash-basis expenses never
     // touched Vendor Payable, so they read as paid.
     Task<bool> IsVendorPaidAsync(Guid expenseId, CancellationToken ct = default);
 }

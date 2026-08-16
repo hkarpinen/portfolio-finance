@@ -20,7 +20,7 @@ public class BookkeepingManagerTests
     private static BookkeepingManager NewManager(out FakeLedgerRepository repo)
     {
         repo = new FakeLedgerRepository();
-        // The direct ledger-journalLine methods never touch the expense/share repos — only the convergence
+        // The direct ledger-posting methods never touch the expense/share repos — only the convergence
         // wrappers do — so the nulls below are never dereferenced.
         return new BookkeepingManager(repo, null!, null!, null!);
     }
@@ -146,7 +146,7 @@ public class BookkeepingManagerTests
     }
 
     [Fact]
-    public async Task SyncExpenseAccrual_AttributesTheEntryToWhoeverEnteredTheBill()
+    public async Task SyncExpenseAccrual_AttributesTheEntryToWhoeverEnteredIt()
     {
         var manager = NewManager(out var repo);
         var owner = Guid.NewGuid();
@@ -169,7 +169,6 @@ public class BookkeepingManagerTests
         public Task<Ledger?> GetLedgerByOwnerAsync(AccountingEntity owner, CancellationToken ct = default)
             => Task.FromResult(_ledgers.FirstOrDefault(l => l.Owner == owner));
 
-        public Task AddLedgerAsync(Ledger ledger, CancellationToken ct = default) { _ledgers.Add(ledger); return Task.CompletedTask; }
 
         public Task<Ledger> GetOrOpenLedgerAsync(
             AccountingEntity owner, string currency, CancellationToken ct = default)
@@ -198,9 +197,6 @@ public class BookkeepingManagerTests
         public Task<IReadOnlyList<Account>> GetAccountsAsync(LedgerId ledgerId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<Account>>(_accounts.Where(a => a.LedgerId == ledgerId).ToList());
 
-        public Task<Account?> GetAccountByCodeAsync(LedgerId ledgerId, string code, CancellationToken ct = default)
-            => Task.FromResult(_accounts.FirstOrDefault(a => a.LedgerId == ledgerId && a.Code == code));
-
         public Task AddAccountAsync(Account account, CancellationToken ct = default) { _accounts.Add(account); return Task.CompletedTask; }
 
         public List<DebtTerms> DebtTerms { get; } = new();
@@ -215,12 +211,18 @@ public class BookkeepingManagerTests
 
         public Task AddJournalEntryAsync(JournalEntry entry, CancellationToken ct = default) { JournalEntries.Add(entry); return Task.CompletedTask; }
 
-        public Task<bool> ConvergeAsync(JournalEntry candidate, bool postOnce = false, CancellationToken ct = default)
+        public Task<bool> ConvergeAsync(JournalEntry candidate, CancellationToken ct = default)
+            => WriteAsync(candidate, firstWriteWins: false);
+
+        public Task<bool> RecordOnceAsync(JournalEntry candidate, CancellationToken ct = default)
+            => WriteAsync(candidate, firstWriteWins: true);
+
+        private Task<bool> WriteAsync(JournalEntry candidate, bool firstWriteWins)
         {
             var inEffect = JournalEntries
                 .Where(e => e.LedgerId == candidate.LedgerId && e.Source == candidate.Source)
                 .ToList().InEffect();
-            if (postOnce && inEffect.Count > 0) return Task.FromResult(false);
+            if (firstWriteWins && inEffect.Count > 0) return Task.FromResult(false);
 
             var plan = ConvergencePlan.For(candidate, inEffect);
             if (plan.AlreadyThere) return Task.FromResult(false);
@@ -238,9 +240,6 @@ public class BookkeepingManagerTests
 
         public Task<IReadOnlyList<JournalLine>> GetJournalLinesByAccountAsync(AccountId accountId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<JournalLine>>(JournalEntries.SelectMany(e => e.JournalLines).Where(p => p.AccountId == accountId).ToList());
-
-        public Task<IReadOnlyList<JournalLine>> GetJournalLinesByLedgerAsync(LedgerId ledgerId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<JournalLine>>(JournalEntries.Where(e => e.LedgerId == ledgerId).SelectMany(e => e.JournalLines).ToList());
 
         public Task CommitAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

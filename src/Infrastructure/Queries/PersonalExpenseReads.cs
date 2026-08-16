@@ -5,7 +5,7 @@ namespace Infrastructure.Queries;
 /// <summary>
 /// Whether a personal expense has been paid.
 ///
-/// Same question, same answer as a group bill: the expense credits Payable when it is incurred and
+/// Same question, same answer as a group expense: the expense credits Payable when it is incurred and
 /// debits it when it is settled, so a zero balance means paid. Both books use the same account
 /// code, which is why one derivation serves both — and why no paid FLAG is needed anywhere.
 ///

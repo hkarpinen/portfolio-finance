@@ -11,7 +11,7 @@ public sealed record DashboardDto(
     Guid GroupId,
     decimal TotalGrossIncome,
     decimal TotalNetIncome,
-    decimal TotalBills,
+    decimal TotalExpenses,
     decimal NetBalance,
     bool IsOvercommitted,
     decimal CoverageRatio,

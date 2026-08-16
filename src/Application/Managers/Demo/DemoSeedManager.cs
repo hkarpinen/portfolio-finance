@@ -26,6 +26,12 @@ internal sealed class DemoSeedManager : IDemoSeedManager
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
+        // THIS month, not next. The money screens show the month as it stands and skip occurrences
+        // later than today, so expenses dated a month ahead put a demo account in front of a page of
+        // zeros — every category empty, nothing in "the last few things", and the one figure the
+        // product exists to show reading nothing.
+        var thisMonth = startOfMonth;
+
         var salary = IncomeSource.Create(
             uid,
             Money.Create(5000m, "USD"),
@@ -39,25 +45,25 @@ internal sealed class DemoSeedManager : IDemoSeedManager
         {
             Expense.CreateOwn(
                 uid, "Rent", Money.Create(1500m, "USD"),
-                ExpenseCategory.Rent, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Rent, thisMonth),
             Expense.CreateOwn(
                 uid, "Internet", Money.Create(60m, "USD"),
-                ExpenseCategory.Internet, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Internet, thisMonth),
             Expense.CreateOwn(
                 uid, "Spotify", Money.Create(11m, "USD"),
-                ExpenseCategory.Subscriptions, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Subscriptions, thisMonth),
             Expense.CreateOwn(
                 uid, "Phone Plan", Money.Create(45m, "USD"),
-                ExpenseCategory.Phone, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Phone, thisMonth),
             Expense.CreateOwn(
                 uid, "Health Insurance", Money.Create(200m, "USD"),
-                ExpenseCategory.Insurance, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Insurance, thisMonth),
             Expense.CreateOwn(
                 uid, "Gym Membership", Money.Create(25m, "USD"),
-                ExpenseCategory.Healthcare, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Healthcare, thisMonth),
             Expense.CreateOwn(
                 uid, "Car Insurance", Money.Create(110m, "USD"),
-                ExpenseCategory.Insurance, startOfMonth.AddMonths(1)),
+                ExpenseCategory.Insurance, thisMonth),
         };
         foreach (var expense in expenses)
             await _expenseRepo.AddAsync(expense, cancellationToken);
@@ -73,6 +79,12 @@ internal sealed class DemoSeedManager : IDemoSeedManager
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
+        // THIS month, not next. The money screens show the month as it stands and skip occurrences
+        // later than today, so expenses dated a month ahead put a demo account in front of a page of
+        // zeros — every category empty, nothing in "the last few things", and the one figure the
+        // product exists to show reading nothing.
+        var thisMonth = startOfMonth;
+
         var sharedExpenses = new[]
         {
             (title: "Electricity", amount: 120m, category: ExpenseCategory.Utilities),
@@ -86,11 +98,11 @@ internal sealed class DemoSeedManager : IDemoSeedManager
         foreach (var (title, amount, category) in sharedExpenses)
         {
             // A PayerMember expense has to name the member who fronted it — the default left
-            // payerUserId null, so the bill detail rendered "Someone, out of their own pocket" and
+            // payerUserId null, so the expense detail rendered "Someone, out of their own pocket" and
             // there was nobody for the group to pay back.
             var expense = Expense.Create(
                 AccountingEntity.Group(gid), uid, title, Money.Create(amount, "USD"),
-                category, startOfMonth.AddMonths(1),
+                category, thisMonth,
                 payerUserId: userId);
             await _expenseRepo.AddAsync(expense, cancellationToken);
 

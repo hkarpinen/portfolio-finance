@@ -19,8 +19,6 @@ public class ExpenseAggregateTests
         Assert.Equal("Netflix", expense.Title);
         Assert.Equal(15.99m, expense.Amount.Amount);
         Assert.Null(expense.GroupId);
-        // Somebody's own bill: they own it and they entered it, which used to be two fields
-        // holding the same person and one holding null.
         Assert.Equal(AccountingEntity.Person(userId), expense.Owner);
         Assert.True(expense.IsActive);
         Assert.Single(expense.GetDomainEvents());
@@ -60,7 +58,7 @@ public class ExpenseAggregateTests
         var expense = Expense.Create(
             AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), NewUser(), "Rent", Usd(1200m), ExpenseCategory.Other, DateTime.UtcNow);
 
-        // Front-and-reimburse is the historical default — the payer fronts the bill.
+        // front-and-settle is the historical default — the payer fronts the expense.
         Assert.Equal(FundingSource.PayerMember, expense.FundingSource);
     }
 
@@ -147,18 +145,18 @@ public class ExpenseAggregateTests
     }
 
     [Fact]
-    public void IsManagedBy_OnAGroupBill_IsWhoeverEnteredIt()
+    public void IsManagedBy_OnAGroupExpense_IsWhoeverEnteredIt()
     {
         var creator = Guid.NewGuid();
         var member = Guid.NewGuid();
-        var bill = Expense.Create(
+        var expense = Expense.Create(
             AccountingEntity.Group(GroupId.Create(Guid.NewGuid())), UserId.Create(creator), "Rent",
             Money.Create(900m, "USD"), ExpenseCategory.Rent, DateTime.UtcNow,
             null, payerUserId: creator, fundingSource: FundingSource.PayerMember);
 
-        Assert.True(bill.IsManagedBy(creator));
-        // Being in the group lets you settle your share, not re-cut the bill.
-        Assert.False(bill.IsManagedBy(member));
+        Assert.True(expense.IsManagedBy(creator));
+        // Being in the group lets you settle your share, not re-cut the expense.
+        Assert.False(expense.IsManagedBy(member));
     }
 
     [Fact]

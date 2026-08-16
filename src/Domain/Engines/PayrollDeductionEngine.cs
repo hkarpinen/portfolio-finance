@@ -12,10 +12,7 @@ public interface IPayrollDeductionEngine
 {
     /// <summary>
     /// What is left of one month of this income after withholding and voluntary deductions.
-    ///
-    /// Takes the income rather than six of its fields. Callers used to unpack it and hand the
-    /// pieces back, which let them arrive at "this income's monthly gross" by two different routes
-    /// — both correct, and neither the source of truth.
+    /// Takes the income itself, so "this income's monthly gross" has one derivation.
     /// </summary>
     NetPayBreakdown ComputeBreakdown(IncomeSource income, int year, int month);
 

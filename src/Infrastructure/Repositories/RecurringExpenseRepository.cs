@@ -22,7 +22,6 @@ internal sealed class RecurringExpenseRepository(FinanceDbContext db) : IRecurri
             .OrderBy(s => s.Title)
             .ToListAsync(ct);
 
-    /// <summary>Somebody's own agreements — the ones owned by the person, not by a group.</summary>
     public async Task<IReadOnlyList<RecurringExpense>> ListForUserAsync(UserId userId, CancellationToken ct = default)
         => await db.RecurringExpenses.AsNoTracking()
             .Where(s => s.Owner.Kind == EntityKind.Person && s.Owner.Id == userId.Value && s.IsActive)

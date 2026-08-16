@@ -4,16 +4,9 @@ using Finance.Domain.ValueObjects;
 namespace Finance.Domain.Engines;
 
 /// <summary>
-/// The chart of accounts. One chart, not one per kind of owner: the numbering is
-/// <see cref="ChartCodes"/> and the journal does not care whose book it is.
-///
-/// There used to be a GroupChart and a PersonalChart, which read as two charts and were not —
-/// every code in both came from here, and half the members were the same method twice.
-///
-/// Nothing here asks whose book it is. A ledger records money in and out; what an account MEANS is
-/// the same whoever owns it, and which accounts exist follows from what somebody actually did, not
-/// from the kind of thing that owns the book. A member bucket only appears where there are members
-/// because only there does anybody post to one.
+/// The chart of accounts — one chart, not one per kind of owner. Nothing here asks whose book it
+/// is: what an account MEANS is the same either way, and which accounts exist follows from what
+/// somebody posted, not from the kind of thing that owns the book.
 /// </summary>
 public static class Chart
 {

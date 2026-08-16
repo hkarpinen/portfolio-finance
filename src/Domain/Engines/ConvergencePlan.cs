@@ -3,16 +3,9 @@ using Finance.Domain.ValueObjects;
 
 namespace Finance.Domain.Engines;
 
-/// <summary>
-/// What has to happen so the books say what a draft says, given what they say now.
-///
-/// Every posting path used to work this out for itself: fetch the entries under a source, compare
-/// with a hand-written check, reverse what did not match, post the replacement. Eight copies of one
-/// decision, and the checks differed by accident rather than intent. This is that decision, once.
-/// </summary>
+/// <summary>What has to happen so the books say what a draft says, given what they say now.</summary>
 public sealed record ConvergencePlan(IReadOnlyList<JournalEntry> Reverse, JournalEntry? Post)
 {
-    /// <summary>True when the books already say it and nothing needs writing.</summary>
     public bool AlreadyThere => Reverse.Count == 0 && Post is null;
 
     /// <summary>
@@ -34,7 +27,7 @@ public sealed record ConvergencePlan(IReadOnlyList<JournalEntry> Reverse, Journa
     }
 
     /// <summary>
-    /// The plan to take a source off the books entirely — the allocation was removed, the payment
+    /// The plan to take a source off the books entirely — the share was removed, the payment
     /// was undone. Nothing replaces it.
     /// </summary>
     public static ConvergencePlan Remove(IReadOnlyList<JournalEntry> inEffect) =>

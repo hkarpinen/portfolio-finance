@@ -1,3 +1,4 @@
+using Finance.Domain.Engines;
 using Finance.Domain.Events;
 using Finance.Domain.ValueObjects;
 
@@ -25,7 +26,6 @@ public sealed class Receipt : IAggregateRoot
     /// bank account is theirs before it is anybody else's.</summary>
     public AccountingEntity Owner { get; private set; }
 
-    /// <summary>Which account it landed in.</summary>
     public Guid IntoAccountId { get; private set; }
 
     /// <summary>Where it came from, as the outside world named it — an employer, a shop refunding
@@ -86,6 +86,5 @@ public sealed class Receipt : IAggregateRoot
         _domainEvents.Add(new ReceiptVoided(Id, Owner.Id));
     }
 
-    /// <summary>The journal entry's key.</summary>
-    public string LedgerSource => $"receipt:{Id.Value:N}";
+    public string LedgerSource => LedgerSources.Receipt(Id.Value);
 }

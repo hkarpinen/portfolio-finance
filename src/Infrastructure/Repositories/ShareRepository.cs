@@ -12,26 +12,26 @@ internal sealed class ShareRepository : IShareRepository
 
     public ShareRepository(FinanceDbContext dbContext) => _dbContext = dbContext;
 
-    public async Task AddAsync(Share split, CancellationToken cancellationToken = default)
+    public async Task AddAsync(Share share, CancellationToken cancellationToken = default)
     {
-        await _dbContext.Shares.AddAsync(split, cancellationToken);
+        await _dbContext.Shares.AddAsync(share, cancellationToken);
     }
 
-    public async Task UpdateAsync(Share split, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(Share share, CancellationToken cancellationToken = default)
     {
-        _dbContext.Shares.Update(split);
+        _dbContext.Shares.Update(share);
     }
 
-    public async Task RemoveAsync(Share split, CancellationToken cancellationToken = default)
+    public async Task RemoveAsync(Share share, CancellationToken cancellationToken = default)
     {
-        _dbContext.Shares.Remove(split);
+        _dbContext.Shares.Remove(share);
     }
 
     public Task CommitAsync(CancellationToken cancellationToken = default)
         => _dbContext.SaveChangesAsync(cancellationToken);
 
-    public Task<Share?> GetByIdAsync(ShareId splitId, CancellationToken cancellationToken = default)
-        => _dbContext.Shares.FirstOrDefaultAsync(s => s.Id == splitId, cancellationToken);
+    public Task<Share?> GetByIdAsync(ShareId shareId, CancellationToken cancellationToken = default)
+        => _dbContext.Shares.FirstOrDefaultAsync(s => s.Id == shareId, cancellationToken);
 
     public Task<Share?> GetByExpenseAndUserAsync(ExpenseId expenseId, UserId userId, CancellationToken cancellationToken = default)
         => _dbContext.Shares.FirstOrDefaultAsync(s => s.ExpenseId == expenseId && s.UserId == userId, cancellationToken);

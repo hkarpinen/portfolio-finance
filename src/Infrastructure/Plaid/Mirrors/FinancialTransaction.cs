@@ -2,9 +2,9 @@ using Finance.Domain.ValueObjects;
 
 namespace Infrastructure.Plaid.Mirrors;
 
-// Sign convention: the provider reports outflows as POSITIVE and inflows as NEGATIVE, and that is
-// preserved as stored — IsInflow reads it. Both call sites used to abs() the amount on the way in,
-// which made IsInflow permanently false and every deposit look like a payment.
+// Sign convention: the provider reports outflows as POSITIVE and inflows as NEGATIVE, stored as
+// reported because IsInflow reads the sign. abs() it on the way in and every deposit becomes a
+// payment.
 public sealed class FinancialTransaction
 {
     public Guid Id { get; private set; }
