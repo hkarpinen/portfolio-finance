@@ -29,8 +29,8 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
 
     var jwtSection = builder.Configuration.GetSection("Jwt");
-    var jwtSecret = jwtSection["Secret"]
-        ?? throw new InvalidOperationException("Jwt:Secret must be configured.");
+    var authority = jwtSection["Authority"]
+        ?? throw new InvalidOperationException("Jwt:Authority must be configured — identity's base URL.");
 
     builder.Services.AddAuthentication(options =>
         {
@@ -39,6 +39,13 @@ try
         })
         .AddJwtBearer(options =>
         {
+            // No key material here, deliberately. This service used to hold the HMAC secret that
+            // signed tokens, which meant it could mint one for any user with any role. It now
+            // fetches identity's public key set from {Authority}/.well-known/openid-configuration
+            // and caches it, so rotating the key is something identity does on its own.
+            options.Authority = authority;
+            options.RequireHttpsMetadata = false;   // container-to-container traffic is plain HTTP
+
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -46,8 +53,7 @@ try
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSection["Issuer"],
-                ValidAudience = jwtSection["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+                ValidAudience = jwtSection["Audience"]
             };
             options.Events = new JwtBearerEvents
             {
