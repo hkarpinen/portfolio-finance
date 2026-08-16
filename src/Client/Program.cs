@@ -68,16 +68,6 @@ try
             .Build();
     });
 
-    builder.Services.AddCors(options =>
-    {
-        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-        options.AddDefaultPolicy(policy =>
-            policy.WithOrigins(origins)
-                  .WithHeaders("Content-Type", "Authorization")
-                  .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
-                  .AllowCredentials());
-    });
-
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -192,7 +182,6 @@ try
         app.UseSwaggerUI();
     }
 
-    app.UseCors();
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
