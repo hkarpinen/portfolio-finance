@@ -49,8 +49,7 @@ internal sealed class ContributionCalculator : IContributionCalculator
                     : [];
 
             // Fronting the expense covers your own part of it, so there is no payment record and
-            // hence no PaidAt. The expense answers this rather than two of its fields being
-            // compared here, which is how the same rule ended up spelled out in three places.
+            // hence no PaidAt. The expense answers this rather than comparing its fields here.
             var isPayerOwnShare = s.Expense.CoversOwnShare(s.Share.UserId.Value);
 
             foreach (var date in occurrenceDates)

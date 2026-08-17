@@ -36,21 +36,18 @@ public static class InfrastructureServiceExtensions
         {
             x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("finance", false));
 
-            // Replaces the hand-rolled outbox table, its polling BackgroundService, and the
-            // ProcessedEvents dedup every consumer used to repeat. UseBusOutbox routes a Publish
-            // made during SaveChanges into the outbox rather than the broker, so the event commits
-            // with the aggregate; the delivery service sends it. The inbox does consumer-side
-            // dedup, which is what a redelivered message used to hit a unique-violation catch for.
+            // UseBusOutbox routes a Publish made during SaveChanges into the outbox rather than
+            // the broker, so the event commits with the aggregate and the delivery service sends
+            // it.
             x.AddEntityFrameworkOutbox<FinanceDbContext>(o =>
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
             });
 
-            // Turns the inbox ON for every receive endpoint. AddEntityFrameworkOutbox on its own
-            // creates the tables and the send side only — without this the consumers have no dedup
-            // at all, which is precisely what the per-consumer ProcessedEvents check used to do.
-            // A redelivered message would re-run the handler.
+            // Turns the inbox on for every receive endpoint. AddEntityFrameworkOutbox creates the
+            // tables and the send side only; without this a redelivered message re-runs the
+            // handler.
             x.AddConfigureEndpointsCallback((context, _, cfg) =>
                 cfg.UseEntityFrameworkOutbox<FinanceDbContext>(context));
 

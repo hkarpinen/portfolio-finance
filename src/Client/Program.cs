@@ -39,10 +39,8 @@ try
         })
         .AddJwtBearer(options =>
         {
-            // No key material here, deliberately. This service used to hold the HMAC secret that
-            // signed tokens, which meant it could mint one for any user with any role. It now
-            // fetches identity's public key set from {Authority}/.well-known/openid-configuration
-            // and caches it, so rotating the key is something identity does on its own.
+            // No key material here: the handler fetches identity's public key set from
+            // {Authority}/.well-known/openid-configuration and caches it.
             options.Authority = authority;
             options.RequireHttpsMetadata = false;   // container-to-container traffic is plain HTTP
 

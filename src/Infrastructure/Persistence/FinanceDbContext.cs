@@ -38,8 +38,7 @@ public sealed class FinanceDbContext : DbContext
         modelBuilder.HasDefaultSchema("finance");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FinanceDbContext).Assembly);
 
-        // MassTransit's transactional outbox and inbox. These replace the hand-rolled
-        // outbox_messages table and the processed_events dedup each consumer used to do for itself.
+        // MassTransit's transactional outbox and inbox.
         modelBuilder.AddInboxStateEntity();
         modelBuilder.AddOutboxMessageEntity();
         modelBuilder.AddOutboxStateEntity();
