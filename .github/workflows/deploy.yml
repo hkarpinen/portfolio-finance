@@ -20,5 +20,5 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
-            docker compose pull finance
-            docker compose up -d --no-deps --force-recreate finance
+            docker compose -f compose.yaml -f compose.prod.yaml pull finance
+            docker compose -f compose.yaml -f compose.prod.yaml up -d --no-deps --force-recreate finance
