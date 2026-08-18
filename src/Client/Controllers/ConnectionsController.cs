@@ -13,7 +13,6 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[EnableRateLimiting("api")]
 [Route("api/finance/connections")]
 public sealed class ConnectionsController : ControllerBase
 {

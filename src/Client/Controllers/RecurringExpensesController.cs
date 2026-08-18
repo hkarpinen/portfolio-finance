@@ -32,7 +32,6 @@ public sealed class RecurringExpensesController(
         => Ok(await schedules.ListForGroupAsync(groupId, ct));
 
     [HttpPost]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(typeof(RecurringExpenseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateRecurringExpenseCommand request, CancellationToken ct = default)
@@ -42,7 +41,6 @@ public sealed class RecurringExpensesController(
     }
 
     [HttpPut("{recurringExpenseId:guid}")]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(typeof(RecurringExpenseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -54,7 +52,6 @@ public sealed class RecurringExpensesController(
     }
 
     [HttpDelete("{recurringExpenseId:guid}")]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Deactivate(Guid recurringExpenseId, CancellationToken ct = default)
@@ -80,7 +77,6 @@ public sealed class RecurringExpensesController(
     /// looks, the expenses that came due are on the books.
     /// </summary>
     [HttpPost("catch-up")]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> CatchUpMine(CancellationToken ct = default)
     {
@@ -92,14 +88,12 @@ public sealed class RecurringExpensesController(
     }
 
     [HttpPost("/api/finance/groups/{groupId:guid}/schedules/catch-up")]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> CatchUpForGroup(Guid groupId, CancellationToken ct = default)
         => Ok(new { generated = await schedules.CatchUpAsync(groupId, User.GetUserId().Value, DateTime.UtcNow, ct) });
 
     /// <summary>Writes the expense for one occurrence. Idempotent — the second call returns the first.</summary>
     [HttpPost("{recurringExpenseId:guid}/occurrences/{occurrenceDate:datetime}")]
-    [EnableRateLimiting("write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Materialise(Guid recurringExpenseId, DateTime occurrenceDate, CancellationToken ct = default)

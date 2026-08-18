@@ -13,7 +13,6 @@ namespace Client.Controllers;
 [ApiController]
 [Authorize]
 [RequireGroupMembership]
-[EnableRateLimiting("api")]
 [Route("api/finance/groups/{groupId:guid}/ledger")]
 public sealed class LedgerController : ControllerBase
 {

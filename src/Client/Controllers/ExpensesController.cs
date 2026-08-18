@@ -26,7 +26,6 @@ namespace Client.Controllers;
 // Group routes on this controller are members-only. A no-op on the personal
 // routes above, which carry no {groupId}.
 [RequireGroupMembership]
-[EnableRateLimiting("api")]
 [Route("api/finance/expenses")]
 public sealed class ExpensesController : ControllerBase
 {

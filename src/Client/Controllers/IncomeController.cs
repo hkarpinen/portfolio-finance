@@ -12,7 +12,6 @@ namespace Client.Controllers;
 
 [ApiController]
 [Authorize]
-[EnableRateLimiting("api")]
 // The {groupId} prefix is members-only. A no-op on the user-scoped routes below, which declare
 // absolute paths with no {groupId}.
 [RequireGroupMembership]
